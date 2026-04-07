@@ -111,6 +111,14 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
 
     log_history("action", id_str, ag, "success");
 
+    // Track execution stats for registered scripts (string IDs)
+    if (body["id"].is_string()) {
+        g_db.query(
+            "UPDATE scripts SET execution_count = execution_count + 1, "
+            "last_executed = datetime('now') WHERE id = ?1",
+            {id_str});
+    }
+
     nlohmann::json resp = {
         {"status",      "success"},
         {"action_id",   body["id"]},
