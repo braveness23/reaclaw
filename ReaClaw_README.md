@@ -92,11 +92,13 @@ The agent is responsible for generating scripts using its own LLM capabilities. 
 ### Catalog
 - `GET /catalog` — Full action catalog (paginated)
 - `GET /catalog/search?q=query` — Search by name, category, tag
+- `GET /catalog/{id}` — Look up a single action by numeric ID
 - `GET /catalog/categories` — Category list with counts
 
 ### State
 - `GET /state` — Project overview (BPM, cursor, transport)
 - `GET /state/tracks` — All tracks with properties and FX chains
+- `POST /state/tracks/{index}` — Set track properties (mute, arm, volume, pan) directly by index
 - `GET /state/items` — Media items in project
 - `GET /state/selection` — Current selection context
 - `GET /state/automation` — Automation envelopes for selected track

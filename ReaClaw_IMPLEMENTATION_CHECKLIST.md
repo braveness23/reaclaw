@@ -29,6 +29,10 @@ Each phase is a shippable unit. Complete and test each phase before starting the
   - [ ] Call `ReaClaw::init(rec)`, return 1
 - [ ] Print startup message: `ShowConsoleMsg("ReaClaw: starting...\n")`
 - [ ] Register main-thread timer callback: `plugin_register("timer", timer_callback_fn)`
+- [ ] After catalog index and DB are ready, reconcile registered scripts:
+  - [ ] For each row in `scripts` table, check if the `.lua` file still exists on disk
+  - [ ] Re-call `AddRemoveReaScript(true, 0, path, true)` for each script to ensure it is registered (handles REAPER reinstall or `reaper-kb.ini` reset)
+  - [ ] Log count: `"ReaClaw: re-registered N scripts"`
 - [ ] Unregister timer on unload
 
 ### Config (`src/config/`)
@@ -105,9 +109,11 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 - [ ] `GET /health` → version, uptime, catalog size, REAPER version
 - [ ] `GET /catalog` → paginated action list from SQLite
 - [ ] `GET /catalog/search?q=` → FTS5 full-text search on `actions_fts`
+- [ ] `GET /catalog/{id}` → single action lookup by numeric ID; 404 if not found
 - [ ] `GET /catalog/categories` → `SELECT category, COUNT(*) FROM actions GROUP BY category`
 - [ ] `GET /state` → BPM, time signature, cursor, transport, track count (threadsafe REAPER calls)
 - [ ] `GET /state/tracks` → enumerate all tracks with name, mute, solo, armed, volume, FX
+- [ ] `POST /state/tracks/{index}` → set track properties directly via `GetSetMediaTrackInfo`; accepts any combination of `muted`, `soloed`, `armed`, `volume_db`, `pan`; returns updated track state; 404 if index out of range
 - [ ] `GET /state/items` → media items with position, length, track index
 - [ ] `GET /state/selection` → selected tracks and items
 - [ ] `GET /state/automation` → automation envelopes for selected track
@@ -125,9 +131,11 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 - [ ] Extension loads in REAPER on Windows, macOS, Linux without crash
 - [ ] `GET /health` returns 200 with correct data
 - [ ] `/catalog/search?q=mute` returns relevant actions
+- [ ] `GET /catalog/40285` returns the correct action
 - [ ] `/state` returns correct BPM and transport state
 - [ ] `/state/tracks` returns correct track list
-- [ ] `POST /execute/action {"id": 40285}` mutes the selected track in REAPER
+- [ ] `POST /state/tracks/0 {"muted": true}` mutes track 0; response confirms new state
+- [ ] `POST /execute/action {"id": 40285}` executes in REAPER
 - [ ] Auth middleware rejects requests with wrong key
 - [ ] All executions appear in `execution_history`
 - [ ] Push `main`; tag `v0.1.0`

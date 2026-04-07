@@ -69,8 +69,9 @@ When REAPER loads the extension (`ReaperPluginEntry` is called):
 4. Register a main-thread timer callback via `plugin_register("timer", ...)`
 5. Generate a self-signed TLS cert if none exists and `tls.generate_if_missing` is true
 6. Build the action catalog index in SQLite (enumerate via `kbd_enumerateActions`)
-7. Start the `cpp-httplib` SSL server on the configured port in a background thread
-8. Log `"ReaClaw listening on https://0.0.0.0:{port}"` to the REAPER console
+7. Reconcile registered scripts — for each script in the `scripts` table, verify it is still registered with REAPER; call `AddRemoveReaScript(true, ...)` for any that are missing (handles REAPER reinstall or `reaper-kb.ini` reset)
+8. Start the `cpp-httplib` SSL server on the configured port in a background thread
+9. Log `"ReaClaw listening on https://0.0.0.0:{port}"` to the REAPER console
 
 On REAPER shutdown (`ReaperPluginEntry` called with `rec == NULL`):
 
@@ -144,6 +145,8 @@ while ((cmd_id = kbd_enumerateActions(section, idx, &name)) != 0) {
 ```
 
 Called once at startup. The catalog is rebuilt if the stored REAPER version differs from `GetAppVersion()`.
+
+**V1 scope:** Only the Main section (ID 0) is indexed. REAPER has additional sections (MIDI Editor, Media Explorer, etc.) containing section-specific actions. These are not indexed or executable in V1; this is a known limitation. Future versions can add a `section` parameter to catalog and execute endpoints.
 
 ### 3.3 Action Execution
 
@@ -278,6 +281,19 @@ Query params: `q` (required), `category` (optional filter), `limit` (default 20)
 }
 ```
 
+**GET `/catalog/{id}`**
+
+Returns the single action matching the given numeric ID. Returns 404 if not found.
+
+```json
+{
+  "id": 40285,
+  "name": "Track: Toggle mute for selected tracks",
+  "category": "Track",
+  "section": "main"
+}
+```
+
 **GET `/catalog/categories`**
 
 ```json
@@ -350,6 +366,36 @@ Currently selected tracks and items.
 **GET `/state/automation`**
 
 Automation envelopes for the selected track. Includes parameter name, mode, and envelope points.
+
+**POST `/state/tracks/{index}`**
+
+Set properties on a specific track by zero-based index directly via `GetSetMediaTrackInfo`. More reliable than finding and executing an action whose effect depends on current selection state.
+
+Request — include only the properties to change:
+```json
+{
+  "muted": true,
+  "armed": false,
+  "volume_db": -6.0,
+  "pan": -0.25
+}
+```
+
+Response:
+```json
+{
+  "index": 0,
+  "name": "Kick",
+  "muted": true,
+  "armed": false,
+  "volume_db": -6.0,
+  "pan": -0.25
+}
+```
+
+Supported writable properties: `muted` (bool), `soloed` (bool), `armed` (bool), `volume_db` (float), `pan` (float, -1.0 to 1.0)
+
+Returns 404 if track index is out of range.
 
 ---
 
