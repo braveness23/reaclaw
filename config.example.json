@@ -1,0 +1,54 @@
+{
+  "_comment": "ReaClaw configuration. Copy this to {REAPER_RESOURCE_PATH}/reaclaw/config.json and edit.",
+  "_comment2": "Find your REAPER resource path: REAPER menu → Options → Show REAPER resource path",
+
+  "server": {
+    "host": "0.0.0.0",
+    "port": 9091,
+    "thread_pool_size": 4
+  },
+
+  "tls": {
+    "enabled": true,
+    "generate_if_missing": true,
+    "cert_file": "",
+    "key_file": "",
+    "client_ca": ""
+  },
+
+  "auth": {
+    "type": "api_key",
+    "key": "sk_change_me_before_use"
+  },
+
+  "database": {
+    "path": "",
+    "type": "sqlite"
+  },
+
+  "llm": {
+    "provider": "anthropic",
+    "api_key": "",
+    "model": "claude-sonnet-4-6",
+    "base_url": ""
+  },
+
+  "script_security": {
+    "validate_syntax": true,
+    "static_analysis": true,
+    "require_approval": false,
+    "log_all_executions": true,
+    "max_script_size_kb": 512
+  },
+
+  "rate_limiting": {
+    "enabled": true,
+    "requests_per_minute": 60,
+    "scripts_per_minute": 5
+  },
+
+  "logging": {
+    "level": "info",
+    "file": ""
+  }
+}
