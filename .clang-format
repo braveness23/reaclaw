@@ -1,0 +1,127 @@
+---
+# ReaClaw clang-format configuration
+# Base: Google style with project-specific overrides
+# Requires clang-format 14+
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++17
+
+# ---------------------------------------------------------------------------
+# Indentation and line length
+# ---------------------------------------------------------------------------
+IndentWidth: 4
+ContinuationIndentWidth: 8
+ColumnLimit: 100
+TabWidth: 4
+UseTab: Never
+
+# ---------------------------------------------------------------------------
+# Brace style — keep Google's Attach style
+# ---------------------------------------------------------------------------
+BreakBeforeBraces: Attach
+
+# ---------------------------------------------------------------------------
+# Short-form suppression — always use braces and newlines
+# ---------------------------------------------------------------------------
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Empty
+
+# ---------------------------------------------------------------------------
+# Pointer and reference alignment
+# ---------------------------------------------------------------------------
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+
+# ---------------------------------------------------------------------------
+# Include sorting and grouping
+# ---------------------------------------------------------------------------
+IncludeBlocks: Regroup
+SortIncludes: CaseSensitive
+IncludeCategories:
+  # Project headers (reaclaw/)
+  - Regex:    '^"reaclaw/'
+    Priority: 1
+  # Local headers (same directory, quoted)
+  - Regex:    '^"'
+    Priority: 2
+  # Vendor/third-party headers
+  - Regex:    '^<(httplib|nlohmann|sqlite3)'
+    Priority: 3
+  # REAPER SDK
+  - Regex:    '^<(reaper_plugin|reaper_'
+    Priority: 4
+  # C++ standard library
+  - Regex:    '^<[a-z_]+>'
+    Priority: 5
+  # C standard library
+  - Regex:    '^<[a-z_]+\.h>'
+    Priority: 6
+  # Everything else
+  - Regex:    '.*'
+    Priority: 10
+
+# ---------------------------------------------------------------------------
+# Spacing
+# ---------------------------------------------------------------------------
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpaceBeforeAssignmentOperators: true
+SpaceAfterLogicalNot: false
+SpacesInAngles: Never
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceBeforeSquareBrackets: false
+
+# ---------------------------------------------------------------------------
+# Braced initializer lists
+# ---------------------------------------------------------------------------
+Cpp11BracedListStyle: true
+
+# ---------------------------------------------------------------------------
+# Line breaking
+# ---------------------------------------------------------------------------
+AlwaysBreakTemplateDeclarations: Yes
+AlwaysBreakAfterReturnType: None
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ConstructorInitializerIndentWidth: 4
+
+# ---------------------------------------------------------------------------
+# Function parameters and call arguments
+# ---------------------------------------------------------------------------
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackArguments: false
+BinPackParameters: false
+
+# ---------------------------------------------------------------------------
+# Namespaces
+# ---------------------------------------------------------------------------
+CompactNamespaces: false
+FixNamespaceComments: true
+NamespaceIndentation: None
+
+# ---------------------------------------------------------------------------
+# Comments
+# ---------------------------------------------------------------------------
+ReflowComments: true
+SpacesBeforeTrailingComments: 2
+
+# ---------------------------------------------------------------------------
+# Penalties (influence line-break decisions)
+# ---------------------------------------------------------------------------
+PenaltyBreakAssignment: 50
+PenaltyBreakBeforeFirstCallParameter: 30
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+...

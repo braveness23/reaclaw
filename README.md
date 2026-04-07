@@ -73,7 +73,7 @@ The agent is responsible for generating scripts using its own LLM capabilities. 
 
 ## Installation
 
-1. Build ReaClaw for your platform (see `ReaClaw_Design.md` → Build section)
+1. Build ReaClaw for your platform (see [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions)
 2. Copy the built file to REAPER's `UserPlugins` directory:
    - **Windows:** `%APPDATA%\REAPER\UserPlugins\`
    - **macOS:** `~/Library/Application Support/REAPER/UserPlugins/`
@@ -244,4 +244,4 @@ curl -sk -H "Authorization: Bearer sk_your_key" \
 
 ## License
 
-TBD
+MIT License — see [LICENSE](LICENSE) for full text.
