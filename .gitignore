@@ -153,3 +153,12 @@ googlemock-*/
 vcpkg_installed/
 .vcpkg-root
 vcpkg/
+
+# -----------------------------------------------------------------------------
+# Vendor — fetched manually, not committed (see vendor/README.md)
+# -----------------------------------------------------------------------------
+vendor/httplib.h
+vendor/json.hpp
+vendor/sqlite3.c
+vendor/sqlite3.h
+vendor/reaper-sdk/
