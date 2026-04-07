@@ -1,21 +1,20 @@
 # ReaClaw
 
-**ReaClaw** is a native C++ REAPER extension that embeds an HTTPS server directly inside REAPER. It exposes a REST API that lets any HTTP-capable AI agent (Claude, OpenAI, Sparky, or any custom system) operate REAPER fully — browsing the action catalog, executing actions, querying project state, generating and registering custom ReaScripts, and building reusable workflows.
+**ReaClaw** is a native C++ REAPER extension that embeds an HTTPS server directly inside REAPER. It exposes a REST API that lets any HTTP-capable AI agent operate REAPER fully — browsing the action catalog, executing actions, querying project state, registering custom Lua ReaScripts, and running multi-step sequences with per-step feedback.
 
-Because ReaClaw is a native extension (not an external process), it has direct access to every REAPER API function with no bridge scripts, no scraping, and no limitations imposed by REAPER's built-in web interface.
+Because ReaClaw is a native extension (not an external process), it has direct access to every REAPER API function with no bridge scripts, no scraping, and no limitations.
 
 ---
 
 ## Quick Summary
 
 - **Native C++ extension** — Runs inside REAPER's process; full SDK access
-- **Embedded HTTPS server** — Self-signed or CA-signed certificates; API key or mTLS auth
+- **Embedded HTTPS server** — Self-signed or CA-signed certificates; API key auth
 - **Full action catalog** — Enumerate all 65K+ actions; search by name, category, tag
-- **Action execution** — Single actions, multi-step sequences, saved workflows
-- **Script generation** — AI agents generate Lua/EEL2 ReaScripts; ReaClaw validates and registers them natively
+- **Action execution** — Single actions and multi-step sequences with per-step feedback
+- **Script registration** — Agent generates Lua; ReaClaw validates syntax and registers natively via `AddRemoveReaScript`
 - **State queries** — Tracks, BPM, transport, FX chains, automation, selection
-- **Feedback loops** — Agents verify their own work; pre/post state snapshots
-- **Audit trail** — SQLite persistence for all executions, scripts, and workflows
+- **Audit trail** — SQLite persistence for all executions and registered scripts
 - **Cross-platform** — Windows, macOS, Linux; one codebase
 
 ---
@@ -28,7 +27,7 @@ AI Agent (Claude, Sparky, curl, etc.)
   │  HTTPS (REST/JSON)
   ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  ReaClaw Extension  (reaper_reaclaw.dll / .dylib / .so)     │
+│  reaper_reaclaw  (.dll / .dylib / .so)                      │
 │                                                             │
 │  ┌─────────────────┐   ┌──────────────────────────────┐    │
 │  │  HTTPS Server   │   │  Command Queue               │    │
@@ -43,7 +42,7 @@ AI Agent (Claude, Sparky, curl, etc.)
 │  ┌──────────────────────┐  ┌──────────────────────────┐    │
 │  │  SQLite              │  │  Config                  │    │
 │  │  (scripts, history,  │  │  (reaclaw/config.json)   │    │
-│  │   workflows, cache)  │  │                          │    │
+│  │   action catalog)    │  │                          │    │
 │  └──────────────────────┘  └──────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
   │
@@ -51,48 +50,48 @@ AI Agent (Claude, Sparky, curl, etc.)
   ▼
 REAPER
   ├─ Action System (65K+ commands)
-  ├─ ReaScript Runtime (Lua / EEL2)
-  ├─ Project State (tracks, items, automation)
-  └─ Plugin/FX chain
+  ├─ ReaScript Runtime (Lua)
+  └─ Project State (tracks, items, automation)
 ```
 
 ---
 
 ## How It Works
 
-ReaClaw is a standard REAPER extension (`.dll` on Windows, `.dylib` on macOS, `.so` on Linux). REAPER loads it at startup from the `UserPlugins` directory. On load, ReaClaw:
+ReaClaw is a standard REAPER extension loaded at startup from the `UserPlugins` directory. On load it:
 
-1. Reads its config from `{REAPER_RESOURCE_PATH}/reaclaw/config.json`
-2. Spawns a background thread running an HTTPS server (cpp-httplib + OpenSSL)
-3. Registers a main-thread timer callback for executing actions safely
-4. Indexes the REAPER action catalog into SQLite
-5. Begins accepting API requests
+1. Reads config from `{REAPER_RESOURCE_PATH}/reaclaw/config.json`
+2. Opens the SQLite database and runs schema migrations
+3. Spawns a background HTTPS server thread
+4. Registers a main-thread timer callback for safe REAPER API execution
+5. Indexes the full action catalog into SQLite
+6. Begins accepting API requests
 
-All REAPER API calls that require the main thread are dispatched through a thread-safe command queue and executed on REAPER's timer callback. Threadsafe REAPER calls (state reads) are made directly from the server thread.
+The agent is responsible for generating scripts using its own LLM capabilities. ReaClaw's job is to validate syntax and register them with REAPER — not to call an LLM itself.
 
 ---
 
 ## Installation
 
-1. Build ReaClaw for your platform (see `DESIGN.md` → Build section)
-2. Copy `reaper_reaclaw.dll` / `.dylib` / `.so` to your REAPER `UserPlugins` directory:
+1. Build ReaClaw for your platform (see `ReaClaw_Design.md` → Build section)
+2. Copy the built file to REAPER's `UserPlugins` directory:
    - **Windows:** `%APPDATA%\REAPER\UserPlugins\`
    - **macOS:** `~/Library/Application Support/REAPER/UserPlugins/`
    - **Linux:** `~/.config/REAPER/UserPlugins/`
-3. Copy `config.example.json` to `{REAPER_RESOURCE_PATH}/reaclaw/config.json` and edit
+3. Copy `config.example.json` to `{REAPER_RESOURCE_PATH}/reaclaw/config.json` and set your API key
 4. Restart REAPER
-5. Verify: `curl -k https://localhost:9091/health`
+5. Verify: `curl -sk -H "Authorization: Bearer sk_your_key" https://localhost:9091/health`
 
 ---
 
-## API Endpoints (Overview)
+## API Endpoints
 
 ### System
-- `GET /health` — Server status and version
+- `GET /health` — Server status, version, catalog size
 
 ### Catalog
-- `GET /catalog` — Full action catalog
-- `GET /catalog/search?q=query` — Search by name, tag, category
+- `GET /catalog` — Full action catalog (paginated)
+- `GET /catalog/search?q=query` — Search by name, category, tag
 - `GET /catalog/categories` — Category list with counts
 
 ### State
@@ -100,30 +99,20 @@ All REAPER API calls that require the main thread are dispatched through a threa
 - `GET /state/tracks` — All tracks with properties and FX chains
 - `GET /state/items` — Media items in project
 - `GET /state/selection` — Current selection context
-- `GET /state/automation` — Automation envelopes
+- `GET /state/automation` — Automation envelopes for selected track
 
 ### Execution
-- `POST /execute/action` — Execute a single action
-- `POST /execute/sequence` — Multi-step sequence with per-step feedback
+- `POST /execute/action` — Execute a single action by ID
+- `POST /execute/sequence` — Multi-step sequence with per-step state feedback
 
 ### Scripts
-- `POST /scripts/generate` — Ask an LLM to generate a ReaScript
-- `POST /scripts/validate` — Validate script syntax without registering
-- `POST /scripts/register` — Register a script as a custom REAPER action
-- `GET /scripts/cache` — List all cached scripts
-- `GET /scripts/{id}` — Get script source
+- `POST /scripts/register` — Validate and register agent-generated Lua as a custom action
+- `GET /scripts/cache` — List all registered scripts
+- `GET /scripts/{id}` — Get script source and metadata
+- `DELETE /scripts/{id}` — Unregister and remove a script
 
-### Workflows
-- `POST /workflows` — Save a workflow (named sequence of steps)
-- `POST /workflows/{id}/execute` — Run a saved workflow
-- `GET /workflows` — List all workflows
-- `GET /workflows/{id}` — Get workflow definition
-- `PUT /workflows/{id}` — Update workflow
-- `DELETE /workflows/{id}` — Delete workflow
-
-### Verification & History
-- `POST /verify` — Verify expected state after an action
-- `GET /history` — Execution history
+### History
+- `GET /history` — Execution audit log
 
 ---
 
@@ -134,7 +123,7 @@ All REAPER API calls that require the main thread are dispatched through a threa
 | Language | C++ (C++17) | Required for REAPER native extension |
 | Build | CMake | Cross-platform; industry standard |
 | HTTP/HTTPS | cpp-httplib | Header-only; OpenSSL TLS; cross-platform |
-| TLS | OpenSSL | Industry standard; self-signed + CA certs |
+| TLS | OpenSSL | Self-signed + CA certs |
 | Database | SQLite (amalgamation) | Embedded; no external deps |
 | JSON | nlohmann/json | Header-only; standard |
 | REAPER SDK | justinfrankel/reaper-sdk | Official SDK |
@@ -143,7 +132,7 @@ All REAPER API calls that require the main thread are dispatched through a threa
 
 ## Configuration
 
-Config lives at `{REAPER_RESOURCE_PATH}/reaclaw/config.json`. See `config.example.json` for all options. Minimal working config:
+Config at `{REAPER_RESOURCE_PATH}/reaclaw/config.json`. See `config.example.json`. Minimal working config:
 
 ```json
 {
@@ -159,11 +148,11 @@ Config lives at `{REAPER_RESOURCE_PATH}/reaclaw/config.json`. See `config.exampl
 
 ```
 reaclaw/
-├── README.md                         (this file)
-├── ReaClaw_Design.md                 (full specification)
-├── ReaClaw_TECH_DECISIONS.md         (architecture decisions)
-├── ReaClaw_IMPLEMENTATION_CHECKLIST.md (phase-by-phase tasks)
-├── config.example.json               (config template)
+├── README.md
+├── ReaClaw_Design.md
+├── ReaClaw_TECH_DECISIONS.md
+├── ReaClaw_IMPLEMENTATION_CHECKLIST.md
+├── config.example.json
 ├── CMakeLists.txt
 ├── src/
 │   ├── main.cpp                      (ReaperPluginEntry, init/teardown)
@@ -174,9 +163,7 @@ reaclaw/
 │   │   ├── catalog.cpp / .h          (GET /catalog, /catalog/search)
 │   │   ├── state.cpp / .h            (GET /state/*)
 │   │   ├── execute.cpp / .h          (POST /execute/*)
-│   │   ├── scripts.cpp / .h          (POST /scripts/*)
-│   │   ├── workflows.cpp / .h        (POST/GET /workflows/*)
-│   │   ├── verify.cpp / .h           (POST /verify)
+│   │   ├── scripts.cpp / .h          (POST/GET/DELETE /scripts/*)
 │   │   └── history.cpp / .h          (GET /history)
 │   ├── reaper/
 │   │   ├── api.cpp / .h              (REAPER API wrappers + GetFunc bindings)
@@ -185,39 +172,35 @@ reaclaw/
 │   │   └── scripts.cpp / .h          (ReaScript registration via AddRemoveReaScript)
 │   ├── db/
 │   │   ├── db.cpp / .h               (SQLite connection, migrations)
-│   │   └── schema.sql                (table definitions)
+│   │   └── schema.sql
 │   ├── auth/
-│   │   └── auth.cpp / .h             (API key, mTLS middleware)
+│   │   └── auth.cpp / .h             (API key middleware)
 │   ├── config/
 │   │   └── config.cpp / .h           (JSON config loading)
 │   └── util/
 │       ├── tls.cpp / .h              (self-signed cert generation)
-│       └── logging.cpp / .h          (structured logging)
+│       └── logging.cpp / .h
 ├── vendor/
-│   ├── httplib.h                     (cpp-httplib, header-only)
-│   ├── json.hpp                      (nlohmann/json, header-only)
-│   ├── sqlite3.c / sqlite3.h         (SQLite amalgamation)
-│   └── reaper-sdk/                   (REAPER SDK headers)
-├── certs/                            (TLS certs, .gitignored)
+│   ├── httplib.h
+│   ├── json.hpp
+│   ├── sqlite3.c / sqlite3.h
+│   └── reaper-sdk/
+├── certs/                            (.gitignored)
 ├── tests/
 └── docs/
-    ├── API.md                        (detailed endpoint reference)
-    └── EXAMPLES.md                   (workflow examples for agents)
+    ├── API.md
+    └── EXAMPLES.md
 ```
 
 ---
 
 ## Implementation Phases
 
-See `ReaClaw_IMPLEMENTATION_CHECKLIST.md` for full task breakdown.
-
 | Phase | Scope | Deliverable |
 |---|---|---|
-| 0 | Extension scaffold, catalog, state, single action execution | v0.0.1 |
-| 1 | Script generation, validation, registration | v0.1.0 |
-| 2 | Multi-step sequences, verification, feedback loops | v0.2.0 |
-| 3 | Workflows, conditional branching, caching | v0.3.0 |
-| 4 | Performance, MCP integration, hardening | v1.0.0 |
+| 0 | Extension scaffold, catalog, state, action execution, HTTPS + auth | v0.1.0 |
+| 1 | Script registration, syntax validation, multi-step sequences, history | v0.2.0 |
+| 2 | MCP wrapper, performance, security hardening | v1.0.0 |
 
 ---
 
@@ -234,18 +217,25 @@ See `ReaClaw_IMPLEMENTATION_CHECKLIST.md` for full task breakdown.
 }
 ```
 
-### With Sparky/OpenClaw (MCP — Phase 4)
+### Agent generates and registers a script
 ```
-Sparky: "Set up drum recording with sidechain"
-  → calls reaclawExecuteWorkflow("drum_sidechain_record")
-  → ReaClaw runs 6-step workflow in REAPER
-  → Returns: {"status": "success", "steps_completed": 6}
+Agent generates Lua script for parallel compression
+  → POST /scripts/register { "name": "parallel_comp", "script": "local tr = ..." }
+  → Returns: { "action_id": "_parallel_comp_a1b2c3" }
+  → POST /execute/action { "id": "_parallel_comp_a1b2c3" }
 ```
 
-### With curl (testing)
+### With Sparky/OpenClaw (Phase 2 MCP)
+```
+Sparky: "Set up drum recording"
+  → reaclawExecuteSequence([mute_all, arm_drums, route_sidechain, record])
+  → Returns: { "status": "success", "steps_completed": 4 }
+```
+
+### With curl
 ```bash
 curl -sk -H "Authorization: Bearer sk_your_key" \
-  https://localhost:9091/catalog/search?q=mute | jq .
+  "https://localhost:9091/catalog/search?q=mute" | jq .
 ```
 
 ---

@@ -1,362 +1,252 @@
 # ReaClaw: Implementation Checklist
 
-Each phase is a shippable unit. Complete and test each phase before starting the next. All tasks within a phase can be worked in parallel unless noted with a dependency marker (→ depends on).
+Each phase is a shippable unit. Complete and test each phase before starting the next.
 
 ---
 
-## Phase 0: Foundation (Weeks 1–2)
+## Phase 0: Foundation
 
 **Goal:** A working REAPER extension that starts an HTTPS server, indexes the action catalog, responds to state queries, and executes single actions.
 
 ### Project Setup
 
-- [ ] Create `CMakeLists.txt` (see Design doc §8 for structure)
-- [ ] Create `vendor/` directory and populate:
+- [ ] Create `CMakeLists.txt` (see Design doc §8 for full structure)
+- [ ] Create `vendor/` and populate:
   - [ ] Download `httplib.h` from yhirose/cpp-httplib (latest release)
   - [ ] Download `json.hpp` from nlohmann/json (3.x, single header)
   - [ ] Download SQLite amalgamation (`sqlite3.c`, `sqlite3.h`) from sqlite.org
-  - [ ] Clone or copy REAPER SDK headers into `vendor/reaper-sdk/`
-        (justinfrankel/reaper-sdk on GitHub)
-- [ ] Add `.gitignore`:
-  - `build/`
-  - `certs/*.crt`, `certs/*.key`, `certs/*.pem`
-  - `*.sqlite`
-  - `.DS_Store`, `*.user`, `.vs/`
-- [ ] Verify CMake builds a `.dll`/`.dylib`/`.so` with no source yet (scaffold only)
-- [ ] Confirm the output file can be loaded by REAPER (copy to UserPlugins, restart, check for crash)
+  - [ ] Clone or copy REAPER SDK headers into `vendor/reaper-sdk/` (justinfrankel/reaper-sdk)
+- [ ] Add `.gitignore`: `build/`, `certs/`, `*.sqlite`, `.DS_Store`, `*.user`, `.vs/`
+- [ ] Verify CMake produces a `.dll`/`.dylib`/`.so` from a stub `main.cpp`
+- [ ] Copy to REAPER `UserPlugins`, restart REAPER — confirm it loads without crash
 
 ### Extension Entry Point (`src/main.cpp`)
 
 - [ ] Implement `ReaperPluginEntry(HINSTANCE, reaper_plugin_info_t*)`
-  - [ ] Check `rec == NULL` branch (unload) and return 0
-  - [ ] Check `rec->caller_version != REAPER_PLUGIN_VERSION` and return 0
-  - [ ] Call `REAPERAPI_LoadAPI(rec->GetFunc)` — bind all REAPER API function pointers
-  - [ ] On success, call `ReaClaw::init(rec)` and return 1
-  - [ ] On unload, call `ReaClaw::shutdown()`
-- [ ] Print startup message to REAPER console: `ShowConsoleMsg("ReaClaw: starting...\n")`
-- [ ] Register main-thread timer callback via `plugin_register("timer", timer_callback_fn)`
+  - [ ] `rec == NULL` branch: call `ReaClaw::shutdown()`, return 0
+  - [ ] `rec->caller_version != REAPER_PLUGIN_VERSION`: return 0
+  - [ ] Call `REAPERAPI_LoadAPI(rec->GetFunc)` to bind all API function pointers
+  - [ ] Call `ReaClaw::init(rec)`, return 1
+- [ ] Print startup message: `ShowConsoleMsg("ReaClaw: starting...\n")`
+- [ ] Register main-thread timer callback: `plugin_register("timer", timer_callback_fn)`
 - [ ] Unregister timer on unload
 
 ### Config (`src/config/`)
 
-- [ ] Implement `Config::load()`:
+- [ ] `Config::load()`:
   - [ ] Call `GetResourcePath()` to find REAPER resource dir
-  - [ ] Look for `{ResourcePath}/reaclaw/config.json`
-  - [ ] If directory `reaclaw/` doesn't exist, create it
-  - [ ] If `config.json` doesn't exist, write default config and log notice
+  - [ ] Create `{ResourcePath}/reaclaw/` if it doesn't exist
+  - [ ] If `config.json` missing, write defaults and log a notice
   - [ ] Parse with nlohmann/json into a `Config` struct
-- [ ] Config struct fields: `server.host`, `server.port`, `server.thread_pool_size`, `tls.*`, `auth.*`, `database.path`, `rate_limiting.*`, `logging.*`
-- [ ] Write `config.example.json` alongside this checklist (see `config.example.json` in repo)
-- [ ] Unit test: load valid config, load config with missing fields (defaults applied)
+- [ ] Config struct: `server.{host, port, thread_pool_size}`, `tls.{enabled, generate_if_missing, cert_file, key_file}`, `auth.{type, key}`, `database.path`, `script_security.{validate_syntax, log_all_executions, max_script_size_kb}`, `logging.{level, file}`
+- [ ] Unit test: valid config loads; missing fields use defaults
 
 ### Database (`src/db/`)
 
-- [ ] `db.cpp`: Open SQLite connection to `{ResourcePath}/reaclaw/reaclawdb.sqlite` (or config path)
-- [ ] Run schema migrations on open (read `schema.sql`, apply each CREATE TABLE IF NOT EXISTS)
-- [ ] Implement `schema.sql` with all tables from Design doc §5:
-  - `actions` + `actions_fts` (FTS5)
-  - `scripts`
-  - `workflows`
-  - `execution_history`
-- [ ] Provide a simple `DB` class with `execute(sql)`, `query(sql, params) → rows`, `insert(...)` helpers
-- [ ] Unit test: create DB, create tables, insert and query a row
+- [ ] Open SQLite at `{ResourcePath}/reaclaw/reaclawdb.sqlite` (or config path)
+- [ ] Run `schema.sql` on open (`CREATE TABLE IF NOT EXISTS` for all tables)
+- [ ] `schema.sql` tables:
+  - `actions` (id, name, category, section, created_at)
+  - `actions_fts` (FTS5 virtual table on actions)
+  - `scripts` (id, name, body, script_path, tags, execution_count, created_at, last_executed)
+  - `execution_history` (id, type, target_id, agent_id, status, error, executed_at)
+- [ ] `DB` class with `execute(sql)`, `query(sql, params) → rows`, `insert(...)` helpers
+- [ ] Unit test: create DB, insert and query a row
 
 ### REAPER API Layer (`src/reaper/api.cpp`)
 
-- [ ] Use `#define REAPERAPI_IMPLEMENT` before including `reaper_plugin_functions.h`
-- [ ] Verify all needed function pointers are non-null after `REAPERAPI_LoadAPI` — log a warning for any missing (indicates an older REAPER version)
+- [ ] `#define REAPERAPI_IMPLEMENT` before `#include "reaper_plugin_functions.h"`
+- [ ] After `REAPERAPI_LoadAPI`, verify all needed function pointers are non-null; log warning for any missing
 - [ ] Functions needed for Phase 0:
   - `kbd_enumerateActions`, `SectionFromUniqueID`
   - `CountTracks`, `GetTrack`, `GetTrackName`, `GetSetMediaTrackInfo`
   - `GetProjectTimeSignature2`, `GetCursorPosition`, `GetPlayState`
-  - `Main_OnCommand`, `Main_OnCommandEx`
-  - `GetResourcePath`, `GetAppVersion`
-  - `ShowConsoleMsg`
+  - `Main_OnCommand`
+  - `GetResourcePath`, `GetAppVersion`, `ShowConsoleMsg`
 
 ### Action Catalog Indexer (`src/reaper/catalog.cpp`)
 
-- [ ] On startup, check SQLite `actions` table:
-  - [ ] If empty or REAPER version changed (compare `GetAppVersion()` against stored value), rebuild index
-  - [ ] Enumerate via `SectionFromUniqueID(0)` + `kbd_enumerateActions` loop
-  - [ ] For each action: extract command ID and name; derive category from name prefix (e.g., `"Track: "` → category `"Track"`)
-  - [ ] Bulk-insert into `actions` table; rebuild `actions_fts` index
-  - [ ] Log count: `"ReaClaw: catalog indexed N actions"`
-- [ ] Unit test: mock `kbd_enumerateActions`; verify correct rows inserted
+- [ ] On startup, check if `actions` table is empty or REAPER version changed
+  - [ ] If rebuild needed: truncate `actions`, call `SectionFromUniqueID(0)` + `kbd_enumerateActions` loop
+  - [ ] Derive category from name prefix (e.g. `"Track: "` → `"Track"`)
+  - [ ] Bulk-insert into `actions`; rebuild `actions_fts`
+  - [ ] Store current `GetAppVersion()` result for next-run comparison
+  - [ ] Log: `"ReaClaw: indexed N actions"`
+- [ ] Unit test: mock enumeration; verify correct rows inserted
 
 ### Command Queue + Timer Callback (`src/reaper/executor.cpp`)
 
-- [ ] Define `Command` struct: `std::function<void()> execute`, `std::promise<nlohmann::json> result`
-- [ ] `std::queue<Command>` protected by `std::mutex`
+- [ ] `Command` struct: `std::function<void()> execute`, `std::promise<nlohmann::json> result`
+- [ ] `std::queue<Command>` + `std::mutex`
 - [ ] `post_command(fn) → std::future<nlohmann::json>`: enqueue and return future
-- [ ] Timer callback (called on main thread at ~30fps):
-  - Drain queue up to N commands per tick (configurable, default 10)
-  - For each: call `execute()`, set `result` promise
-- [ ] Timeout handling: if future not ready within 5s, return HTTP 408
-
-### HTTPS Server (`src/server/`)
-
-- [ ] `server.cpp`: Initialize `httplib::SSLServer` with cert/key paths
-  - [ ] If `tls.generate_if_missing` and no cert/key found, call `TLS::generate_self_signed()` first
-  - [ ] Set thread pool size from config
-  - [ ] Bind auth middleware: check `Authorization: Bearer {key}` on every request if `auth.type == "api_key"`
-  - [ ] Bind rate limiter: per-IP request count with 60s sliding window
-  - [ ] Set common response headers: `Content-Type: application/json`
-- [ ] `router.cpp`: Register all route handlers (stubs returning 501 for Phase 0 unimplemented routes)
-- [ ] Start server on background thread; store thread handle for shutdown join
+- [ ] Timer callback drains queue on main thread (up to 10 commands per tick); sets promise for each
+- [ ] Handler thread waits on future with 5s timeout; return HTTP 408 on timeout
 
 ### TLS Utilities (`src/util/tls.cpp`)
 
 - [ ] `TLS::generate_self_signed(cert_path, key_path)`:
   - [ ] Generate 4096-bit RSA key via `EVP_PKEY_keygen`
-  - [ ] Create self-signed X.509 cert valid for 10 years
-  - [ ] Write PEM-encoded cert and key to specified paths
-  - [ ] Log: `"ReaClaw: generated self-signed TLS cert at {path}"`
+  - [ ] Create self-signed X.509 cert (10 year validity)
+  - [ ] Write PEM-encoded cert and key to disk
+  - [ ] Log path on success
+
+### HTTPS Server (`src/server/`)
+
+- [ ] `server.cpp`: Initialize `httplib::SSLServer` with cert/key paths
+  - [ ] If `tls.generate_if_missing` and cert/key missing, call `TLS::generate_self_signed()` first
+  - [ ] Set thread pool size from config
+  - [ ] Auth middleware: check `Authorization: Bearer {key}` on every request when `auth.type == "api_key"`; return 401 on mismatch
+  - [ ] Set `Content-Type: application/json` on all responses
+- [ ] `router.cpp`: Register all route handlers (Phase 0 routes; return 501 for unimplemented)
+- [ ] Start server on background thread; store thread handle for shutdown join
 
 ### Phase 0 API Handlers
 
-- [ ] `GET /health` → server status, version, catalog size, uptime
-- [ ] `GET /catalog` → paginated action list from SQLite (→ depends on catalog indexed)
-- [ ] `GET /catalog/search?q=...` → FTS5 search on `actions_fts`
-- [ ] `GET /catalog/categories` → GROUP BY category from `actions` table
-- [ ] `GET /state` → call REAPER API directly (threadsafe); return project/transport/selection JSON
-- [ ] `GET /state/tracks` → enumerate tracks, FX chains, properties
-- [ ] `POST /execute/action` → post to command queue; wait for result; log to `execution_history`
+- [ ] `GET /health` → version, uptime, catalog size, REAPER version
+- [ ] `GET /catalog` → paginated action list from SQLite
+- [ ] `GET /catalog/search?q=` → FTS5 full-text search on `actions_fts`
+- [ ] `GET /catalog/categories` → `SELECT category, COUNT(*) FROM actions GROUP BY category`
+- [ ] `GET /state` → BPM, time signature, cursor, transport, track count (threadsafe REAPER calls)
+- [ ] `GET /state/tracks` → enumerate all tracks with name, mute, solo, armed, volume, FX
+- [ ] `GET /state/items` → media items with position, length, track index
+- [ ] `GET /state/selection` → selected tracks and items
+- [ ] `GET /state/automation` → automation envelopes for selected track
+- [ ] `POST /execute/action` → post to command queue; await result; log to `execution_history`; return feedback if requested
 
 ### Logging (`src/util/logging.cpp`)
 
-- [ ] Structured logging with level filter from config (`debug`, `info`, `warn`, `error`)
-- [ ] Write to REAPER console via `ShowConsoleMsg` if no log file configured
-- [ ] Write to file if `logging.file` is set in config
+- [ ] Level filter from config (`debug`, `info`, `warn`, `error`)
+- [ ] Write to REAPER console via `ShowConsoleMsg` if no log file set
+- [ ] Write to file if `logging.file` is configured
 - [ ] Format: `[LEVEL] [timestamp] message`
 
 ### Phase 0 Deliverable
 
-- [ ] Extension loads in REAPER without crash on Windows, macOS, Linux
-- [ ] HTTPS server starts; `GET /health` returns 200
-- [ ] Action catalog indexed; `/catalog/search?q=mute` returns correct results
-- [ ] `/state` returns correct BPM, transport state, track list
+- [ ] Extension loads in REAPER on Windows, macOS, Linux without crash
+- [ ] `GET /health` returns 200 with correct data
+- [ ] `/catalog/search?q=mute` returns relevant actions
+- [ ] `/state` returns correct BPM and transport state
+- [ ] `/state/tracks` returns correct track list
 - [ ] `POST /execute/action {"id": 40285}` mutes the selected track in REAPER
-- [ ] All executions written to `execution_history`
-- [ ] Auth + rate limiting functional
-- [ ] Push `main` branch; tag `v0.0.1`
+- [ ] Auth middleware rejects requests with wrong key
+- [ ] All executions appear in `execution_history`
+- [ ] Push `main`; tag `v0.1.0`
 - [ ] Write `docs/API.md` for Phase 0 endpoints
 
 ---
 
-## Phase 1: Script Generation & Registration (Weeks 3–4)
+## Phase 1: Scripts & Sequences
 
-**Goal:** AI agents can generate Lua ReaScripts, validate them, register them as custom REAPER actions via `AddRemoveReaScript`, and call them by action ID.
+**Goal:** Agents register Lua ReaScripts as custom REAPER actions and run multi-step sequences with per-step feedback.
 
 ### Prerequisites
 
 - [ ] Phase 0 complete and tagged
 
-### LLM Client (`src/llm/`)
-
-- [ ] `llm.cpp`: HTTP(S) client that calls an LLM to generate scripts
-  - [ ] Support `provider: "anthropic"` — POST to `https://api.anthropic.com/v1/messages`
-  - [ ] Support `provider: "openai"` — POST to `https://api.openai.com/v1/chat/completions`
-  - [ ] Support `base_url` override (for LiteLLM proxy or any OpenAI-compatible endpoint)
-  - [ ] Use cpp-httplib for the outbound request (separate client instance from server)
-  - [ ] Config: `llm.api_key`, `llm.model`, `llm.base_url`
-- [ ] System prompt for script generation: explain REAPER Lua API, request a complete, working script
-- [ ] Parse LLM response; extract generated code block
-
-### Script Validation (`src/script/validator.cpp`)
-
-- [ ] Syntax validation:
-  - [ ] Shell out to `luac -p {script_file}` if `luac` is available on PATH
-  - [ ] If `luac` not available, use a simple bracket-matching and keyword check as fallback
-  - [ ] Return `{ syntax_valid: bool, error: string, line: int }`
-- [ ] Static analysis (warnings, not failures):
-  - [ ] Scan for `os.execute`, `io.open`, `reaper.ExecProcess` — flag each occurrence with line number
-  - [ ] Scan for undefined `reaper.*` calls: compare against known API list (build from REAPER SDK docs)
-  - [ ] Return array of `{ line: int, message: string }` warnings
-
 ### Script Registration (`src/reaper/scripts.cpp`)
 
-- [ ] `Scripts::register_script(name, body, language, tags) → action_id`:
-  - [ ] Generate a unique ID: `_{name}_{sha256_prefix_8chars}`
-  - [ ] Write script to `{ResourcePath}/reaclaw/scripts/{action_id}.lua`
-  - [ ] Post to command queue: call `AddRemoveReaScript(true, 0, path, true)` on main thread
-  - [ ] Receive assigned command ID back from REAPER
+- [ ] `Scripts::register_script(name, body, tags) → {action_id, error}`:
+  - [ ] Generate unique ID: `_{name}_{sha256_prefix_8chars}`
+  - [ ] Check idempotency: if same name already in `scripts` table, return existing ID
+  - [ ] Validate Lua syntax:
+    - [ ] Write body to a temp file
+    - [ ] Shell out to `luac -p {tempfile}`; capture stdout/stderr
+    - [ ] If `luac` not on PATH, fall back to bracket/keyword check
+    - [ ] On failure: return `{ registered: false, syntax_error: { line, message } }`
+  - [ ] On success: write body to `{ResourcePath}/reaclaw/scripts/{action_id}.lua`
+  - [ ] Post to command queue: call `AddRemoveReaScript(true, 0, path, true)`
   - [ ] Insert into `scripts` table
-- [ ] `Scripts::unregister_script(action_id)`: call `AddRemoveReaScript(false, ...)`, delete file, remove from DB
-- [ ] Handle idempotency: if same name already registered, return existing ID
+  - [ ] Return `{ action_id, registered: true, script_path }`
+- [ ] `Scripts::unregister_script(action_id)`:
+  - [ ] Post to command queue: call `AddRemoveReaScript(false, 0, path, true)`
+  - [ ] Delete `.lua` file from disk
+  - [ ] Remove row from `scripts` table
 
 ### Phase 1 API Handlers
 
-- [ ] `POST /scripts/generate` → call LLM client; run validator; return script + warnings (→ depends on LLM client, validator)
-- [ ] `POST /scripts/validate` → run validator only; no LLM call, no registration
-- [ ] `POST /scripts/register` → validate then register via `AddRemoveReaScript` (→ depends on validator, script registrar)
-- [ ] `GET /scripts/cache` → query `scripts` table
-- [ ] `GET /scripts/{id}` → read from `scripts` table; return source + metadata
+- [ ] `POST /scripts/register` → call `Scripts::register_script`; return result
+- [ ] `GET /scripts/cache` → query all rows from `scripts` table; support `?tags=` filter
+- [ ] `GET /scripts/{id}` → fetch row + read file body from disk
+- [ ] `DELETE /scripts/{id}` → call `Scripts::unregister_script`
+
+### Multi-Step Sequence (`src/handlers/execute.cpp`)
+
+- [ ] `POST /execute/sequence`:
+  - [ ] Iterate `steps` array
+  - [ ] For each step: post to command queue; await result
+  - [ ] If `feedback_between_steps: true`, call state read functions after each step; include in step result
+  - [ ] If `stop_on_failure: true`, abort on first failure; mark remaining steps as `"skipped"`
+  - [ ] Log each step to `execution_history` (type `"sequence"`, target = sequence label or first action ID)
+  - [ ] Return: overall status, `steps_completed`, per-step results array
+
+### Execution History (`src/handlers/history.cpp`)
+
+- [ ] `GET /history`:
+  - [ ] Query `execution_history` ordered by `executed_at DESC`
+  - [ ] Support `?limit=`, `?offset=`, `?agent_id=` query params
+  - [ ] Read `X-Agent-Id` request header on all endpoints and store in `execution_history.agent_id`
 
 ### Phase 1 Deliverable
 
-- [ ] `POST /scripts/generate` produces a syntactically valid Lua script for common intents (parallel comp, mute track group, EQ setup)
-- [ ] `POST /scripts/register` registers the script; it appears in REAPER's Actions list under the generated ID
-- [ ] `POST /execute/action` with the generated ID runs the script in REAPER
-- [ ] Calling `POST /scripts/register` twice with same name returns the same ID (idempotent)
-- [ ] Static analysis catches obvious bad patterns; warnings returned to agent
-- [ ] Push `main`; tag `v0.1.0`
-- [ ] Update `docs/API.md` with script endpoints
-- [ ] Add `docs/EXAMPLES.md` with "generate and cache" example
+- [ ] `POST /scripts/register` with valid Lua: script appears in REAPER Actions list
+- [ ] `POST /execute/action` with the registered ID runs the script in REAPER
+- [ ] Registering same name twice returns existing ID (idempotent)
+- [ ] `POST /scripts/register` with syntax error returns error + line number; nothing written to disk or REAPER
+- [ ] `DELETE /scripts/{id}` removes from REAPER Actions list and disk
+- [ ] `POST /execute/sequence` with 5 steps: all execute in order; per-step feedback returned
+- [ ] `stop_on_failure: true` stops at first failure; remaining steps marked skipped
+- [ ] `GET /history` returns accurate log
+- [ ] Push `main`; tag `v0.2.0`
+- [ ] Update `docs/API.md` with Phase 1 endpoints
+- [ ] Add `docs/EXAMPLES.md` with script registration and sequence examples
 
 ---
 
-## Phase 2: Feedback Loops & State Verification (Weeks 5–6)
+## Phase 2: Integration & Hardening
 
-**Goal:** Agents execute multi-step sequences and verify the effects of their actions.
+**Goal:** MCP wrapper for OpenClaw/Sparky; agent identification; performance; security audit.
 
 ### Prerequisites
 
 - [ ] Phase 1 complete and tagged
 
-### Multi-Step Execution (`src/handlers/execute.cpp`)
-
-- [ ] `POST /execute/sequence`:
-  - [ ] Iterate steps array
-  - [ ] For each step: post to command queue, await result
-  - [ ] If `feedback_between_steps: true`, query state after each step
-  - [ ] If `stop_on_failure: true`, abort sequence on first failure; log completed + failed steps
-  - [ ] Collect per-step results; return full execution log
-
-### State Snapshots
-
-- [ ] `StateSnapshot::capture() → nlohmann::json`:
-  - [ ] Call all threadsafe state read functions
-  - [ ] Return a full JSON blob of: project info, transport, all tracks + FX
-- [ ] Before each action execution: capture snapshot, store in `execution_history.state_before`
-- [ ] After each action execution: capture snapshot, store in `execution_history.state_after`
-
-### Verification (`src/handlers/verify.cpp`)
-
-- [ ] `POST /verify`:
-  - [ ] Accept `expected` as a map of JSON path → expected value
-  - [ ] Capture current state snapshot
-  - [ ] For each key in `expected`: resolve the JSON path in the snapshot; compare values
-  - [ ] Return: `verified` bool, per-check results with `pass/fail`, `actual` values
-- [ ] JSON path resolution: support simple dot-notation (`tracks[0].muted`, `transport.playing`)
-
-### History Enhancement
-
-- [ ] Extend `GET /history` response to include `state_before`, `state_after`, `verification_result`
-- [ ] Add query params: `type` filter (action/script/workflow), `status` filter (success/failed), date range
-
-### Phase 2 Deliverable
-
-- [ ] `POST /execute/sequence` with 5 steps executes reliably; all step results returned
-- [ ] `feedback_between_steps: true` returns state after each step
-- [ ] `POST /verify` correctly identifies when an action did or did not have the expected effect
-- [ ] `execution_history` entries include state_before and state_after JSON
-- [ ] Push `main`; tag `v0.2.0`
-- [ ] Add "multi-step feedback loop" example to `docs/EXAMPLES.md`
-
----
-
-## Phase 3: Workflows & Macro System (Weeks 7–8)
-
-**Goal:** Save and reuse named multi-step workflows; agents learn to reuse instead of regenerate.
-
-### Prerequisites
-
-- [ ] Phase 2 complete and tagged
-
-### Workflow CRUD (`src/handlers/workflows.cpp`)
-
-- [ ] `POST /workflows` — validate step array; assign ID; insert into `workflows` table
-- [ ] `GET /workflows` — list all; support `?tag=` filter
-- [ ] `GET /workflows/{id}` — fetch single workflow with all steps
-- [ ] `PUT /workflows/{id}` — update name, description, tags, or steps
-- [ ] `DELETE /workflows/{id}` — remove from DB (does not unregister referenced scripts)
-
-### Workflow Execution (`src/reaper/executor.cpp`)
-
-- [ ] `Executor::run_workflow(workflow_id) → ExecutionLog`:
-  - [ ] Fetch workflow from DB
-  - [ ] Iterate steps:
-    - `type: "action"` → post to command queue via `Main_OnCommand`
-    - `type: "script"` → same (uses registered script's command ID)
-    - `type: "query"` → capture state, no execution
-    - `type: "condition"` → evaluate condition expression against current state; branch to `on_success` or `on_failure` step ID
-  - [ ] Collect step results; write to `execution_history`
-  - [ ] Update `workflows.last_executed`, increment `execution_count`
-
-### Conditional Branching
-
-- [ ] Condition expression: simple JSON path check, e.g. `"tracks[0].muted == false"`
-- [ ] Evaluator: resolve JSON path in current state snapshot; compare with literal value
-- [ ] `on_success` and `on_failure` are step IDs within the same workflow (or `"abort"` / `"continue"`)
-
-### Cache Hints (Reuse Detection)
-
-- [ ] On `GET /scripts/cache` and `GET /workflows`, include `execution_count` and `last_executed`
-- [ ] When agent submits `POST /scripts/generate`, check `scripts` table for matching tags before calling LLM — return cached match hint in response: `"cache_hint": { "action_id": "...", "name": "..." }`
-
-### Phase 3 Deliverable
-
-- [ ] Save a "drum recording setup" workflow; execute it 10 times; all succeed
-- [ ] Conditional branching skips steps correctly when track does not exist
-- [ ] `execution_count` increments; `last_executed` updates correctly
-- [ ] Cache hint returned when LLM generation would be redundant
-- [ ] Push `main`; tag `v0.3.0`
-- [ ] Document workflow JSON format in `docs/API.md`
-
----
-
-## Phase 4: Integration & Hardening (Weeks 9–10)
-
-**Goal:** Production-ready; optional MCP wrapper for OpenClaw/Sparky; multiple concurrent agent support; performance; security audit.
-
-### Prerequisites
-
-- [ ] Phase 3 complete and tagged
-
 ### Agent Identification
 
 - [ ] Read `X-Agent-Id` header on all requests; store in `execution_history.agent_id`
-- [ ] `GET /history?agent_id=sparky` — filter history by agent
-- [ ] Per-agent rate limits (separate bucket per `X-Agent-Id` in addition to per-IP)
+- [ ] `GET /history?agent_id=sparky` filters by agent
 
 ### Performance
 
-- [ ] Profile all Phase 0–3 endpoints with a benchmarking tool (e.g., `wrk` or `k6`)
-- [ ] Target: catalog search <50ms, state queries <100ms, action execution <200ms (excluding command queue wait)
-- [ ] Add database indexes on `execution_history.executed_at`, `scripts.tags`, `workflows.tags`
-- [ ] Cache hot state reads in memory with 1s TTL to reduce REAPER API call frequency
+- [ ] Profile all Phase 0–1 endpoints (target: catalog search <50ms, state queries <100ms, action execution <200ms excluding queue wait)
+- [ ] Add SQLite indexes: `execution_history(executed_at)`, `scripts(name)`
+- [ ] Cache frequent state reads in memory with 1s TTL to reduce REAPER API call frequency
 
 ### Optional MCP Wrapper
 
-- [ ] Design MCP tool definitions for:
+- [ ] Design MCP tool definitions:
   - `reaclawExecuteAction`
+  - `reaclawExecuteSequence`
   - `reaclawQueryState`
-  - `reaclawGenerateScript`
-  - `reaclawExecuteWorkflow`
+  - `reaclawRegisterScript`
   - `reaclawSearchCatalog`
-- [ ] Write `docs/MCP.md` explaining how to configure ReaClaw as an MCP server in OpenClaw
+- [ ] Write `docs/MCP.md` — how to configure ReaClaw as an MCP server in OpenClaw
 
 ### Security Hardening
 
 - [ ] Add `Strict-Transport-Security` header to all responses
-- [ ] Validate all input sizes (script body, workflow steps array, intent string)
-- [ ] Ensure script files are written only inside `{ResourcePath}/reaclaw/scripts/`; reject any path traversal in names
-- [ ] Rate limit script generation separately from other endpoints
-- [ ] Audit log: write security events (auth failures, rate limit hits, script warnings) to a dedicated log
-
-### Error Recovery
-
-- [ ] Script versioning: on `PUT /scripts/{id}`, keep previous version in DB; allow rollback to prior version
+- [ ] Validate all input sizes (script body ≤ max_script_size_kb, step arrays ≤ 100 items)
+- [ ] Ensure script files are written only inside `{ResourcePath}/reaclaw/scripts/`; reject path traversal in script names
+- [ ] Audit log for auth failures (wrong API key → log IP and timestamp)
 
 ### Observability
 
-- [ ] `GET /metrics` — expose request counts, error rates, average latency per endpoint, queue depth (Prometheus text format)
-- [ ] Health check includes: DB connection, server thread alive, command queue depth
+- [ ] `GET /health` enhancements: include command queue depth, DB connection status, server thread alive
+- [ ] Structured log format option (`"format": "json"` in logging config)
 
-### Phase 4 Deliverable
+### Phase 2 Deliverable
 
 - [ ] Load test: 10 concurrent agents making catalog searches — all <50ms
-- [ ] MCP tool definitions documented; Sparky can call ReaClaw via MCP
+- [ ] MCP tool definitions documented and tested with Sparky
 - [ ] Security hardening checklist complete
 - [ ] Push `main`; tag `v1.0.0`
 - [ ] Write `docs/DEPLOYMENT.md` with platform-specific build and install instructions
@@ -365,20 +255,17 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 
 ## Ongoing (All Phases)
 
-- [ ] Keep all unit tests passing before each commit
+- [ ] Keep unit and integration tests passing before each commit
 - [ ] Update `docs/API.md` as endpoints are added or changed
 - [ ] Add `CHANGELOG.md` entry for each tagged release
-- [ ] Respond to issues in GitHub; keep README accurate
-- [ ] Keep `vendor/` library versions pinned and documented
+- [ ] Keep `vendor/` library versions pinned and documented in `CMakeLists.txt` comments
 
 ---
 
-## Success Criteria Summary
+## Success Criteria
 
 | Phase | Key criterion |
 |---|---|
-| 0 | Catalog indexed; action executed in REAPER via HTTP; HTTPS working |
-| 1 | AI-generated script runs in REAPER; cached and reusable by ID |
-| 2 | Agent verifies its own action effects; multi-step sequences with feedback |
-| 3 | Saved workflows execute reliably; agent reuses instead of regenerating |
-| 4 | 10 concurrent agents; MCP integration; production-hardened |
+| 0 | Catalog indexed; action executes in REAPER via HTTPS; auth works |
+| 1 | Agent-generated Lua runs in REAPER; cached and callable by ID; sequences with feedback work |
+| 2 | MCP integration working; 10 concurrent agents handled; production-hardened |

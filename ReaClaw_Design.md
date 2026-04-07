@@ -4,7 +4,9 @@
 
 ## 1. Executive Summary
 
-ReaClaw is a native C++ REAPER extension that embeds an HTTPS server inside REAPER's process. It gives any HTTP-capable AI agent full programmatic control over REAPER: browsing and executing actions, querying project state, generating and registering custom ReaScripts, and building reusable multi-step workflows with feedback and verification.
+ReaClaw is a native C++ REAPER extension that embeds an HTTPS server inside REAPER's process. It gives any HTTP-capable AI agent full programmatic control over REAPER: browsing and executing actions, querying project state, and registering agent-generated Lua ReaScripts as custom actions.
+
+**Design principle:** ReaClaw interfaces with REAPER. The agent reasons, generates, and decides. ReaClaw does not call LLMs, does not manage workflows on the agent's behalf, and does not second-guess the agent's generated code beyond a syntax check.
 
 **Key properties:**
 - Native extension — runs in REAPER's process; direct access to all REAPER API functions
@@ -31,7 +33,7 @@ ReaClaw is a native C++ REAPER extension that embeds an HTTPS server inside REAP
 │  │  HTTPS Server Thread Pool  (cpp-httplib + OpenSSL)       │   │
 │  │  ┌────────────────────────────────────────────────────┐  │   │
 │  │  │  Router + Auth middleware                          │  │   │
-│  │  │  /catalog  /state  /execute  /scripts  /workflows  │  │   │
+│  │  │  /catalog  /state  /execute  /scripts  /history    │  │   │
 │  │  └────────────────────────────────────────────────────┘  │   │
 │  └─────────────────────────┬────────────────────────────────┘   │
 │                             │                                    │
@@ -68,7 +70,7 @@ When REAPER loads the extension (`ReaperPluginEntry` is called):
 5. Generate a self-signed TLS cert if none exists and `tls.generate_if_missing` is true
 6. Build the action catalog index in SQLite (enumerate via `kbd_enumerateActions`)
 7. Start the `cpp-httplib` SSL server on the configured port in a background thread
-8. Log "ReaClaw listening on https://0.0.0.0:{port}" to the REAPER console
+8. Log `"ReaClaw listening on https://0.0.0.0:{port}"` to the REAPER console
 
 On REAPER shutdown (`ReaperPluginEntry` called with `rec == NULL`):
 
@@ -82,8 +84,8 @@ The REAPER SDK distinguishes threadsafe from non-threadsafe functions. The web s
 
 **Background threads (cpp-httplib thread pool):**
 - Parse requests and run route handlers
-- May call threadsafe REAPER functions directly (e.g., `CountTracks`, `GetTrack`, `GetTrackName`, `GetProjectTimeSignature2`, `GetPlayState`)
-- For non-threadsafe calls (primarily action execution via `Main_OnCommand`), post a `Command` to the queue and block on its `std::future<Result>` with a configurable timeout (default 5s)
+- Call threadsafe REAPER functions directly (e.g., `CountTracks`, `GetTrack`, `GetTrackName`, `GetProjectTimeSignature2`, `GetPlayState`)
+- For non-threadsafe calls (primarily `Main_OnCommand`), post a `Command` to the queue and block on its `std::future<Result>` with a configurable timeout (default 5s)
 
 **Main thread (timer callback at ~30fps):**
 - Drain the command queue
@@ -93,12 +95,12 @@ The REAPER SDK distinguishes threadsafe from non-threadsafe functions. The web s
 **Command queue structure:**
 ```cpp
 struct Command {
-    std::function<void()>   execute;    // Called on main thread
+    std::function<void()>        execute;   // Called on main thread
     std::promise<nlohmann::json> result;
 };
 
-std::queue<Command>  command_queue;
-std::mutex           queue_mutex;
+std::queue<Command> command_queue;
+std::mutex          queue_mutex;
 ```
 
 ---
@@ -108,19 +110,15 @@ std::mutex           queue_mutex;
 ### 3.1 Plugin Entry Point
 
 ```cpp
-// Entry point exported by the extension DLL/dylib/so
 extern "C" REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
     HINSTANCE hInstance,
     reaper_plugin_info_t *rec)
 {
     if (!rec) {
-        // Cleanup on unload
         ReaClaw::shutdown();
         return 0;
     }
     if (rec->caller_version != REAPER_PLUGIN_VERSION) return 0;
-
-    // Load all API function pointers
     if (!REAPERAPI_LoadAPI(rec->GetFunc)) return 0;
 
     ReaClaw::init(rec);
@@ -132,89 +130,81 @@ extern "C" REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
 
 ### 3.2 Action Catalog Enumeration
 
-REAPER organizes actions into "sections" (Main, MIDI Editor, Media Explorer, etc.). The main section (section ID 0) contains the primary 65K+ actions.
-
 ```cpp
-// Get the main keyboard section
-KbdSectionInfo *section = SectionFromUniqueID(0);
+KbdSectionInfo *section = SectionFromUniqueID(0); // Main section
 
 int idx = 0;
 const char *name = nullptr;
 int cmd_id = 0;
 
 while ((cmd_id = kbd_enumerateActions(section, idx, &name)) != 0) {
-    // Store {cmd_id, name} in catalog
+    // Store {cmd_id, name} in SQLite actions table
     idx++;
 }
 ```
 
-This is called once at startup; results are written to the `actions` SQLite table. The catalog is rebuilt if the REAPER version changes (detected by comparing stored version to `GetAppVersion()`).
+Called once at startup. The catalog is rebuilt if the stored REAPER version differs from `GetAppVersion()`.
 
 ### 3.3 Action Execution
 
-Action execution must happen on the main thread. The handler posts to the command queue:
+`Main_OnCommand` must be called from the main thread. Handlers post to the command queue:
 
 ```cpp
 // From web server handler thread:
 Command cmd;
-cmd.execute = [cmd_id]() {
-    Main_OnCommand(cmd_id, 0);
-};
 auto future = cmd.result.get_future();
+cmd.execute = [cmd_id]() { Main_OnCommand(cmd_id, 0); };
 
 {
     std::lock_guard<std::mutex> lock(queue_mutex);
     command_queue.push(std::move(cmd));
 }
 
-// Wait for main thread to execute
-auto status = future.wait_for(std::chrono::seconds(5));
-if (status == std::future_status::timeout) {
-    // Return 504 timeout error
+if (future.wait_for(std::chrono::seconds(5)) == std::future_status::timeout) {
+    // Return HTTP 408
 }
 ```
 
 ### 3.4 ReaScript Registration
 
 ```cpp
-// Register a Lua script file as a custom REAPER action
-// sectionID 0 = Main section
-// Returns the assigned command ID, or 0 on failure
+// Write the agent-generated script to disk, then register it:
 int new_cmd_id = AddRemoveReaScript(
-    true,         // isAdd
-    0,            // sectionID (Main)
-    script_path,  // absolute path to .lua file on disk
-    true          // commit (true = persist to reaper-kb.ini)
+    true,        // isAdd
+    0,           // sectionID (Main)
+    script_path, // absolute path to .lua file
+    true         // commit — persist to reaper-kb.ini
 );
+// Returns command ID, or 0 on failure
 ```
 
-To remove:
+To unregister:
 ```cpp
 AddRemoveReaScript(false, 0, script_path, true);
 ```
 
-Scripts are written to `{GetResourcePath()}/reaclaw/scripts/{id}.lua` before registration.
+Scripts are written to `{GetResourcePath()}/reaclaw/scripts/{id}.lua`.
 
 ### 3.5 State Queries (threadsafe — called directly from handler threads)
 
 ```cpp
-// Project overview
-double bpm;
-double beat;
+// BPM and time signature
+double bpm, beat;
 GetProjectTimeSignature2(nullptr, &bpm, &beat);
 
+// Transport
 int play_state = GetPlayState(); // 0=stopped, 1=playing, 2=paused, 4=recording
 
+// Cursor
 double cursor_pos = GetCursorPosition();
 
-// Track enumeration
-int num_tracks = CountTracks(nullptr); // nullptr = current project
+// Tracks
+int num_tracks = CountTracks(nullptr);
 for (int i = 0; i < num_tracks; i++) {
     MediaTrack *track = GetTrack(nullptr, i);
     char name[256] = {};
     GetTrackName(track, name, sizeof(name));
     bool muted = *(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr);
-    // ... etc.
 }
 ```
 
@@ -224,13 +214,13 @@ for (int i = 0; i < num_tracks; i++) {
 
 All endpoints:
 - Accept and return `application/json`
-- Require `Authorization: Bearer {key}` header if auth type is `api_key`
+- Require `Authorization: Bearer {key}` header when `auth.type` is `api_key`
 - Return standard error shape on failure:
   ```json
   { "error": "description", "code": "ERROR_CODE", "context": {} }
   ```
 
-HTTP status codes: `200 OK`, `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `408 Request Timeout`, `429 Too Many Requests`, `500 Internal Server Error`
+HTTP status codes: `200 OK`, `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `408 Request Timeout`, `500 Internal Server Error`
 
 ---
 
@@ -256,7 +246,7 @@ HTTP status codes: `200 OK`, `400 Bad Request`, `401 Unauthorized`, `404 Not Fou
 
 Returns full action catalog. Supports pagination.
 
-Query params: `limit` (default 100), `offset` (default 0), `section` (default "main")
+Query params: `limit` (default 100), `offset` (default 0), `section` (default `"main"`)
 
 ```json
 {
@@ -268,7 +258,6 @@ Query params: `limit` (default 100), `offset` (default 0), `section` (default "m
       "id": 40285,
       "name": "Track: Toggle mute for selected tracks",
       "category": "Track",
-      "tags": ["track", "mute"],
       "section": "main"
     }
   ]
@@ -277,7 +266,7 @@ Query params: `limit` (default 100), `offset` (default 0), `section` (default "m
 
 **GET `/catalog/search?q=query`**
 
-Full-text search across name, category, and tags. SQLite FTS5 index.
+Full-text search across action names and categories. SQLite FTS5.
 
 Query params: `q` (required), `category` (optional filter), `limit` (default 20)
 
@@ -306,8 +295,6 @@ Query params: `q` (required), `category` (optional filter), `limit` (default 20)
 
 **GET `/state`**
 
-High-level project summary.
-
 ```json
 {
   "project": {
@@ -324,10 +311,6 @@ High-level project summary.
     "loop_enabled": true,
     "loop_start": 0.0,
     "loop_end": 8.0
-  },
-  "selection": {
-    "track_count": 1,
-    "item_count": 0
   },
   "track_count": 12
 }
@@ -347,12 +330,10 @@ High-level project summary.
       "armed": true,
       "volume_db": 0.0,
       "pan": 0.0,
-      "fx_count": 2,
       "fx": [
         { "slot": 0, "name": "ReaComp (Cockos)", "enabled": true }
       ],
-      "send_count": 1,
-      "receives_count": 0
+      "send_count": 1
     }
   ]
 }
@@ -360,15 +341,15 @@ High-level project summary.
 
 **GET `/state/items`**
 
-Media items in the current project.
+Media items in the current project. Includes position, length, track index, and take name.
 
 **GET `/state/selection`**
 
-Currently selected tracks, items, and take.
+Currently selected tracks and items.
 
 **GET `/state/automation`**
 
-Automation envelopes for selected track. Includes points, mode, parameter.
+Automation envelopes for the selected track. Includes parameter name, mode, and envelope points.
 
 ---
 
@@ -376,7 +357,7 @@ Automation envelopes for selected track. Includes points, mode, parameter.
 
 **POST `/execute/action`**
 
-Execute a single action by numeric ID or custom script action ID string.
+Execute a single action by numeric ID or registered script action ID string.
 
 Request:
 ```json
@@ -386,8 +367,8 @@ Request:
 }
 ```
 
-- `id`: Integer (built-in action) or string (custom action, e.g. `"_parallel_comp_abc123"`)
-- `feedback`: If true, include state snapshot after execution
+- `id`: Integer (built-in) or string (registered script, e.g. `"_parallel_comp_a1b2c3"`)
+- `feedback`: If true, capture and return current state after execution
 
 Response:
 ```json
@@ -396,21 +377,23 @@ Response:
   "action_id": 40285,
   "executed_at": "2026-04-07T14:24:10Z",
   "feedback": {
-    "state_after": { ... }
+    "tracks": [...],
+    "transport": {...}
   }
 }
 ```
 
 **POST `/execute/sequence`**
 
-Execute multiple actions in order. Each step can include a feedback check between steps.
+Execute multiple actions in order. Returns per-step results. The agent inspects each step's feedback to decide whether to continue.
 
 Request:
 ```json
 {
   "steps": [
     { "id": 40285, "label": "mute kick" },
-    { "id": 40286, "label": "mute snare" }
+    { "id": "_setup_sidechain_abc", "label": "setup sidechain" },
+    { "id": 1013, "label": "record" }
   ],
   "feedback_between_steps": true,
   "stop_on_failure": true
@@ -421,13 +404,13 @@ Response:
 ```json
 {
   "status": "success",
-  "steps_completed": 2,
+  "steps_completed": 3,
   "steps": [
     {
       "label": "mute kick",
       "action_id": 40285,
       "status": "success",
-      "feedback": { "state_after": {...} }
+      "feedback": { "tracks": [...] }
     }
   ]
 }
@@ -437,73 +420,40 @@ Response:
 
 ### 4.5 Script Management
 
-**POST `/scripts/generate`**
-
-Calls the configured LLM to generate a ReaScript.
-
-Request:
-```json
-{
-  "intent": "Create parallel compression routing on the selected track",
-  "context": {
-    "selected_track_index": 0,
-    "track_name": "Drums",
-    "available_fx": ["ReaComp", "ReaEQ", "ReaGate"]
-  },
-  "language": "lua"
-}
-```
-
-Response:
-```json
-{
-  "script": "local tr = reaper.GetSelectedTrack(0,0)\n...",
-  "language": "lua",
-  "preview": "Inserts aux track, routes signal parallel, adds ReaComp at 4:1 ratio",
-  "warnings": [],
-  "syntax_valid": true
-}
-```
-
-**POST `/scripts/validate`**
-
-Validate a script without registering it.
-
-Request: `{ "script": "...", "language": "lua" }`
-
-Response:
-```json
-{
-  "syntax_valid": true,
-  "warnings": [
-    { "line": 14, "message": "os.execute call detected — potential shell execution" }
-  ]
-}
-```
-
 **POST `/scripts/register`**
 
-Write a script to disk and register it as a custom REAPER action via `AddRemoveReaScript`.
+The agent provides a Lua script it has generated. ReaClaw validates the syntax, writes it to disk, and registers it as a custom REAPER action via `AddRemoveReaScript`.
 
 Request:
 ```json
 {
   "name": "parallel_comp_drums",
-  "script": "local tr = ...",
-  "language": "lua",
+  "script": "local tr = reaper.GetSelectedTrack(0,0)\n...",
   "tags": ["compression", "parallel", "drums"]
 }
 ```
 
-Response:
+Response on success:
 ```json
 {
   "action_id": "_parallel_comp_drums_a1b2c3",
   "registered": true,
-  "script_path": "/Users/dave/Library/.../reaclaw/scripts/_parallel_comp_drums_a1b2c3.lua",
-  "callable_immediately": true
+  "script_path": "/Users/dave/.../reaclaw/scripts/_parallel_comp_drums_a1b2c3.lua"
 }
 ```
+
+Response on syntax error:
+```json
+{
+  "registered": false,
+  "syntax_error": {
+    "line": 7,
+    "message": "'end' expected (to close 'function') near '<eof>'"
+  }
+}
+```
+
+Idempotent: if a script with the same name is already registered, return the existing `action_id`.
 
 **GET `/scripts/cache`**
 
@@ -513,10 +463,10 @@ Response:
     {
       "action_id": "_parallel_comp_drums_a1b2c3",
       "name": "parallel_comp_drums",
-      "language": "lua",
-      "tags": ["compression", "parallel"],
+      "tags": ["compression", "parallel", "drums"],
       "created_at": "2026-04-07T10:00:00Z",
-      "execution_count": 5
+      "execution_count": 5,
+      "last_executed": "2026-04-07T14:24:10Z"
     }
   ]
 }
@@ -524,102 +474,15 @@ Response:
 
 **GET `/scripts/{action_id}`**
 
-Returns the script source and metadata for the given action ID.
+Returns the full Lua source and metadata for the given action ID.
+
+**DELETE `/scripts/{action_id}`**
+
+Unregisters the script from REAPER via `AddRemoveReaScript(false, ...)`, deletes the `.lua` file, and removes the entry from SQLite.
 
 ---
 
-### 4.6 Workflows
-
-**POST `/workflows`**
-
-Save a named multi-step workflow to SQLite.
-
-Request:
-```json
-{
-  "name": "drum_sidechain_record",
-  "description": "Route kick to sidechain, mute drums except hihat, arm, record",
-  "tags": ["drums", "recording", "sidechain"],
-  "steps": [
-    {
-      "id": "step_1",
-      "type": "action",
-      "action_id": 40280,
-      "label": "Select kick track"
-    },
-    {
-      "id": "step_2",
-      "type": "script",
-      "action_id": "_setup_sidechain_abc",
-      "label": "Setup sidechain routing",
-      "on_failure": "abort"
-    },
-    {
-      "id": "step_3",
-      "type": "action",
-      "action_id": 1013,
-      "label": "Record"
-    }
-  ]
-}
-```
-
-Step types: `action` (built-in), `script` (registered custom action), `query` (read state, no execution), `condition` (branch on state)
-
-Response: `{ "workflow_id": "wf_drum_sidechain_a1b2", "created": true }`
-
-**POST `/workflows/{id}/execute`**
-
-Run a saved workflow. Returns a step-by-step execution log.
-
-**GET `/workflows`**
-
-List all saved workflows. Supports `?tag=drums` filtering.
-
-**GET `/workflows/{id}`**
-
-Full workflow definition including steps.
-
-**PUT `/workflows/{id}`**
-
-Update a workflow definition.
-
-**DELETE `/workflows/{id}`**
-
-Delete a workflow.
-
----
-
-### 4.7 Verification
-
-**POST `/verify`**
-
-Check that REAPER state matches expectations after an action.
-
-Request:
-```json
-{
-  "expected": {
-    "tracks[0].muted": true,
-    "transport.playing": false
-  }
-}
-```
-
-Response:
-```json
-{
-  "verified": false,
-  "checks": [
-    { "path": "tracks[0].muted", "expected": true, "actual": true, "pass": true },
-    { "path": "transport.playing", "expected": false, "actual": true, "pass": false }
-  ]
-}
-```
-
----
-
-### 4.8 History
+### 4.6 History
 
 **GET `/history`**
 
@@ -631,7 +494,7 @@ Query params: `limit` (default 50), `offset`, `agent_id`
     {
       "id": 1042,
       "type": "action",
-      "action_id": 40285,
+      "target_id": "40285",
       "agent_id": "claude-sonnet-4-6",
       "status": "success",
       "executed_at": "2026-04-07T14:24:10Z"
@@ -647,54 +510,36 @@ Query params: `limit` (default 50), `offset`, `agent_id`
 ```sql
 -- Action catalog (indexed from REAPER at startup)
 CREATE TABLE actions (
-    id          INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL,
-    category    TEXT,
-    section     TEXT DEFAULT 'main',
-    created_at  TEXT DEFAULT (datetime('now'))
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL,
+    category   TEXT,
+    section    TEXT DEFAULT 'main',
+    created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE VIRTUAL TABLE actions_fts USING fts5(name, category, content=actions);
 
--- Generated and registered ReaScripts
+-- Agent-registered Lua ReaScripts
 CREATE TABLE scripts (
-    id              TEXT PRIMARY KEY,   -- e.g. "_parallel_comp_a1b2"
+    id              TEXT PRIMARY KEY,    -- e.g. "_parallel_comp_a1b2c3"
     name            TEXT NOT NULL,
-    language        TEXT NOT NULL,      -- 'lua', 'eel2'
     body            TEXT NOT NULL,
     script_path     TEXT NOT NULL,
-    generated_by    TEXT,               -- LLM model name if AI-generated
-    intent          TEXT,               -- Original generation prompt
-    tags            TEXT,               -- JSON array
+    tags            TEXT,                -- JSON array
     execution_count INTEGER DEFAULT 0,
     created_at      TEXT DEFAULT (datetime('now')),
     last_executed   TEXT
 );
 
--- Saved workflows
-CREATE TABLE workflows (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    description TEXT,
-    tags        TEXT,               -- JSON array
-    steps       TEXT NOT NULL,      -- JSON array of WorkflowStep
-    created_at  TEXT DEFAULT (datetime('now')),
-    last_executed TEXT,
-    execution_count INTEGER DEFAULT 0
-);
-
 -- Execution audit log
 CREATE TABLE execution_history (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    type            TEXT NOT NULL,      -- 'action', 'script', 'workflow', 'sequence'
-    target_id       TEXT NOT NULL,      -- action/script/workflow ID
-    agent_id        TEXT,               -- Identifying header from request
-    status          TEXT NOT NULL,      -- 'success', 'failed', 'timeout'
-    state_before    TEXT,               -- JSON snapshot
-    state_after     TEXT,               -- JSON snapshot
-    error           TEXT,
-    executed_at     TEXT DEFAULT (datetime('now'))
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    type        TEXT NOT NULL,           -- 'action', 'script', 'sequence'
+    target_id   TEXT NOT NULL,           -- action/script ID
+    agent_id    TEXT,                    -- from X-Agent-Id header
+    status      TEXT NOT NULL,           -- 'success', 'failed', 'timeout'
+    error       TEXT,
+    executed_at TEXT DEFAULT (datetime('now'))
 );
-
 ```
 
 ---
@@ -703,15 +548,13 @@ CREATE TABLE execution_history (
 
 ### Authentication
 
-Three modes, set in `config.json`:
+Two modes, set in `config.json`:
 
-**`none`** — No auth. Use only on localhost or fully trusted network. Default for local dev.
+**`none`** — No auth. Use only on localhost or a fully trusted network.
 
-**`api_key`** — All requests must include `Authorization: Bearer {key}`. Key is set in config. Simple and effective for home-network use.
+**`api_key`** — All requests must include `Authorization: Bearer {key}`. Key is set in config. Recommended for any network-accessible deployment.
 
-**`mtls`** — Mutual TLS. Client must present a certificate signed by the configured client CA. Strongest option for remote or multi-agent scenarios.
-
-### TLS Configuration
+### TLS
 
 ReaClaw always runs HTTPS. Two certificate modes:
 
@@ -722,9 +565,9 @@ ReaClaw always runs HTTPS. Two certificate modes:
   "generate_if_missing": true
 }
 ```
-On first run, ReaClaw generates a 4096-bit RSA key and self-signed cert, saved to `{ResourcePath}/reaclaw/certs/`. Agents connecting locally skip certificate verification (or use `-k` with curl).
+On first run, ReaClaw generates a 4096-bit RSA key and self-signed cert, saved to `{ResourcePath}/reaclaw/certs/`. Agents skip certificate verification for self-signed (`-k` with curl, or equivalent in SDK).
 
-**CA-signed (production):**
+**CA-signed:**
 ```json
 "tls": {
   "enabled": true,
@@ -733,34 +576,25 @@ On first run, ReaClaw generates a 4096-bit RSA key and self-signed cert, saved t
 }
 ```
 
-### Script Security
+### Script Validation
 
-| Script type | Trust level | Validation |
-|---|---|---|
-| Built-in REAPER actions | Fully trusted | None |
-| Community scripts (ReaPack) | Trusted | None |
-| User-written ReaScripts | Trusted | None |
-| AI-generated scripts | Untrusted until validated | Syntax check + static analysis |
+Before registering any agent-submitted script, ReaClaw runs a syntax check:
 
-Static analysis warnings (not hard failures):
-- `os.execute(...)` — shell execution
-- `io.open(...)` with path outside project directory — filesystem access
-- `reaper.ExecProcess(...)` — process spawning
-- Calls to undefined Reaper API functions
+```bash
+luac -p {script_file}
+```
 
-All script executions are written to `execution_history`. Source code is retained in SQLite and on disk.
+If `luac` is not available on PATH, fall back to a lightweight bracket/keyword check. On failure, return the error with line number — do not register. On success, register immediately.
 
-### Rate Limiting
-
-Configurable per-IP and per-key limits. Defaults:
-- 60 requests/minute per IP
-- 5 script generations/minute per IP
+No static analysis, no approval gate. The agent is trusted; syntax validation exists only to catch generation errors before they reach REAPER.
 
 ---
 
 ## 7. Configuration Reference
 
 Config file: `{GetResourcePath()}/reaclaw/config.json`
+
+If missing, ReaClaw writes defaults on startup.
 
 ```json
 {
@@ -773,8 +607,7 @@ Config file: `{GetResourcePath()}/reaclaw/config.json`
     "enabled": true,
     "generate_if_missing": true,
     "cert_file": "",
-    "key_file": "",
-    "client_ca": ""
+    "key_file": ""
   },
   "auth": {
     "type": "api_key",
@@ -783,23 +616,10 @@ Config file: `{GetResourcePath()}/reaclaw/config.json`
   "database": {
     "path": ""
   },
-  "llm": {
-    "provider": "anthropic",
-    "api_key": "",
-    "model": "claude-sonnet-4-6",
-    "base_url": ""
-  },
   "script_security": {
     "validate_syntax": true,
-    "static_analysis": true,
-    "require_approval": false,
     "log_all_executions": true,
     "max_script_size_kb": 512
-  },
-  "rate_limiting": {
-    "enabled": true,
-    "requests_per_minute": 60,
-    "scripts_per_minute": 5
   },
   "logging": {
     "level": "info",
@@ -809,9 +629,8 @@ Config file: `{GetResourcePath()}/reaclaw/config.json`
 ```
 
 Notes:
-- `database.path`: If empty, defaults to `{ResourcePath}/reaclaw/reaclawdb.sqlite`
-- `llm.base_url`: If set, overrides the provider's default endpoint (use for LiteLLM proxy or OpenAI-compatible)
-- `tls.client_ca`: Required only when `auth.type` is `mtls`
+- `database.path`: Defaults to `{ResourcePath}/reaclaw/reaclawdb.sqlite`
+- `auth.type`: `"none"` or `"api_key"`
 - `logging.file`: If empty, logs to REAPER console via `ShowConsoleMsg`
 
 ---
@@ -849,8 +668,6 @@ add_library(reaper_reaclaw SHARED
     src/handlers/state.cpp
     src/handlers/execute.cpp
     src/handlers/scripts.cpp
-    src/handlers/workflows.cpp
-    src/handlers/verify.cpp
     src/handlers/history.cpp
     src/reaper/api.cpp
     src/reaper/catalog.cpp
@@ -872,19 +689,17 @@ target_include_directories(reaper_reaclaw PRIVATE
 
 target_link_libraries(reaper_reaclaw PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 
-# Platform-specific output
 set_target_properties(reaper_reaclaw PROPERTIES
     PREFIX ""
     OUTPUT_NAME "reaper_reaclaw"
 )
 
-# Install to REAPER UserPlugins
 if(DEFINED REAPER_USER_PLUGINS)
     install(TARGETS reaper_reaclaw DESTINATION "${REAPER_USER_PLUGINS}")
 endif()
 ```
 
-Build and install:
+Build:
 ```bash
 cmake -B build -DREAPER_USER_PLUGINS="/path/to/UserPlugins"
 cmake --build build --config Release
@@ -899,15 +714,11 @@ On Windows, must use MSVC (required for REAPER C++ ABI compatibility).
 
 See `ReaClaw_IMPLEMENTATION_CHECKLIST.md` for full task breakdown.
 
-**Phase 0 — Foundation (Weeks 1–2):** Extension scaffold; REAPER API binding; action catalog; state queries; single action execution; HTTPS + auth; SQLite
+**Phase 0 — Foundation:** Extension scaffold; REAPER API binding; action catalog; state queries; single action execution; HTTPS + auth; SQLite
 
-**Phase 1 — Script Generation (Weeks 3–4):** `/scripts/generate` (LLM API call); syntax validation; static analysis; `AddRemoveReaScript` registration; script cache
+**Phase 1 — Scripts & Sequences:** Script registration (`AddRemoveReaScript`); Lua syntax validation; script cache; multi-step sequences with per-step feedback; execution history
 
-**Phase 2 — Feedback Loops (Weeks 5–6):** Multi-step sequences; `/verify` endpoint; state snapshots before/after; execution history; per-step feedback
-
-**Phase 3 — Workflows (Weeks 7–8):** Workflow CRUD; conditional branching; workflow execution log; agent reuse detection
-
-**Phase 4 — Integration & Hardening (Weeks 9–10):** Optional MCP wrapper for OpenClaw/Sparky; multiple concurrent agent support; performance profiling; security audit
+**Phase 2 — Integration & Hardening:** Optional MCP wrapper for OpenClaw/Sparky; agent identification; performance profiling; security audit
 
 ---
 
@@ -919,42 +730,40 @@ Agent: "Mute the selected track"
   → GET /catalog/search?q=mute+selected+track
   → Returns: id=40285, "Track: Toggle mute for selected tracks"
   → POST /execute/action { "id": 40285, "feedback": true }
-  → Returns: { "status": "success", "feedback": { "tracks[0].muted": true } }
-  → Agent: Verified. Done.
+  → Returns: { "status": "success", "feedback": { "tracks": [{"muted": true, ...}] } }
 ```
 
-### Generate and cache a script
+### Agent generates and registers a script
 ```
-Agent: "Set up parallel compression on the drums bus"
-  → GET /scripts/cache?tag=parallel → empty
-  → POST /scripts/generate { "intent": "parallel compression on drums bus", "language": "lua" }
-  → Returns: { "script": "...", "syntax_valid": true }
-  → POST /scripts/register { "name": "parallel_comp_drums", "script": "..." }
-  → Returns: { "action_id": "_parallel_comp_drums_a1b2c3" }
+Agent generates Lua for parallel compression (using its own LLM capabilities)
+  → GET /scripts/cache?tags=parallel  →  empty, not cached
+  → POST /scripts/register {
+      "name": "parallel_comp_drums",
+      "script": "local tr = reaper.GetSelectedTrack(0,0)\n...",
+      "tags": ["compression", "parallel"]
+    }
+  → Returns: { "action_id": "_parallel_comp_drums_a1b2c3", "registered": true }
   → POST /execute/action { "id": "_parallel_comp_drums_a1b2c3", "feedback": true }
-  → POST /verify { "expected": { "tracks[3].fx_count": 2 } }
-  → Returns: { "verified": true }
 
 Next time:
-  → GET /scripts/cache?tag=parallel → found: _parallel_comp_drums_a1b2c3
+  → GET /scripts/cache?tags=parallel  →  found: _parallel_comp_drums_a1b2c3
   → POST /execute/action { "id": "_parallel_comp_drums_a1b2c3" }
   → No regeneration needed.
 ```
 
-### Multi-step workflow with verification
+### Multi-step sequence
 ```
-Agent: "Record drums with sidechain routing from kick"
+Agent: "Record drums with sidechain from kick"
   → POST /execute/sequence {
       "steps": [
         { "id": 40280, "label": "select kick" },
         { "id": "_setup_sidechain_xyz", "label": "setup sidechain" },
         { "id": 1013, "label": "record" }
       ],
-      "feedback_between_steps": true
+      "feedback_between_steps": true,
+      "stop_on_failure": true
     }
-  → Step 1 feedback: { "selected_track": "Kick" } ✓
-  → Step 2 feedback: { "sidechain_target": "Drums Bus" }
-  → POST /verify { "expected": { "sidechain_target": "Drums Bus" } }
-  → verified: true → continue
+  → Step 1 feedback: tracks[0].name = "Kick" ✓
+  → Step 2 feedback: tracks[3].fx[1].name = "ReaComp" ✓
   → Step 3: recording started
 ```
