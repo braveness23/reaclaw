@@ -61,9 +61,10 @@ or 90 days have elapsed, whichever comes first.
 ### Transport
 
 ReaClaw listens exclusively on HTTPS. Plain HTTP is not supported and cannot
-be enabled via configuration. The server defaults to `127.0.0.1:9091`
-(loopback only). Binding to `0.0.0.0` or a specific interface is possible via
-config but is an explicit user choice.
+be enabled via configuration. The server defaults to `0.0.0.0:9091` (all
+local interfaces). To restrict to loopback only, set `"host": "127.0.0.1"`
+in `config.json` — this is strongly recommended unless you explicitly need
+LAN access.
 
 ### TLS / Certificate
 
@@ -79,16 +80,16 @@ replace the auto-generated certificate with one signed by a local CA.
 
 ### Authentication
 
-Two auth modes are supported, selected via `openclaw.json`:
+Two auth modes are supported, selected via `config.json`:
 
 | Mode | Description |
 |------|-------------|
 | `none` | No authentication. Suitable only for fully isolated localhost use. |
-| `api-key` | Bearer token required on every request (`Authorization: Bearer <key>`). |
+| `api_key` | Bearer token required on every request (`Authorization: Bearer <key>`). |
 
-API key auth is the recommended default. The key is generated at install time
-and stored in `{ResourcePath}/reaclaw/config.db` (SQLite). There is no
-session, no cookie, no OAuth flow — just a shared secret per request.
+API key auth is the recommended default. The key is set in
+`{ResourcePath}/reaclaw/config.json`. There is no session, no cookie, no
+OAuth flow — just a shared secret per request.
 
 ### Lua Script Execution
 
@@ -147,14 +148,14 @@ The following classes of issues are in scope for this security policy:
 
 ## Security Best Practices for Deployers
 
-- **Keep the server on loopback.** Do not bind to `0.0.0.0` unless you
-  understand the implications and have a firewall in place.
+- **Restrict to loopback.** Set `"host": "127.0.0.1"` in `config.json` unless
+  you need LAN access and have a firewall in place.
 - **Always enable API key auth.** The `none` mode is provided for local
   development convenience; do not use it in any environment where the port
   is reachable from untrusted hosts.
-- **Rotate the API key** if you believe it has been compromised. A new key
-  can be generated via the ReaClaw CLI or by deleting `config.db` (this also
-  clears execution history).
+- **Rotate the API key** if you believe it has been compromised. Edit
+  `config.json` and restart REAPER. To also clear execution history, delete
+  `{ResourcePath}/reaclaw/reaclawdb.sqlite`.
 - **Review scripts before use.** Lua scripts run with the same OS permissions
   as REAPER. Do not execute scripts from untrusted sources.
 - **Keep ReaClaw updated.** Security fixes are released as patch versions.

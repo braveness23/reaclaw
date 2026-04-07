@@ -39,6 +39,8 @@ target_compile_options(sqlite3 PRIVATE
 )
 # Enable FTS5 (full-text search) for the action catalog
 target_compile_definitions(sqlite3 PUBLIC SQLITE_ENABLE_FTS5=1)
+# Required on Linux/macOS: static lib linked into a shared lib must be PIC
+set_target_properties(sqlite3 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # ---------------------------------------------------------------------------
 # Main extension target
@@ -103,6 +105,9 @@ else()
         -Wall -Wextra -Wpedantic
         -Wno-unused-parameter    # REAPER callbacks have mandated signatures
     )
+    # swell-types.h (Linux/macOS) defines min/max macros; suppress them
+    # so they don't conflict with std::min / std::max.
+    target_compile_definitions(reaper_reaclaw PRIVATE NOMINMAX)
 endif()
 
 if(APPLE)

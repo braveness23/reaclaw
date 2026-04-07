@@ -173,8 +173,7 @@ reaclaw/
 │   │   ├── executor.cpp / .h         (action execution, command queue)
 │   │   └── scripts.cpp / .h          (ReaScript registration via AddRemoveReaScript)
 │   ├── db/
-│   │   ├── db.cpp / .h               (SQLite connection, migrations)
-│   │   └── schema.sql
+│   │   └── db.cpp / .h               (SQLite connection, schema, migrations)
 │   ├── auth/
 │   │   └── auth.cpp / .h             (API key middleware)
 │   ├── config/

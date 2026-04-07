@@ -3,6 +3,10 @@
 #include "db/db.h"
 #include "app.h"
 
+// Full REAPER SDK — provides reaper_plugin_info_t definition and REAPERAPI_LoadAPI.
+// REAPERAPI_IMPLEMENT is NOT defined here; storage for function pointers lives in api.cpp.
+#include <reaper_plugin_functions.h>
+
 #include <chrono>
 
 // ---------------------------------------------------------------------------

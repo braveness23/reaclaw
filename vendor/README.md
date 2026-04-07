@@ -30,7 +30,16 @@ curl -L https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
 
 # SQLite amalgamation — download from https://www.sqlite.org/download.html
 # Extract sqlite3.c and sqlite3.h into vendor/
+# e.g.: curl -L https://www.sqlite.org/2024/sqlite-amalgamation-3470200.zip -o /tmp/sq.zip
+#       unzip -j /tmp/sq.zip "*/sqlite3.c" "*/sqlite3.h" -d vendor/
 
 # REAPER SDK
 git clone https://github.com/justinfrankel/reaper-sdk.git vendor/reaper-sdk
+# Copy the sdk/ headers into vendor/reaper-sdk/ (the include path CMake uses):
+cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/   # if the clone lands in a subdir, adjust
+
+# WDL/swell — required on Linux and macOS (reaper_plugin.h includes ../WDL/swell/swell.h)
+git clone --depth=1 --filter=blob:none --sparse https://github.com/justinfrankel/WDL.git /tmp/wdl-tmp
+cd /tmp/wdl-tmp && git sparse-checkout set WDL/swell && cd -
+cp -r /tmp/wdl-tmp/WDL/swell vendor/WDL/
 ```

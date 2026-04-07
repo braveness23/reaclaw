@@ -78,7 +78,7 @@ nlohmann::json read_project_state() {
     GetSet_LoopTimeRange2(nullptr, false, false, &loop_start, &loop_end, false);
 
     char proj_path[4096] = {};
-    GetProjectPath(nullptr, proj_path, sizeof(proj_path));
+    GetProjectPath(proj_path, sizeof(proj_path));
 
     std::string path_str(proj_path);
     std::string proj_name;

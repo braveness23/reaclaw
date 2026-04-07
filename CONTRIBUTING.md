@@ -53,9 +53,10 @@ The following are bundled in `vendor/` and must be present:
 | `httplib.h` | [yhirose/cpp-httplib](https://github.com/yhirose/cpp-httplib) — latest release |
 | `json.hpp` | [nlohmann/json](https://github.com/nlohmann/json) — 3.x single header |
 | `sqlite3.c` + `sqlite3.h` | [SQLite amalgamation](https://www.sqlite.org/download.html) |
-| `reaper-sdk/` | [justinfrankel/reaper-sdk](https://github.com/justinfrankel/reaper-sdk) |
+| `reaper-sdk/` | [justinfrankel/reaper-sdk](https://github.com/justinfrankel/reaper-sdk) — copy `sdk/*.h` into `vendor/reaper-sdk/` |
+| `WDL/swell/` | [justinfrankel/WDL](https://github.com/justinfrankel/WDL) — required on Linux and macOS (sparse clone `WDL/swell` into `vendor/WDL/`) |
 
-OpenSSL is a system/vcpkg dependency and is not bundled.
+See `vendor/README.md` for exact fetch commands. OpenSSL is a system/vcpkg dependency and is not bundled.
 
 ---
 
