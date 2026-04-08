@@ -49,7 +49,8 @@ int ReaperPluginEntry(void* hInstance, reaper_plugin_info_t* rec) {
 
     // Bind all REAPER API function pointers. Must succeed before any
     // REAPER API calls are made (including ShowConsoleMsg / GetResourcePath).
-    if (!REAPERAPI_LoadAPI(rec->GetFunc)) return 0;
+    // Note: REAPERAPI_LoadAPI returns 0 on success, non-zero on failure.
+    if (REAPERAPI_LoadAPI(rec->GetFunc)) return 0;
 
     ReaClaw::g_start_time = std::chrono::steady_clock::now();
 

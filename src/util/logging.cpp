@@ -121,7 +121,9 @@ void init(LogLevel level, const std::string& file_path,
     g_level        = level;
     g_json_format  = (format == "json");
     g_show_console = show_console_fn;
-    if (!file_path.empty() && !g_file.is_open()) {
+    // Close any existing file handle before (re-)opening.
+    if (g_file.is_open()) g_file.close();
+    if (!file_path.empty()) {
         g_file.open(file_path, std::ios::app);
     }
 }

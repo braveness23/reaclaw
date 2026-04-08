@@ -170,7 +170,11 @@ std::string DB::scalar_text(const std::string& sql,
 }
 
 bool DB::run_schema() {
-    return execute(k_schema);
+    if (!execute(k_schema)) return false;
+    // Migration: add reaper_cmd_id column if it doesn't exist (added in v0.3).
+    // SQLite silently returns an error if the column already exists; that is fine.
+    execute("ALTER TABLE scripts ADD COLUMN reaper_cmd_id INTEGER NOT NULL DEFAULT 0");
+    return true;
 }
 
 }  // namespace ReaClaw

@@ -266,12 +266,14 @@ RegisterResult register_script(const std::string& name,
         return result;
     }
 
-    // --- Persist to DB ---
+    // --- Persist to DB (including the REAPER command ID for direct execution) ---
+    int reaper_cmd = reg.value("cmd", 0);
     nlohmann::json tags_json(tags);
     g_db.query(
-        "INSERT OR REPLACE INTO scripts(id, name, body, script_path, tags) "
-        "VALUES(?1, ?2, ?3, ?4, ?5)",
-        {action_id, name, body, script_path, tags_json.dump()});
+        "INSERT OR REPLACE INTO scripts(id, name, body, script_path, tags, reaper_cmd_id) "
+        "VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+        {action_id, name, body, script_path, tags_json.dump(),
+         std::to_string(reaper_cmd)});
 
     Log::info("Scripts: registered '" + name + "' → " + action_id);
 

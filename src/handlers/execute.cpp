@@ -27,10 +27,22 @@ void log_history(const std::string& type, const std::string& target_id,
 }
 
 // Resolve a JSON id value (int or string) to a REAPER command id.
+// For string IDs, first tries the scripts DB (using the stored reaper_cmd_id),
+// then falls back to NamedCommandLookup for extension-registered named actions.
 int resolve_cmd_id(const nlohmann::json& id_val) {
     if (id_val.is_number_integer()) return id_val.get<int>();
     if (id_val.is_string()) {
         std::string name = id_val.get<std::string>();
+        // Check scripts DB first: ReaScripts have a stored REAPER command ID.
+        auto rows = g_db.query(
+            "SELECT reaper_cmd_id FROM scripts WHERE id = ?1", {name});
+        if (!rows.empty()) {
+            try {
+                int cmd = std::stoi(rows[0].at("reaper_cmd_id"));
+                if (cmd != 0) return cmd;
+            } catch (...) {}
+        }
+        // Fall back to NamedCommandLookup for named actions.
         return NamedCommandLookup(name.c_str());
     }
     return 0;

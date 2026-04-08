@@ -20,6 +20,13 @@ X-Agent-Id: <string>
 ```
 Stored in `execution_history.agent_id` for filtering via `GET /history?agent_id=`.
 
+All responses include:
+```
+Strict-Transport-Security: max-age=31536000
+```
+
+`GET /state`, `GET /state/tracks`, and `GET /state/items` responses are cached for 1 second. A `POST /state/tracks/{index}` write immediately invalidates the cache.
+
 ---
 
 ## Phase 0 (v0.1.0)
@@ -31,12 +38,19 @@ Returns server status.
 ```json
 {
   "status": "ok",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "reaper_version": "7.12",
   "catalog_size": 65234,
-  "uptime_seconds": 3600
+  "uptime_seconds": 3600,
+  "queue_depth": 0,
+  "db_ok": true,
+  "server_running": true
 }
 ```
+
+- `queue_depth` — commands currently waiting for the REAPER main thread
+- `db_ok` — SQLite connection is open
+- `server_running` — HTTPS listener thread is active
 
 ---
 
