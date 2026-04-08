@@ -1,6 +1,9 @@
 #pragma once
 
-namespace httplib { struct Request; struct Response; }
+namespace httplib {
+struct Request;
+struct Response;
+}  // namespace httplib
 
 namespace ReaClaw::Handlers {
 

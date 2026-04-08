@@ -12,7 +12,8 @@ namespace Log {
 // level: minimum level to emit.
 // file_path: if non-empty, also append to this file.
 // format: "text" (default) or "json" for structured log output.
-void init(LogLevel level, const std::string& file_path,
+void init(LogLevel level,
+          const std::string& file_path,
           void (*show_console_fn)(const char*),
           const std::string& format = "text");
 

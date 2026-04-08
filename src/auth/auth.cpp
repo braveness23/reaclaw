@@ -1,4 +1,5 @@
 #include "auth/auth.h"
+
 #include "config/config.h"
 #include "util/logging.h"
 
@@ -7,7 +8,8 @@
 namespace ReaClaw::Auth {
 
 bool check(const Config& cfg, const httplib::Request& req) {
-    if (cfg.auth_type != "api_key") return true;  // auth.type = "none"
+    if (cfg.auth_type != "api_key")
+        return true;  // auth.type = "none"
 
     auto it = req.headers.find("Authorization");
     if (it == req.headers.end()) {
@@ -15,8 +17,8 @@ bool check(const Config& cfg, const httplib::Request& req) {
         return false;
     }
 
-    const std::string& hdr    = it->second;
-    const std::string  prefix = "Bearer ";
+    const std::string& hdr = it->second;
+    const std::string prefix = "Bearer ";
     if (hdr.size() <= prefix.size() || hdr.substr(0, prefix.size()) != prefix) {
         Log::warn("Auth: malformed Authorization header from " + req.remote_addr);
         return false;
@@ -32,9 +34,8 @@ bool check(const Config& cfg, const httplib::Request& req) {
 
 void reject(httplib::Response& res) {
     res.status = 401;
-    res.set_content(
-        R"({"error":"Unauthorized","code":"UNAUTHORIZED","context":{}})",
-        "application/json");
+    res.set_content(R"({"error":"Unauthorized","code":"UNAUTHORIZED","context":{}})",
+                    "application/json");
 }
 
 }  // namespace ReaClaw::Auth

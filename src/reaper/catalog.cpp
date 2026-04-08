@@ -1,12 +1,13 @@
 #include "reaper/catalog.h"
+
 #include "db/db.h"
 #include "util/logging.h"
 
 // REAPER SDK — extern declarations of all API function pointers
 // (REAPERAPI_IMPLEMENT is defined only in reaper/api.cpp)
-#include <reaper_plugin_functions.h>
-
 #include <string>
+
+#include <reaper_plugin_functions.h>
 
 namespace ReaClaw::Catalog {
 
@@ -24,9 +25,9 @@ std::string extract_category(const char* name) {
 }
 
 bool needs_rebuild(DB& db, const std::string& reaper_version) {
-    if (db.scalar_int("SELECT COUNT(*) FROM actions") == 0) return true;
-    return db.scalar_text("SELECT value FROM meta WHERE key='reaper_version'")
-           != reaper_version;
+    if (db.scalar_int("SELECT COUNT(*) FROM actions") == 0)
+        return true;
+    return db.scalar_text("SELECT value FROM meta WHERE key='reaper_version'") != reaper_version;
 }
 
 }  // namespace
@@ -34,8 +35,7 @@ bool needs_rebuild(DB& db, const std::string& reaper_version) {
 void build(DB& db, const std::string& reaper_version) {
     if (!needs_rebuild(db, reaper_version)) {
         Log::info("Catalog up to date: " +
-                  std::to_string(db.scalar_int("SELECT COUNT(*) FROM actions")) +
-                  " actions");
+                  std::to_string(db.scalar_int("SELECT COUNT(*) FROM actions")) + " actions");
         return;
     }
 
@@ -52,7 +52,7 @@ void build(DB& db, const std::string& reaper_version) {
     db.execute("DELETE FROM actions_fts");
 
     int indexed = 0;
-    int idx     = 0;
+    int idx = 0;
     const char* name = nullptr;
     int cmd_id = 0;
 
@@ -60,9 +60,9 @@ void build(DB& db, const std::string& reaper_version) {
         if (name && name[0] != '\0') {
             std::string category = extract_category(name);
             db.query(
-                "INSERT OR REPLACE INTO actions(id, name, category, section) "
-                "VALUES(?1, ?2, ?3, 'main')",
-                {std::to_string(cmd_id), std::string(name), category});
+                    "INSERT OR REPLACE INTO actions(id, name, category, section) "
+                    "VALUES(?1, ?2, ?3, 'main')",
+                    {std::to_string(cmd_id), std::string(name), category});
             indexed++;
         }
         idx++;

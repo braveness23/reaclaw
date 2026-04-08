@@ -1,7 +1,11 @@
 #pragma once
 
-namespace httplib { class SSLServer; }
-namespace ReaClaw { struct Config; }
+namespace httplib {
+class SSLServer;
+}
+namespace ReaClaw {
+struct Config;
+}
 
 namespace ReaClaw::Router {
 

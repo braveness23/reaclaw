@@ -8,8 +8,8 @@
 
 namespace ReaClaw {
 
-extern Config                                    g_config;
-extern DB                                        g_db;
-extern std::chrono::steady_clock::time_point     g_start_time;
+extern Config g_config;
+extern DB g_db;
+extern std::chrono::steady_clock::time_point g_start_time;
 
 }  // namespace ReaClaw

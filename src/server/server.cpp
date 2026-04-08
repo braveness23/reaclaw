@@ -1,8 +1,9 @@
 #include "server/server.h"
-#include "server/router.h"
-#include "util/tls.h"
-#include "util/logging.h"
+
 #include "config/config.h"
+#include "server/router.h"
+#include "util/logging.h"
+#include "util/tls.h"
 
 #include <httplib.h>  // CPPHTTPLIB_OPENSSL_SUPPORT is set via CMake compile definitions
 
@@ -16,20 +17,21 @@ namespace ReaClaw::Server {
 namespace {
 
 std::unique_ptr<httplib::SSLServer> g_server;
-std::thread                         g_thread;
-std::atomic<bool>                   g_running{false};
+std::thread g_thread;
+std::atomic<bool> g_running{false};
 
 }  // namespace
 
 bool start(const Config& cfg) {
     // Resolve or generate TLS cert/key
     const std::string& cert = cfg.resolved_cert_path;
-    const std::string& key  = cfg.resolved_key_path;
+    const std::string& key = cfg.resolved_key_path;
 
     if (!TLS::files_exist(cert, key)) {
         if (!cfg.tls_generate_if_missing) {
-            Log::error("TLS cert/key not found and generate_if_missing is false. "
-                       "Set cert_file/key_file in config or enable generate_if_missing.");
+            Log::error(
+                    "TLS cert/key not found and generate_if_missing is false. "
+                    "Set cert_file/key_file in config or enable generate_if_missing.");
             return false;
         }
         if (!TLS::generate_self_signed(cert, key)) {
@@ -54,7 +56,7 @@ bool start(const Config& cfg) {
 
     // Start listening on a background thread
     const std::string host = cfg.host;
-    const int         port = cfg.port;
+    const int port = cfg.port;
 
     g_running = true;
     g_thread = std::thread([host, port]() {

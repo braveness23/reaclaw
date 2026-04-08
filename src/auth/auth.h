@@ -1,7 +1,12 @@
 #pragma once
 
-namespace httplib { struct Request; struct Response; }
-namespace ReaClaw { struct Config; }
+namespace httplib {
+struct Request;
+struct Response;
+}  // namespace httplib
+namespace ReaClaw {
+struct Config;
+}
 
 namespace ReaClaw::Auth {
 

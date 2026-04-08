@@ -36,7 +36,7 @@ __declspec(dllexport)
 #else
 __attribute__((visibility("default")))
 #endif
-int ReaperPluginEntry(void* hInstance, reaper_plugin_info_t* rec) {
+        int ReaperPluginEntry(void* hInstance, reaper_plugin_info_t* rec) {
     (void)hInstance;
 
     if (!rec) {
