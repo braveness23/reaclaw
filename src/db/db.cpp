@@ -1,4 +1,5 @@
 #include "db/db.h"
+
 #include "util/logging.h"
 
 #include <sqlite3.h>
@@ -56,15 +57,17 @@ CREATE INDEX IF NOT EXISTS idx_scripts_name
 
 }  // namespace
 
-DB::~DB() { close(); }
+DB::~DB() {
+    close();
+}
 
 bool DB::open(const std::string& path) {
-    if (db_) close();
+    if (db_)
+        close();
 
     int rc = sqlite3_open(path.c_str(), &db_);
     if (rc != SQLITE_OK) {
-        Log::error("DB open failed (" + path + "): " +
-                   std::string(sqlite3_errmsg(db_)));
+        Log::error("DB open failed (" + path + "): " + std::string(sqlite3_errmsg(db_)));
         sqlite3_close(db_);
         db_ = nullptr;
         return false;
@@ -113,9 +116,8 @@ Rows DB::query(const std::string& sql, const std::vector<std::string>& params) {
         Row row;
         for (int c = 0; c < ncols; c++) {
             const char* col_name = sqlite3_column_name(stmt, c);
-            const unsigned char* val  = sqlite3_column_text(stmt, c);
-            row[col_name ? col_name : ""] =
-                val ? reinterpret_cast<const char*>(val) : "";
+            const unsigned char* val = sqlite3_column_text(stmt, c);
+            row[col_name ? col_name : ""] = val ? reinterpret_cast<const char*>(val) : "";
         }
         rows.push_back(std::move(row));
     }
@@ -138,9 +140,8 @@ Rows DB::query_i(const std::string& sql, const std::vector<int64_t>& params) {
         Row row;
         for (int c = 0; c < ncols; c++) {
             const char* col_name = sqlite3_column_name(stmt, c);
-            const unsigned char* val  = sqlite3_column_text(stmt, c);
-            row[col_name ? col_name : ""] =
-                val ? reinterpret_cast<const char*>(val) : "";
+            const unsigned char* val = sqlite3_column_text(stmt, c);
+            row[col_name ? col_name : ""] = val ? reinterpret_cast<const char*>(val) : "";
         }
         rows.push_back(std::move(row));
     }
@@ -153,24 +154,30 @@ int64_t DB::last_insert_rowid() const {
 }
 
 int64_t DB::scalar_int(const std::string& sql,
-                        const std::vector<std::string>& params,
-                        int64_t default_val) {
+                       const std::vector<std::string>& params,
+                       int64_t default_val) {
     auto rows = query(sql, params);
-    if (rows.empty() || rows[0].empty()) return default_val;
-    try { return std::stoll(rows[0].begin()->second); } catch (...) {}
+    if (rows.empty() || rows[0].empty())
+        return default_val;
+    try {
+        return std::stoll(rows[0].begin()->second);
+    } catch (...) {
+    }
     return default_val;
 }
 
 std::string DB::scalar_text(const std::string& sql,
-                              const std::vector<std::string>& params,
-                              const std::string& default_val) {
+                            const std::vector<std::string>& params,
+                            const std::string& default_val) {
     auto rows = query(sql, params);
-    if (rows.empty() || rows[0].empty()) return default_val;
+    if (rows.empty() || rows[0].empty())
+        return default_val;
     return rows[0].begin()->second;
 }
 
 bool DB::run_schema() {
-    if (!execute(k_schema)) return false;
+    if (!execute(k_schema))
+        return false;
     // Migration: add reaper_cmd_id column if it doesn't exist (added in v0.3).
     // SQLite silently returns an error if the column already exists; that is fine.
     execute("ALTER TABLE scripts ADD COLUMN reaper_cmd_id INTEGER NOT NULL DEFAULT 0");
