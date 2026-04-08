@@ -13,5 +13,8 @@ bool start(const Config& cfg);
 // Signal the server to stop and join its thread. Blocks until done.
 void stop();
 
+// Returns true if the server thread is currently listening.
+bool is_running();
+
 }  // namespace Server
 }  // namespace ReaClaw

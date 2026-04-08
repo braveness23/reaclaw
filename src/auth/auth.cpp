@@ -1,5 +1,6 @@
 #include "auth/auth.h"
 #include "config/config.h"
+#include "util/logging.h"
 
 #include <httplib.h>
 
@@ -9,14 +10,24 @@ bool check(const Config& cfg, const httplib::Request& req) {
     if (cfg.auth_type != "api_key") return true;  // auth.type = "none"
 
     auto it = req.headers.find("Authorization");
-    if (it == req.headers.end()) return false;
+    if (it == req.headers.end()) {
+        Log::warn("Auth: missing Authorization header from " + req.remote_addr);
+        return false;
+    }
 
     const std::string& hdr    = it->second;
     const std::string  prefix = "Bearer ";
-    if (hdr.size() <= prefix.size()) return false;
-    if (hdr.substr(0, prefix.size()) != prefix) return false;
+    if (hdr.size() <= prefix.size() || hdr.substr(0, prefix.size()) != prefix) {
+        Log::warn("Auth: malformed Authorization header from " + req.remote_addr);
+        return false;
+    }
 
-    return hdr.substr(prefix.size()) == cfg.auth_key;
+    if (hdr.substr(prefix.size()) != cfg.auth_key) {
+        Log::warn("Auth: invalid API key from " + req.remote_addr);
+        return false;
+    }
+
+    return true;
 }
 
 void reject(httplib::Response& res) {

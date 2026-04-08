@@ -48,6 +48,11 @@ nlohmann::json post(std::function<nlohmann::json()> fn, int timeout_seconds) {
     }
 }
 
+size_t queue_depth() {
+    std::lock_guard<std::mutex> lk(s_mutex);
+    return s_queue.size();
+}
+
 void tick() {
     // Drain up to 10 commands per tick (~30fps → ~300 commands/sec sustained).
     for (int i = 0; i < 10; i++) {

@@ -73,7 +73,7 @@ bool init(reaper_plugin_info_t* rec) {
         if      (lv == "debug") level = LogLevel::debug;
         else if (lv == "warn")  level = LogLevel::warn;
         else if (lv == "error") level = LogLevel::error;
-        Log::init(level, g_config.log_file, ShowConsoleMsg);
+        Log::init(level, g_config.log_file, ShowConsoleMsg, g_config.log_format);
     }
 
     // Open database

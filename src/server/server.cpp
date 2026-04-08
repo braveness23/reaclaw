@@ -6,6 +6,7 @@
 
 #include <httplib.h>  // CPPHTTPLIB_OPENSSL_SUPPORT is set via CMake compile definitions
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <thread>
@@ -16,6 +17,7 @@ namespace {
 
 std::unique_ptr<httplib::SSLServer> g_server;
 std::thread                         g_thread;
+std::atomic<bool>                   g_running{false};
 
 }  // namespace
 
@@ -54,9 +56,11 @@ bool start(const Config& cfg) {
     const std::string host = cfg.host;
     const int         port = cfg.port;
 
+    g_running = true;
     g_thread = std::thread([host, port]() {
         Log::info("HTTPS server listening on " + host + ":" + std::to_string(port));
         g_server->listen(host.c_str(), port);
+        g_running = false;
         Log::info("HTTPS server stopped");
     });
 
@@ -64,6 +68,7 @@ bool start(const Config& cfg) {
 }
 
 void stop() {
+    g_running = false;
     if (g_server) {
         g_server->stop();
     }
@@ -71,6 +76,10 @@ void stop() {
         g_thread.join();
     }
     g_server.reset();
+}
+
+bool is_running() {
+    return g_running.load();
 }
 
 }  // namespace ReaClaw::Server

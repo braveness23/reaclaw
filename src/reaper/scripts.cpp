@@ -224,6 +224,19 @@ RegisterResult register_script(const std::string& name,
     std::string action_id   = make_action_id(name, body);
     std::string script_path = g_config.scripts_dir + action_id + ".lua";
 
+    // --- Path traversal guard: verify path stays inside scripts_dir ---
+    {
+        fs::path scripts_root = fs::path(g_config.scripts_dir).lexically_normal();
+        fs::path resolved     = fs::path(script_path).lexically_normal();
+        fs::path rel          = resolved.lexically_relative(scripts_root);
+        // lexically_relative returns an empty path or one starting with ".." if outside
+        if (rel.empty() || rel.begin()->string() == "..") {
+            result.internal_error = "Script path escapes scripts directory (path traversal rejected)";
+            Log::error("Scripts: " + result.internal_error + " — " + script_path);
+            return result;
+        }
+    }
+
     // --- Write script to disk ---
     if (!write_file(script_path, body)) {
         result.internal_error = "Failed to write script file: " + script_path;

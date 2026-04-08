@@ -28,8 +28,9 @@ struct Config {
     int  max_script_size_kb = 512;
 
     // logging
-    std::string log_level = "info";  // debug, info, warn, error
-    std::string log_file;            // empty = REAPER console only
+    std::string log_level  = "info";  // debug, info, warn, error
+    std::string log_file;             // empty = REAPER console only
+    std::string log_format = "text";  // "text" or "json"
 
     // Derived paths (filled in by load())
     std::string resource_dir;   // {GetResourcePath()}/reaclaw/

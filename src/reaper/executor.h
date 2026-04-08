@@ -13,4 +13,7 @@ nlohmann::json post(std::function<nlohmann::json()> fn,
 // Called from the REAPER main-thread timer (~30fps). Drains the command queue.
 void tick();
 
+// Returns the number of commands currently waiting in the queue.
+size_t queue_depth();
+
 }  // namespace ReaClaw::Executor

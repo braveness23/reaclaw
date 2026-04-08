@@ -40,8 +40,9 @@ json default_config() {
             {"max_script_size_kb", 512}
         }},
         {"logging", {
-            {"level", "info"},
-            {"file", ""}
+            {"level",  "info"},
+            {"file",   ""},
+            {"format", "text"}
         }}
     };
 }
@@ -117,9 +118,10 @@ bool Config::load(Config& cfg, const std::string& resource_path) {
     cfg.log_all_executions = jval<bool>(ss, "log_all_executions", true);
     cfg.max_script_size_kb = jval<int>(ss, "max_script_size_kb", 512);
 
-    auto& log    = j["logging"];
-    cfg.log_level = jval<std::string>(log, "level", "info");
-    cfg.log_file  = jval<std::string>(log, "file", "");
+    auto& log      = j["logging"];
+    cfg.log_level  = jval<std::string>(log, "level",  "info");
+    cfg.log_file   = jval<std::string>(log, "file",   "");
+    cfg.log_format = jval<std::string>(log, "format", "text");
 
     // Resolve TLS cert/key paths (user-supplied or derived from certs_dir)
     if (!cfg.tls_cert_file.empty()) {
@@ -149,7 +151,7 @@ bool Config::save() const {
             {"log_all_executions", log_all_executions},
             {"max_script_size_kb", max_script_size_kb}
         }},
-        {"logging", {{"level", log_level}, {"file", log_file}}}
+        {"logging", {{"level", log_level}, {"file", log_file}, {"format", log_format}}}
     };
 
     std::ofstream f(resource_dir + "config.json");

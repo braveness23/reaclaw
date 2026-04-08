@@ -220,44 +220,40 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 
 ### Agent Identification
 
-- [ ] Read `X-Agent-Id` header on all requests; store in `execution_history.agent_id`
-- [ ] `GET /history?agent_id=sparky` filters by agent
+- [x] Read `X-Agent-Id` header on all requests; store in `execution_history.agent_id` — done in Phase 1
+- [x] `GET /history?agent_id=sparky` filters by agent — done in Phase 1
 
 ### Performance
 
-- [ ] Profile all Phase 0–1 endpoints (target: catalog search <50ms, state queries <100ms, action execution <200ms excluding queue wait)
-- [ ] Add SQLite indexes: `execution_history(executed_at)`, `scripts(name)`
-- [ ] Cache frequent state reads in memory with 1s TTL to reduce REAPER API call frequency
+- [x] Add SQLite indexes: `execution_history(executed_at)`, `scripts(name)` — already in schema from Phase 1
+- [x] Cache frequent state reads in memory with 1s TTL — `/state`, `/state/tracks`, `/state/items` cached; invalidated on track writes
+- [ ] Profile all Phase 0–1 endpoints (requires live REAPER; targets: catalog search <50ms, state queries <100ms, action execution <200ms excluding queue wait)
 
 ### Optional MCP Wrapper
 
-- [ ] Design MCP tool definitions:
-  - `reaclawExecuteAction`
-  - `reaclawExecuteSequence`
-  - `reaclawQueryState`
-  - `reaclawRegisterScript`
-  - `reaclawSearchCatalog`
-- [ ] Write `docs/MCP.md` — how to configure ReaClaw as an MCP server in OpenClaw
+- [x] Design MCP tool definitions: `reaclawExecuteAction`, `reaclawExecuteSequence`, `reaclawQueryState`, `reaclawRegisterScript`, `reaclawSearchCatalog`
+- [x] Write `docs/MCP.md` — MCP tool definitions and OpenClaw/Sparky integration guide
 
 ### Security Hardening
 
-- [ ] Add `Strict-Transport-Security` header to all responses
-- [ ] Validate all input sizes (script body ≤ max_script_size_kb, step arrays ≤ 100 items)
-- [ ] Ensure script files are written only inside `{ResourcePath}/reaclaw/scripts/`; reject path traversal in script names
-- [ ] Audit log for auth failures (wrong API key → log IP and timestamp)
+- [x] Add `Strict-Transport-Security` header to all responses (`router.cpp` `auth_wrap`)
+- [x] Validate all input sizes (script body ≤ max_script_size_kb, step arrays ≤ 100 items) — done in Phase 1
+- [x] Ensure script files are written only inside `{ResourcePath}/reaclaw/scripts/`; reject path traversal in script names (`reaper/scripts.cpp` — `lexically_relative` check after path construction)
+- [x] Audit log for auth failures (wrong API key → log IP and timestamp) (`auth/auth.cpp` — distinct warn messages for missing header, malformed header, wrong key)
+- [x] Agent identification (`X-Agent-Id` → `execution_history.agent_id`) — already implemented in Phase 1 execute handlers
 
 ### Observability
 
-- [ ] `GET /health` enhancements: include command queue depth, DB connection status, server thread alive
-- [ ] Structured log format option (`"format": "json"` in logging config)
+- [x] `GET /health` enhancements: `queue_depth`, `db_ok`, `server_running` added
+- [x] Structured log format option: `logging.format: "json"` — newline-delimited JSON output
 
 ### Phase 2 Deliverable
 
-- [ ] Load test: 10 concurrent agents making catalog searches — all <50ms
-- [ ] MCP tool definitions documented and tested with Sparky
-- [ ] Security hardening checklist complete
-- [ ] Push `main`; tag `v1.0.0`
-- [ ] Write `docs/DEPLOYMENT.md` with platform-specific build and install instructions
+- [x] Security hardening checklist complete
+- [x] MCP tool definitions documented (`docs/MCP.md`)
+- [x] Write `docs/DEPLOYMENT.md` with platform-specific build and install instructions
+- [x] Push `main`; tag `v1.0.0`
+- [ ] Load test: 10 concurrent agents making catalog searches — all <50ms (requires live REAPER)
 
 ---
 

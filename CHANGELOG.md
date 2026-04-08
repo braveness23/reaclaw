@@ -11,6 +11,28 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.0] - 2026-04-08
+
+### Added
+- `Strict-Transport-Security: max-age=31536000` header on all responses
+- Path traversal guard: script paths verified inside `scripts_dir` before write (`lexically_relative` check)
+- Auth failure audit log: distinct `WARN` messages for missing header, malformed header, and wrong key — each includes client IP
+- `GET /health` now returns `queue_depth`, `db_ok`, `server_running`
+- 1-second TTL read cache for `GET /state`, `GET /state/tracks`, `GET /state/items`; invalidated on `POST /state/tracks/{index}` writes
+- Structured log format: set `logging.format: "json"` for newline-delimited JSON log output
+- `docs/MCP.md` — MCP tool definitions and OpenClaw/Sparky integration guide
+- `docs/DEPLOYMENT.md` — platform build instructions, config reference, security checklist, troubleshooting
+
+### Changed
+- `Log::init()` accepts optional `format` parameter (`"text"` or `"json"`)
+- `config.json` gains `logging.format` field (default `"text"`)
+
+### Notes
+- SQLite indexes (`idx_history_executed_at`, `idx_scripts_name`) were already present in schema from Phase 1
+- Agent identification (`X-Agent-Id` → `execution_history.agent_id`) was already implemented in Phase 1
+
+---
+
 ## [0.2.0] - 2026-04-07
 
 ### Added

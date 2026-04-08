@@ -9,6 +9,8 @@
 #include "handlers/scripts.h"
 #include "handlers/history.h"
 #include "handlers/common.h"
+#include "reaper/executor.h"
+#include "server/server.h"
 
 #include <httplib.h>  // CPPHTTPLIB_OPENSSL_SUPPORT is set via CMake compile definitions
 #include <json.hpp>
@@ -29,6 +31,7 @@ using H = std::function<void(const httplib::Request&, httplib::Response&)>;
 H auth_wrap(const Config& cfg, H handler) {
     return [cfg, handler](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Content-Type", "application/json");
+        res.set_header("Strict-Transport-Security", "max-age=31536000");
         if (!Auth::check(cfg, req)) {
             Auth::reject(res);
             return;
@@ -54,7 +57,10 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
             {"version",         REACLAW_VERSION},
             {"reaper_version",  rv ? rv : ""},
             {"catalog_size",    catalog_size},
-            {"uptime_seconds",  uptime}
+            {"uptime_seconds",  uptime},
+            {"queue_depth",     static_cast<int>(Executor::queue_depth())},
+            {"db_ok",           g_db.is_open()},
+            {"server_running",  Server::is_running()}
         });
     }));
 

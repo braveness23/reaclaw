@@ -9,12 +9,44 @@
 // REAPER SDK — extern declarations (REAPERAPI_IMPLEMENT only in reaper/api.cpp)
 #include <reaper_plugin_functions.h>
 
+#include <chrono>
 #include <cmath>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 namespace ReaClaw::Handlers {
 
 namespace {
+
+// ---------------------------------------------------------------------------
+// 1-second TTL cache for read-heavy state endpoints.
+// Reduces REAPER API call frequency when agents poll rapidly.
+// ---------------------------------------------------------------------------
+
+struct StateCacheEntry {
+    nlohmann::json                        data;
+    std::chrono::steady_clock::time_point expires;
+};
+
+std::unordered_map<std::string, StateCacheEntry> s_state_cache;
+std::mutex                                        s_cache_mutex;
+constexpr int kStateCacheTTL_ms = 1000;
+
+// Returns cached data if fresh, or nlohmann::json() (null) on miss/expiry.
+nlohmann::json state_cache_get(const std::string& key) {
+    std::lock_guard<std::mutex> lk(s_cache_mutex);
+    auto it = s_state_cache.find(key);
+    if (it == s_state_cache.end()) return nlohmann::json();
+    if (std::chrono::steady_clock::now() > it->second.expires) return nlohmann::json();
+    return it->second.data;
+}
+
+void state_cache_set(const std::string& key, const nlohmann::json& data) {
+    std::lock_guard<std::mutex> lk(s_cache_mutex);
+    s_state_cache[key] = {data, std::chrono::steady_clock::now() +
+                                std::chrono::milliseconds(kStateCacheTTL_ms)};
+}
 
 nlohmann::json track_to_json(MediaTrack* track, int index) {
     if (!track) return nlohmann::json::object();
@@ -124,18 +156,26 @@ nlohmann::json read_project_state() {
 // GET /state
 void handle_state(const httplib::Request& req, httplib::Response& res) {
     (void)req;
-    json_ok(res, read_project_state());
+    auto cached = state_cache_get("state");
+    if (!cached.is_null()) { json_ok(res, cached); return; }
+    auto data = read_project_state();
+    state_cache_set("state", data);
+    json_ok(res, data);
 }
 
 // GET /state/tracks
 void handle_state_tracks(const httplib::Request& req, httplib::Response& res) {
     (void)req;
+    auto cached = state_cache_get("tracks");
+    if (!cached.is_null()) { json_ok(res, cached); return; }
     int n = CountTracks(nullptr);
     nlohmann::json tracks = nlohmann::json::array();
     for (int i = 0; i < n; i++) {
         tracks.push_back(track_to_json(GetTrack(nullptr, i), i));
     }
-    json_ok(res, {{"tracks", tracks}});
+    nlohmann::json data = {{"tracks", tracks}};
+    state_cache_set("tracks", data);
+    json_ok(res, data);
 }
 
 // POST /state/tracks/:index
@@ -188,12 +228,22 @@ void handle_state_set_track(const httplib::Request& req, httplib::Response& res)
     if (result.contains("_error"))     { json_error(res, 500, result["_error"].get<std::string>(), "INTERNAL_ERROR"); return; }
     if (result.contains("_not_found")) { json_error(res, 404, "Track index out of range", "NOT_FOUND"); return; }
 
+    // Invalidate track cache so the next read reflects the write immediately.
+    {
+        std::lock_guard<std::mutex> lk(s_cache_mutex);
+        s_state_cache.erase("tracks");
+        s_state_cache.erase("state");
+    }
+
     json_ok(res, result);
 }
 
 // GET /state/items
 void handle_state_items(const httplib::Request& req, httplib::Response& res) {
     (void)req;
+    auto cached = state_cache_get("items");
+    if (!cached.is_null()) { json_ok(res, cached); return; }
+
     int n = CountMediaItems(nullptr);
     nlohmann::json items = nlohmann::json::array();
 
@@ -225,7 +275,9 @@ void handle_state_items(const httplib::Request& req, httplib::Response& res) {
         });
     }
 
-    json_ok(res, {{"items", items}, {"total", n}});
+    nlohmann::json data = {{"items", items}, {"total", n}};
+    state_cache_set("items", data);
+    json_ok(res, data);
 }
 
 // GET /state/selection
