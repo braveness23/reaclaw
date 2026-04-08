@@ -12,7 +12,7 @@ namespace Catalog {
 void build(DB& db, const std::string& reaper_version);
 
 // Return the number of indexed actions.
-int  count(DB& db);
+int count(DB& db);
 
 }  // namespace Catalog
 }  // namespace ReaClaw

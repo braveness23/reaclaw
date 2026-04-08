@@ -2,39 +2,40 @@
 // It causes reaper_plugin_functions.h to define (not just declare) all
 // function pointer globals populated by REAPERAPI_LoadAPI.
 #define REAPERAPI_IMPLEMENT
-#include <reaper_plugin_functions.h>
-
 #include "reaper/api.h"
+
+#include "app.h"
+#include "config/config.h"
+#include "db/db.h"
 #include "reaper/catalog.h"
 #include "reaper/executor.h"
 #include "server/server.h"
-#include "config/config.h"
-#include "db/db.h"
 #include "util/logging.h"
-#include "app.h"
 
 #include <string>
+
+#include <reaper_plugin_functions.h>
 
 namespace ReaClaw {
 
 // Required REAPER API functions for Phase 0 (verified non-null after LoadAPI).
 // Any null pointer is logged as a warning; the extension still loads.
 static constexpr const char* k_required_fns[] = {
-    "GetResourcePath",
-    "GetAppVersion",
-    "ShowConsoleMsg",
-    "kbd_enumerateActions",
-    "SectionFromUniqueID",
-    "CountTracks",
-    "GetTrack",
-    "GetTrackName",
-    "GetSetMediaTrackInfo",
-    "GetProjectTimeSignature2",
-    "GetCursorPosition",
-    "GetPlayState",
-    "Main_OnCommand",
-    "NamedCommandLookup",
-    "plugin_register",
+        "GetResourcePath",
+        "GetAppVersion",
+        "ShowConsoleMsg",
+        "kbd_enumerateActions",
+        "SectionFromUniqueID",
+        "CountTracks",
+        "GetTrack",
+        "GetTrackName",
+        "GetSetMediaTrackInfo",
+        "GetProjectTimeSignature2",
+        "GetCursorPosition",
+        "GetPlayState",
+        "Main_OnCommand",
+        "NamedCommandLookup",
+        "plugin_register",
 };
 
 bool init(reaper_plugin_info_t* rec) {
@@ -70,9 +71,12 @@ bool init(reaper_plugin_info_t* rec) {
     {
         LogLevel level = LogLevel::info;
         const std::string& lv = g_config.log_level;
-        if      (lv == "debug") level = LogLevel::debug;
-        else if (lv == "warn")  level = LogLevel::warn;
-        else if (lv == "error") level = LogLevel::error;
+        if (lv == "debug")
+            level = LogLevel::debug;
+        else if (lv == "warn")
+            level = LogLevel::warn;
+        else if (lv == "error")
+            level = LogLevel::error;
         Log::init(level, g_config.log_file, ShowConsoleMsg, g_config.log_format);
     }
 
@@ -89,13 +93,13 @@ bool init(reaper_plugin_info_t* rec) {
     // Reconcile registered scripts: re-register any scripts that are in the
     // DB but may have been dropped from reaper-kb.ini (e.g., after reinstall)
     if (AddRemoveReaScript) {
-        auto scripts = g_db.query(
-            "SELECT id, script_path FROM scripts", {});
+        auto scripts = g_db.query("SELECT id, script_path FROM scripts", {});
         int reconciled = 0;
         for (auto& row : scripts) {
             const std::string& path = row.at("script_path");
             int cmd = AddRemoveReaScript(true, 0, path.c_str(), true);
-            if (cmd != 0) reconciled++;
+            if (cmd != 0)
+                reconciled++;
         }
         if (reconciled > 0) {
             Log::info("Re-registered " + std::to_string(reconciled) + " scripts");
@@ -113,8 +117,7 @@ bool init(reaper_plugin_info_t* rec) {
         // Non-fatal: extension still loads, catalog queries work
     }
 
-    Log::info("ReaClaw ready — https://" + g_config.host + ":" +
-              std::to_string(g_config.port));
+    Log::info("ReaClaw ready — https://" + g_config.host + ":" + std::to_string(g_config.port));
     return true;
 }
 

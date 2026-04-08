@@ -1,4 +1,5 @@
 #include "reaper/executor.h"
+
 #include "util/logging.h"
 
 #include <chrono>
@@ -13,11 +14,11 @@ namespace {
 
 struct Command {
     std::function<nlohmann::json()> execute;
-    std::promise<nlohmann::json>    result;
+    std::promise<nlohmann::json> result;
 };
 
 std::queue<Command> s_queue;
-std::mutex          s_mutex;
+std::mutex s_mutex;
 
 }  // namespace
 
@@ -33,8 +34,7 @@ nlohmann::json post(std::function<nlohmann::json()> fn, int timeout_seconds) {
 
     auto status = fut.wait_for(std::chrono::seconds(timeout_seconds));
     if (status == std::future_status::timeout) {
-        Log::warn("Command queue timeout after " +
-                  std::to_string(timeout_seconds) + "s");
+        Log::warn("Command queue timeout after " + std::to_string(timeout_seconds) + "s");
         return nlohmann::json{{"_timeout", true}};
     }
     try {
@@ -59,7 +59,8 @@ void tick() {
         Command cmd;
         {
             std::lock_guard<std::mutex> lk(s_mutex);
-            if (s_queue.empty()) break;
+            if (s_queue.empty())
+                break;
             cmd = std::move(s_queue.front());
             s_queue.pop();
         }
