@@ -106,45 +106,64 @@ jobs:
           path: reaper_reaclaw-macos-arm64.dylib
 
   # ---------------------------------------------------------------------------
-  # Windows — MSVC 2022, x64
+  # Windows — MinGW-w64 cross-compile on Linux (k3s runner)
   # ---------------------------------------------------------------------------
   build-windows:
-    name: Build (Windows, MSVC)
-    runs-on: windows-2022
+    name: Build (Windows, MinGW cross-compile)
+    runs-on: arc-runner-reaclaw
+    env:
+      OPENSSL_VERSION: 3.3.2
+      OPENSSL_INSTALL: /opt/openssl-mingw64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install vcpkg OpenSSL
-        run: vcpkg install openssl:x64-windows
-        env:
-          VCPKG_DEFAULT_TRIPLET: x64-windows
+      - name: Install MinGW-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 cmake unzip
+
+      - name: Cache cross-compiled OpenSSL
+        id: cache-openssl
+        uses: actions/cache@v4
+        with:
+          path: /opt/openssl-mingw64
+          key: openssl-mingw64-${{ env.OPENSSL_VERSION }}
+
+      - name: Cross-compile OpenSSL for Windows
+        if: steps.cache-openssl.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz | tar xz
+          cd openssl-$OPENSSL_VERSION
+          ./Configure mingw64 \
+            --cross-compile-prefix=x86_64-w64-mingw32- \
+            --prefix=$OPENSSL_INSTALL \
+            no-shared no-tests
+          make -j$(nproc)
+          sudo make install_sw
 
       - name: Fetch vendor deps
-        shell: pwsh
         run: |
-          Invoke-WebRequest $env:HTTPLIB_URL  -OutFile vendor/httplib.h
-          Invoke-WebRequest $env:JSON_HPP_URL -OutFile vendor/json.hpp
-          Invoke-WebRequest $env:SQLITE_ZIP_URL -OutFile "$env:TEMP/sqlite.zip"
-          Expand-Archive "$env:TEMP/sqlite.zip" -DestinationPath "$env:TEMP/sqlite"
-          $src = Get-ChildItem "$env:TEMP/sqlite" -Recurse -Include sqlite3.c,sqlite3.h
-          $src | Copy-Item -Destination vendor/
-          git clone --depth=1 $env:REAPER_SDK_URL vendor/reaper-sdk
-          Copy-Item vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
+          curl -fsSL $HTTPLIB_URL   -o vendor/httplib.h
+          curl -fsSL $JSON_HPP_URL  -o vendor/json.hpp
+          curl -fsSL $SQLITE_ZIP_URL -o /tmp/sqlite.zip
+          unzip -j /tmp/sqlite.zip "*/sqlite3.c" "*/sqlite3.h" -d vendor/
+          git clone --depth=1 $REAPER_SDK_URL vendor/reaper-sdk
+          cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
 
       - name: Configure
         run: |
-          cmake -B build `
-            -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          cmake -B build \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-mingw64.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOPENSSL_ROOT_DIR=$OPENSSL_INSTALL \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DREACLAW_BUILD_TESTS=OFF
 
       - name: Build
-        run: cmake --build build --config Release
-
-      - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: cmake --build build -j$(nproc)
 
       - name: Rename artifact
-        run: Copy-Item build\Release\reaper_reaclaw.dll reaper_reaclaw-windows-x64.dll
+        run: cp build/reaper_reaclaw.dll reaper_reaclaw-windows-x64.dll
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

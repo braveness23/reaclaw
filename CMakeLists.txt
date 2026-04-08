@@ -119,6 +119,18 @@ if(APPLE)
     target_link_libraries(reaper_reaclaw PRIVATE "-framework CoreFoundation")
 endif()
 
+if(WIN32)
+    # cpp-httplib on Windows requires WinSock2, crypt32, and bcrypt
+    target_link_libraries(reaper_reaclaw PRIVATE ws2_32 crypt32 bcrypt)
+    # Ensure .dll extension (needed for MinGW cross-compile)
+    set_target_properties(reaper_reaclaw PROPERTIES SUFFIX ".dll")
+endif()
+
+# Disable tests when cross-compiling (can't run Windows binaries on Linux)
+if(CMAKE_CROSSCOMPILING)
+    set(REACLAW_BUILD_TESTS OFF)
+endif()
+
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
