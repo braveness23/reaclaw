@@ -3,6 +3,7 @@
 #include "app.h"
 #include "handlers/common.h"
 #include "reaper/executor.h"
+#include "util/logging.h"
 
 #include <httplib.h>
 
@@ -108,6 +109,8 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
     std::string id_str = body["id"].is_number() ? std::to_string(body["id"].get<int>())
                                                 : body["id"].get<std::string>();
 
+    Log::info("Execute action: " + id_str + (ag.empty() ? "" : " (agent: " + ag + ")"));
+
     auto result = Executor::post([body]() -> nlohmann::json {
         int cmd_id = resolve_cmd_id(body["id"]);
         if (cmd_id == 0)
@@ -173,6 +176,9 @@ void handle_execute_sequence(const httplib::Request& req, httplib::Response& res
         json_error(res, 400, "Sequences are limited to 100 steps", "BAD_REQUEST");
         return;
     }
+
+    Log::info("Execute sequence: " + std::to_string(n_steps) + " steps" +
+              (ag.empty() ? "" : " (agent: " + ag + ")"));
 
     nlohmann::json step_results = nlohmann::json::array();
     int steps_completed = 0;

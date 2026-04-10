@@ -11,6 +11,7 @@
 #include "handlers/state.h"
 #include "reaper/executor.h"
 #include "server/server.h"
+#include "util/logging.h"
 
 #include <httplib.h>  // CPPHTTPLIB_OPENSSL_SUPPORT is set via CMake compile definitions
 
@@ -37,7 +38,12 @@ H auth_wrap(const Config& cfg, H handler) {
             Auth::reject(res);
             return;
         }
+        Log::debug(req.method + " " + req.path);
         handler(req, res);
+        if (res.status >= 500)
+            Log::error(req.method + " " + req.path + " → " + std::to_string(res.status));
+        else if (res.status >= 400)
+            Log::warn(req.method + " " + req.path + " → " + std::to_string(res.status));
     };
 }
 

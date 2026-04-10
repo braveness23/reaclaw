@@ -3,6 +3,7 @@
 #include "app.h"
 #include "handlers/common.h"
 #include "reaper/executor.h"
+#include "util/logging.h"
 
 #include <httplib.h>
 
@@ -260,6 +261,7 @@ void handle_state_set_track(const httplib::Request& req, httplib::Response& res)
         s_state_cache.erase("state");
     }
 
+    Log::info("Track " + std::to_string(index) + " updated");
     json_ok(res, result);
 }
 
