@@ -11,6 +11,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.5] - 2026-04-10
+
+### Fixed
+- Windows DLL now statically links MinGW runtime (`libwinpthread-1.dll`, `libgcc_s_seh-1.dll`, `libstdc++-6.dll`); resolves "entry point not found: __gthr_win32_self" error on systems without MinGW installed
+
+---
+
 ## [1.0.3] - 2026-04-08
 
 ### Changed
