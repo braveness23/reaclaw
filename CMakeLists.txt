@@ -124,6 +124,12 @@ if(WIN32)
     target_link_libraries(reaper_reaclaw PRIVATE ws2_32 crypt32 bcrypt)
     # Ensure .dll extension (needed for MinGW cross-compile)
     set_target_properties(reaper_reaclaw PROPERTIES SUFFIX ".dll")
+    # Statically link MinGW runtime so the DLL is self-contained — no
+    # libwinpthread-1.dll / libgcc_s_seh-1.dll / libstdc++-6.dll required
+    # on the target machine.
+    if(NOT MSVC)
+        target_link_options(reaper_reaclaw PRIVATE -static -static-libgcc -static-libstdc++)
+    endif()
 endif()
 
 # Disable tests when cross-compiling (can't run Windows binaries on Linux)
