@@ -257,6 +257,33 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 
 ---
 
+## Phase 3: Dockable Control Panel
+
+**Goal:** Native REAPER docker panel for controlling ReaClaw without editing config.json.
+
+- [x] `src/panel/resource.h` — control IDs
+- [x] `src/panel/swell_stub.cpp` — SWELL function pointer table (SWELL_PROVIDED_BY_APP; no GTK compile needed)
+- [x] `src/panel/panel.h` — Panel::init / show_toggle / destroy
+- [x] `src/panel/panel.cpp` — dialog resource + dialog proc + dock integration
+- [x] `src/reaper/api.cpp` — call Panel::init after server start; Panel::destroy on shutdown
+- [x] `src/reaper/api.h` — added hInstance parameter to init()
+- [x] `src/main.cpp` — pass hInstance to ReaClaw::init()
+- [x] `CMakeLists.txt` — add panel sources, vendor/WDL include, SWELL_PROVIDED_BY_APP define
+
+### Panel controls
+- Enable/Disable ReaClaw server checkbox (starts/stops the HTTPS server; extension stays loaded)
+- Host text field
+- Port text field
+- Bypass TLS cert validation checkbox
+- Log file viewer (read-only multiline edit + Refresh button)
+- Apply button (writes config.json, restarts server if running)
+
+### To use
+Open REAPER → Actions → search "ReaClaw: Control Panel" → run or assign to toolbar.
+The panel can be docked anywhere in REAPER's docker system.
+
+---
+
 ## Ongoing (All Phases)
 
 - [x] Keep unit and integration tests passing before each commit — 36/36 unit tests pass; 12/12 integration tests pass against live REAPER 7.67

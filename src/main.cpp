@@ -37,8 +37,6 @@ __declspec(dllexport)
 __attribute__((visibility("default")))
 #endif
         int ReaperPluginEntry(void* hInstance, reaper_plugin_info_t* rec) {
-    (void)hInstance;
-
     if (!rec) {
         ReaClaw::shutdown();
         return 0;
@@ -55,7 +53,7 @@ __attribute__((visibility("default")))
 
     ReaClaw::g_start_time = std::chrono::steady_clock::now();
 
-    return ReaClaw::init(rec) ? 1 : 0;
+    return ReaClaw::init(rec, hInstance) ? 1 : 0;
 }
 
 }  // extern "C"

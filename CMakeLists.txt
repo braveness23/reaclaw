@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(reaper_reaclaw VERSION 1.0.5 LANGUAGES C CXX)
+project(reaper_reaclaw VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -63,12 +63,16 @@ add_library(reaper_reaclaw SHARED
     src/config/config.cpp
     src/util/tls.cpp
     src/util/logging.cpp
+    src/panel/panel.cpp
+    src/panel/swell_stub.cpp
+    $<$<BOOL:${WIN32}>:src/panel/panel.rc>
 )
 
 target_include_directories(reaper_reaclaw PRIVATE
     src/
     vendor/
     vendor/reaper-sdk/
+    vendor/WDL
     ${OPENSSL_INCLUDE_DIR}
 )
 
@@ -104,10 +108,16 @@ else()
     target_compile_options(reaper_reaclaw PRIVATE
         -Wall -Wextra -Wpedantic
         -Wno-unused-parameter    # REAPER callbacks have mandated signatures
+        -Wno-cast-function-type  # SWELL stores function pointers as void* in API tables
     )
     # swell-types.h (Linux/macOS) defines min/max macros; suppress them
     # so they don't conflict with std::min / std::max.
-    target_compile_definitions(reaper_reaclaw PRIVATE NOMINMAX)
+    # SWELL_PROVIDED_BY_APP: use REAPER's embedded SWELL instead of compiling
+    # GTK ourselves — function pointers are filled at runtime via GetFunc.
+    target_compile_definitions(reaper_reaclaw PRIVATE
+        NOMINMAX
+        SWELL_PROVIDED_BY_APP
+    )
 endif()
 
 if(APPLE)

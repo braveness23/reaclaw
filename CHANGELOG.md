@@ -11,6 +11,22 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.1.0] - 2026-04-11
+
+### Added
+- Dockable control panel (`src/panel/`) — toggle via REAPER Actions list ("ReaClaw: Control Panel") or toolbar button
+  - Enable/disable server checkbox
+  - Host and Port text fields
+  - Bypass TLS cert validation checkbox
+  - Log file viewer (caps at 4 KB) with Refresh button
+  - Apply button — saves `config.json` and starts/stops/restarts the server
+- Linux/macOS: SWELL-based dialog resource defined inline; SWELL function pointers populated at runtime from `SWELLAPI_GetFunc` exported by REAPER host
+- Windows: native Win32 dialog resource (`src/panel/panel.rc`) via `CreateDialogParam`
+- REAPER docker integration via `DockWindowAddEx` — panel dock state persists across sessions
+- Registered as REAPER custom action `REACLAW_PANEL_TOGGLE` with `hookcommand` and `toggleaction` support
+
+---
+
 ## [1.0.5] - 2026-04-10
 
 ### Fixed

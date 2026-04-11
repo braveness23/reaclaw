@@ -11,6 +11,7 @@
 #include "reaper/executor.h"
 #include "server/server.h"
 #include "util/logging.h"
+#include "panel/panel.h"
 
 #include <string>
 
@@ -38,7 +39,7 @@ static constexpr const char* k_required_fns[] = {
         "plugin_register",
 };
 
-bool init(reaper_plugin_info_t* rec) {
+bool init(reaper_plugin_info_t* rec, void* hInstance) {
     // Sanity-check a few critical pointers
     if (!ShowConsoleMsg || !GetResourcePath || !GetAppVersion) {
         // Can't log yet — write to stderr
@@ -118,11 +119,17 @@ bool init(reaper_plugin_info_t* rec) {
     }
 
     Log::info("ReaClaw ready — https://" + g_config.host + ":" + std::to_string(g_config.port));
+
+    // Register dockable control panel (non-fatal if unavailable)
+    Panel::init(rec, hInstance);
+
     return true;
 }
 
 void shutdown() {
     Log::info("ReaClaw shutting down...");
+
+    Panel::destroy();
 
     // Unregister timer
     if (plugin_register) {

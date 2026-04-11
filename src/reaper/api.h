@@ -14,8 +14,10 @@ struct reaper_plugin_info_t;
 namespace ReaClaw {
 
 // Called by ReaperPluginEntry after REAPERAPI_LoadAPI succeeds.
-// Initialises config, DB, catalog, TLS, and starts the HTTPS server.
-bool init(reaper_plugin_info_t* rec);
+// Initialises config, DB, catalog, TLS, starts the HTTPS server, and
+// registers the dockable control panel.
+// hInstance: the opaque handle passed to ReaperPluginEntry (used by SWELL).
+bool init(reaper_plugin_info_t* rec, void* hInstance);
 
 // Called by ReaperPluginEntry when rec == nullptr (REAPER shutting down).
 void shutdown();
