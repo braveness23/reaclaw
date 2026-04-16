@@ -15,7 +15,6 @@
 // Macros redefine BEGIN, END, PUSHBUTTON, EDITTEXT, CONTROL, LTEXT, etc.
 // Keep this block self-contained; restore standard macros afterwards.
 #include "WDL/swell/swell-dlggen.h"
-
 #include "panel/resource.h"
 
 // clang-format off
@@ -52,22 +51,24 @@ SWELL_DEFINE_DIALOG_RESOURCE_END(IDD_REACLAW_PANEL)
 #endif  // !_WIN32
 
 // ---- Normal includes (after the resource block) ------------------------
-#include "panel/panel.h"
-
 #include "app.h"
 #include "config/config.h"
+#include "panel/panel.h"
 #include "server/server.h"
 #include "util/logging.h"
-
-#include <reaper_plugin.h>
-#include <reaper_plugin_functions.h>
 
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
 
+#include <reaper_plugin.h>
+#include <reaper_plugin_functions.h>
+
 #ifdef _WIN32
+// Resource IDs (IDC_*, IDD_*) — on non-Windows these come from the SWELL
+// dialog resource block above; on Windows they must be included explicitly.
+#include "panel/resource.h"
 // BST_CHECKED / BST_UNCHECKED live in <commctrl.h>; not pulled in by
 // <windows.h> when WIN32_LEAN_AND_MEAN is defined.
 #include <commctrl.h>
@@ -75,15 +76,15 @@ SWELL_DEFINE_DIALOG_RESOURCE_END(IDD_REACLAW_PANEL)
 
 #ifndef _WIN32
 #include <dlfcn.h>
-// SWELL_dllMain is defined in swell_stub.cpp.
-extern "C" int SWELL_dllMain(HINSTANCE hInst, DWORD callMode, LPVOID getFunc);
+        // SWELL_dllMain is defined in swell_stub.cpp.
+        extern "C" int SWELL_dllMain(HINSTANCE hInst, DWORD callMode, LPVOID getFunc);
 #endif
 
 namespace ReaClaw {
 namespace Panel {
 
-static HWND g_hwnd  = nullptr;
-static int  g_cmd_id = 0;
+static HWND g_hwnd = nullptr;
+static int g_cmd_id = 0;
 static custom_action_register_t g_action = {};
 static void* g_hInstance = nullptr;
 
@@ -105,11 +106,11 @@ static std::string read_log() {
 }
 
 static void populate(HWND hwnd) {
-    CheckDlgButton(hwnd, IDC_ENABLE,    Server::is_running() ? BST_CHECKED : BST_UNCHECKED);
-    SetDlgItemText(hwnd, IDC_HOST,      g_config.host.c_str());
-    SetDlgItemText(hwnd, IDC_PORT,      std::to_string(g_config.port).c_str());
+    CheckDlgButton(hwnd, IDC_ENABLE, Server::is_running() ? BST_CHECKED : BST_UNCHECKED);
+    SetDlgItemText(hwnd, IDC_HOST, g_config.host.c_str());
+    SetDlgItemText(hwnd, IDC_PORT, std::to_string(g_config.port).c_str());
     CheckDlgButton(hwnd, IDC_TLS_BYPASS, !g_config.tls_enabled ? BST_CHECKED : BST_UNCHECKED);
-    SetDlgItemText(hwnd, IDC_LOG,       read_log().c_str());
+    SetDlgItemText(hwnd, IDC_LOG, read_log().c_str());
 }
 
 // ---- Dialog proc -------------------------------------------------------
@@ -131,13 +132,16 @@ static INT_PTR WINAPI dlgproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM /*lPara
 
                     char buf[512];
                     GetDlgItemText(hwnd, IDC_HOST, buf, (int)sizeof(buf));
-                    if (buf[0]) g_config.host = buf;
+                    if (buf[0])
+                        g_config.host = buf;
 
                     GetDlgItemText(hwnd, IDC_PORT, buf, (int)sizeof(buf));
                     int p = std::atoi(buf);
-                    if (p > 0 && p < 65536) g_config.port = p;
+                    if (p > 0 && p < 65536)
+                        g_config.port = p;
 
-                    g_config.tls_enabled = !(IsDlgButtonChecked(hwnd, IDC_TLS_BYPASS) == BST_CHECKED);
+                    g_config.tls_enabled = !(IsDlgButtonChecked(hwnd, IDC_TLS_BYPASS) ==
+                                             BST_CHECKED);
 
                     g_config.save();
 
@@ -156,7 +160,8 @@ static INT_PTR WINAPI dlgproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM /*lPara
                     }
 
                     // Reflect actual running state back to the checkbox
-                    CheckDlgButton(hwnd, IDC_ENABLE, Server::is_running() ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(
+                            hwnd, IDC_ENABLE, Server::is_running() ? BST_CHECKED : BST_UNCHECKED);
                     return 0;
                 }
             }
@@ -202,12 +207,12 @@ void init(reaper_plugin_info_t* rec, void* hInstance) {
     // rec->GetFunc is the REAPER SDK getter (CountTracks etc.) and must NOT
     // be passed here; we need the SWELL-specific getter.
     {
-        using SwellGetFunc_t = void*(*)(const char*);
+        using SwellGetFunc_t = void* (*)(const char*);
         auto swellGetFunc = reinterpret_cast<SwellGetFunc_t>(
-            dlsym(RTLD_DEFAULT, "SWELLAPI_GetFunc")
-        );
+                dlsym(RTLD_DEFAULT, "SWELLAPI_GetFunc"));
         if (swellGetFunc) {
-            SWELL_dllMain((HINSTANCE)hInstance, DLL_PROCESS_ATTACH,
+            SWELL_dllMain((HINSTANCE)hInstance,
+                          DLL_PROCESS_ATTACH,
                           reinterpret_cast<void*>(swellGetFunc));
         } else {
             Log::warn("ReaClaw: SWELLAPI_GetFunc not found — control panel unavailable");
@@ -216,21 +221,22 @@ void init(reaper_plugin_info_t* rec, void* hInstance) {
     }
 #endif
 
-    if (!plugin_register || !GetMainHwnd) return;
+    if (!plugin_register || !GetMainHwnd)
+        return;
 
     // Register the toggle action so it appears in REAPER's Actions list
     // and can be bound to a toolbar button or keyboard shortcut.
     g_action.uniqueSectionId = 0;  // Main section
-    g_action.idStr  = "REACLAW_PANEL_TOGGLE";
-    g_action.name   = "ReaClaw: Control Panel";
-    g_action.extra  = nullptr;
+    g_action.idStr = "REACLAW_PANEL_TOGGLE";
+    g_action.name = "ReaClaw: Control Panel";
+    g_action.extra = nullptr;
     g_cmd_id = plugin_register("custom_action", &g_action);
     if (!g_cmd_id) {
         Log::warn("ReaClaw: failed to register control panel action");
         return;
     }
 
-    plugin_register("hookcommand",  (void*)hookcommand);
+    plugin_register("hookcommand", (void*)hookcommand);
     plugin_register("toggleaction", (void*)toggleaction);
 
     // Create modeless dockable dialog.
@@ -238,12 +244,7 @@ void init(reaper_plugin_info_t* rec, void* hInstance) {
     //   which finds the inline resource registered via SWELL_DEFINE_DIALOG_RESOURCE_BEGIN.
     // On Windows: native Win32 CreateDialogParam, resource comes from panel.rc.
     g_hwnd = CreateDialogParam(
-        (HINSTANCE)hInstance,
-        MAKEINTRESOURCE(IDD_REACLAW_PANEL),
-        GetMainHwnd(),
-        dlgproc,
-        0
-    );
+            (HINSTANCE)hInstance, MAKEINTRESOURCE(IDD_REACLAW_PANEL), GetMainHwnd(), dlgproc, 0);
     if (!g_hwnd) {
         Log::warn("ReaClaw: failed to create control panel window");
         return;
@@ -259,24 +260,29 @@ void init(reaper_plugin_info_t* rec, void* hInstance) {
 }
 
 void show_toggle() {
-    if (!g_hwnd) return;
+    if (!g_hwnd)
+        return;
     if (IsWindowVisible(g_hwnd)) {
         ShowWindow(g_hwnd, SW_HIDE);
     } else {
         populate(g_hwnd);
         ShowWindow(g_hwnd, SW_SHOW);
-        if (DockWindowActivate) DockWindowActivate(g_hwnd);
+        if (DockWindowActivate) {
+            DockWindowActivate(g_hwnd);
+        }
     }
 }
 
 void destroy() {
     if (g_cmd_id && plugin_register) {
-        plugin_register("-hookcommand",  (void*)hookcommand);
+        plugin_register("-hookcommand", (void*)hookcommand);
         plugin_register("-toggleaction", (void*)toggleaction);
         plugin_register("-custom_action", &g_action);
     }
     if (g_hwnd) {
-        if (DockWindowRemove) DockWindowRemove(g_hwnd);
+        if (DockWindowRemove) {
+            DockWindowRemove(g_hwnd);
+        }
         DestroyWindow(g_hwnd);
         g_hwnd = nullptr;
     }

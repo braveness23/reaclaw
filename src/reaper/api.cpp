@@ -1,17 +1,19 @@
 // REAPERAPI_IMPLEMENT must be defined in exactly one translation unit.
 // It causes reaper_plugin_functions.h to define (not just declare) all
 // function pointer globals populated by REAPERAPI_LoadAPI.
+// clang-format off
 #define REAPERAPI_IMPLEMENT
 #include "reaper/api.h"
+// clang-format on
 
 #include "app.h"
 #include "config/config.h"
 #include "db/db.h"
+#include "panel/panel.h"
 #include "reaper/catalog.h"
 #include "reaper/executor.h"
 #include "server/server.h"
 #include "util/logging.h"
-#include "panel/panel.h"
 
 #include <string>
 
