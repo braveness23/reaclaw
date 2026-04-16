@@ -2,6 +2,7 @@
 // Coordinates match the SWELL dialog in panel.cpp so layout is consistent
 // across platforms.  Dialog units on Windows with 8pt MS Shell Dlg map
 // to roughly the same pixel sizes as SWELL's 1.5× scaling factor.
+#include <winresrc.h>
 #include "resource.h"
 
 IDD_REACLAW_PANEL DIALOGEX 0, 0, 260, 220

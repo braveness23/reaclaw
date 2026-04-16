@@ -6,6 +6,17 @@
 //
 // This file must be compiled exactly once per extension binary.
 #ifndef _WIN32
+
+#ifdef __APPLE__
+// Pre-include C++ headers that swell.h transitively pulls in via swell-types.h.
+// On Xcode 15+, libc++ uses C++ templates internally in <cstddef>. Those
+// templates cannot have C linkage, so including them inside the extern "C" {}
+// block in swell-modstub-generic.cpp causes compile errors. Pre-including here
+// means the include guards fire before swell-modstub-generic.cpp gets to them.
+#include <cstddef>
+#include <cstdint>
+#endif
+
 #define SWELL_PROVIDED_BY_APP
 #include "WDL/swell/swell-modstub-generic.cpp"
 #endif
