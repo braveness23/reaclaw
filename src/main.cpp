@@ -37,6 +37,28 @@ __declspec(dllexport)
 __attribute__((visibility("default")))
 #endif
         int ReaperPluginEntry(void* hInstance, reaper_plugin_info_t* rec) {
+#ifdef _WIN32
+    // Diagnostic: write a breadcrumb before any REAPER or CRT calls so we can
+    // confirm the DLL loaded and ReaperPluginEntry was invoked.
+    // Remove this block once the load issue is diagnosed.
+    {
+        char tmp[MAX_PATH];
+        DWORD n = GetTempPathA(MAX_PATH, tmp);
+        if (n > 0 && n < MAX_PATH) {
+            lstrcatA(tmp, "reaclaw-diag.txt");
+            HANDLE h = CreateFileA(
+                    tmp, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h != INVALID_HANDLE_VALUE) {
+                const char* msg = rec ? "ReaperPluginEntry called (load)\n"
+                                      : "ReaperPluginEntry called (unload)\n";
+                DWORD written;
+                WriteFile(h, msg, lstrlenA(msg), &written, nullptr);
+                CloseHandle(h);
+            }
+        }
+    }
+#endif
+
     if (!rec) {
         ReaClaw::shutdown();
         return 0;
