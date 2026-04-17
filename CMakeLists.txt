@@ -102,6 +102,10 @@ if(MSVC)
     target_compile_options(reaper_reaclaw PRIVATE /W4 /WX /permissive-)
     # Suppress C4100 (unreferenced formal parameter) — common in REAPER callbacks
     target_compile_options(reaper_reaclaw PRIVATE /wd4100)
+    # Suppress C4505 (unreferenced static function) — reaper_plugin.h BSWAP helpers
+    target_compile_options(reaper_reaclaw PRIVATE /wd4505)
+    # Suppress C4996 (deprecated) — httplib uses deprecated APIs; fopen vs fopen_s
+    target_compile_options(reaper_reaclaw PRIVATE /wd4996)
     # MSVC: suppress min/max macro conflicts with <algorithm>
     target_compile_definitions(reaper_reaclaw PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 else()

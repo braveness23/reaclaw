@@ -251,8 +251,69 @@ Next session:
 
 ---
 
-## Stdio MCP Bridge (Optional)
+## Stdio MCP Server
 
-If your MCP host requires a stdio server rather than direct HTTP calls, you can wrap ReaClaw with a minimal bridge script. The bridge translates `tools/call` JSON-RPC messages into ReaClaw HTTP requests and returns results.
+`mcp/server.py` is a ready-to-use stdio MCP bridge. It translates MCP `tools/call` JSON-RPC messages into ReaClaw HTTPS requests and returns results.
 
-See the OpenClaw MCP documentation for how to register a stdio MCP server and pass the ReaClaw base URL + API key as environment variables.
+### Install
+
+```bash
+cd mcp
+pip install -r requirements.txt
+```
+
+### Run
+
+```bash
+REACLAW_API_KEY=sk_your_key_here python mcp/server.py
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `REACLAW_BASE_URL` | `https://localhost:9091` | ReaClaw server URL |
+| `REACLAW_API_KEY` | *(empty)* | Bearer API key; leave unset if `auth.type` is `"none"` |
+| `REACLAW_SSL_VERIFY` | `false` | Set to `"true"` to verify TLS cert (needed for CA-signed certs) |
+
+SSL verification is off by default because ReaClaw uses a self-signed cert in dev/home-network deployments.
+
+### Claude Desktop / claude_desktop_config.json
+
+```json
+{
+  "mcpServers": {
+    "reaclaw": {
+      "command": "python",
+      "args": ["/path/to/reaclaw/mcp/server.py"],
+      "env": {
+        "REACLAW_BASE_URL": "https://localhost:9091",
+        "REACLAW_API_KEY": "sk_your_key_here"
+      }
+    }
+  }
+}
+```
+
+### Available tools
+
+| Tool | Maps to |
+|---|---|
+| `reaclaw_health` | `GET /health` |
+| `reaclaw_search_catalog` | `GET /catalog/search` |
+| `reaclaw_get_catalog` | `GET /catalog` |
+| `reaclaw_get_catalog_categories` | `GET /catalog/categories` |
+| `reaclaw_get_action` | `GET /catalog/{id}` |
+| `reaclaw_get_state` | `GET /state` (+ optional `/state/tracks`) |
+| `reaclaw_get_tracks` | `GET /state/tracks` |
+| `reaclaw_get_items` | `GET /state/items` |
+| `reaclaw_get_selection` | `GET /state/selection` |
+| `reaclaw_get_automation` | `GET /state/automation` |
+| `reaclaw_set_track` | `POST /state/tracks/{index}` |
+| `reaclaw_execute_action` | `POST /execute/action` |
+| `reaclaw_execute_sequence` | `POST /execute/sequence` |
+| `reaclaw_register_script` | `POST /scripts/register` |
+| `reaclaw_get_script_cache` | `GET /scripts/cache` |
+| `reaclaw_get_script` | `GET /scripts/{id}` |
+| `reaclaw_delete_script` | `DELETE /scripts/{id}` |
+| `reaclaw_get_history` | `GET /history` |
