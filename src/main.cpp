@@ -38,25 +38,28 @@ __attribute__((visibility("default")))
 #endif
         int ReaperPluginEntry(void* hInstance, reaper_plugin_info_t* rec) {
 #ifdef _WIN32
-    // Diagnostic: write a breadcrumb before any REAPER or CRT calls so we can
-    // confirm the DLL loaded and ReaperPluginEntry was invoked.
-    // Remove this block once the load issue is diagnosed.
-    {
+    // Diagnostic: step-by-step breadcrumb file written via raw Win32 handles
+    // so it works even if the CRT, REAPER API, or logging subsystem fails.
+    // Each step appends a line; the last line written shows how far init got.
+    // Remove this block once the Windows load issue is fully diagnosed.
+    auto diag_write = [](const char* msg) {
         char tmp[MAX_PATH];
         DWORD n = GetTempPathA(MAX_PATH, tmp);
-        if (n > 0 && n < MAX_PATH) {
-            lstrcatA(tmp, "reaclaw-diag.txt");
-            HANDLE h = CreateFileA(
-                    tmp, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-            if (h != INVALID_HANDLE_VALUE) {
-                const char* msg = rec ? "ReaperPluginEntry called (load)\n"
-                                      : "ReaperPluginEntry called (unload)\n";
-                DWORD written;
-                WriteFile(h, msg, lstrlenA(msg), &written, nullptr);
-                CloseHandle(h);
-            }
-        }
-    }
+        if (n == 0 || n >= MAX_PATH)
+            return;
+        lstrcatA(tmp, "reaclaw-diag.txt");
+        HANDLE h = CreateFileA(
+                tmp, GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
+            return;
+        SetFilePointer(h, 0, nullptr, FILE_END);
+        DWORD written;
+        WriteFile(h, msg, lstrlenA(msg), &written, nullptr);
+        CloseHandle(h);
+    };
+
+    // Step 1 — DLL entry point reached
+    diag_write(rec ? "1: ReaperPluginEntry (load)\n" : "1: ReaperPluginEntry (unload)\n");
 #endif
 
     if (!rec) {
@@ -64,18 +67,49 @@ __attribute__((visibility("default")))
         return 0;
     }
 
+#ifdef _WIN32
+    // Step 2 — version check
+    {
+        char buf[64];
+        wsprintfA(buf, "2: caller_version=0x%X expected=0x%X\n",
+                  rec->caller_version, REAPER_PLUGIN_VERSION);
+        diag_write(buf);
+    }
+#endif
+
     if (rec->caller_version != REAPER_PLUGIN_VERSION)
         return 0;
 
     // Bind all REAPER API function pointers. Must succeed before any
     // REAPER API calls are made (including ShowConsoleMsg / GetResourcePath).
-    // Note: REAPERAPI_LoadAPI returns 0 on success, non-zero on failure.
-    if (REAPERAPI_LoadAPI(rec->GetFunc))
-        return 0;
+    // Note: REAPERAPI_LoadAPI returns the count of unresolved pointers (0 = all
+    // resolved). We intentionally ignore a non-zero return: the full SDK header
+    // declares functions added across many REAPER versions, so older hosts will
+    // leave some pointers null. We validate the specific functions we need in
+    // ReaClaw::init() instead.
+    int unresolved = REAPERAPI_LoadAPI(rec->GetFunc);
+
+#ifdef _WIN32
+    // Step 3 — LoadAPI result + critical pointer check
+    {
+        char buf[128];
+        wsprintfA(buf, "3: LoadAPI unresolved=%d ShowConsoleMsg=%s GetResourcePath=%s\n",
+                  unresolved,
+                  ShowConsoleMsg ? "ok" : "NULL",
+                  GetResourcePath ? "ok" : "NULL");
+        diag_write(buf);
+    }
+#endif
 
     ReaClaw::g_start_time = std::chrono::steady_clock::now();
 
-    return ReaClaw::init(rec, hInstance) ? 1 : 0;
+    bool ok = ReaClaw::init(rec, hInstance);
+
+#ifdef _WIN32
+    diag_write(ok ? "4: init() returned true\n" : "4: init() returned false\n");
+#endif
+
+    return ok ? 1 : 0;
 }
 
 }  // extern "C"

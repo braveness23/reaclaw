@@ -179,8 +179,12 @@ bool DB::run_schema() {
     if (!execute(k_schema))
         return false;
     // Migration: add reaper_cmd_id column if it doesn't exist (added in v0.3).
-    // SQLite silently returns an error if the column already exists; that is fine.
-    execute("ALTER TABLE scripts ADD COLUMN reaper_cmd_id INTEGER NOT NULL DEFAULT 0");
+    // SQLite has no ADD COLUMN IF NOT EXISTS, so we check pragma_table_info first.
+    auto cols = query(
+            "SELECT name FROM pragma_table_info('scripts') WHERE name='reaper_cmd_id'", {});
+    if (cols.empty()) {
+        execute("ALTER TABLE scripts ADD COLUMN reaper_cmd_id INTEGER NOT NULL DEFAULT 0");
+    }
     return true;
 }
 

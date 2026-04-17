@@ -120,7 +120,7 @@ bool init(reaper_plugin_info_t* rec, void* hInstance) {
         // Non-fatal: extension still loads, catalog queries work
     }
 
-    Log::info("ReaClaw ready — https://" + g_config.host + ":" + std::to_string(g_config.port));
+    Log::info("ReaClaw ready: https://" + g_config.host + ":" + std::to_string(g_config.port));
 
     // Register dockable control panel (non-fatal if unavailable)
     Panel::init(rec, hInstance);
