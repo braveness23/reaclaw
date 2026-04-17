@@ -1,23 +1,49 @@
 // ReaClaw Control Panel — Windows dialog resource.
-// Coordinates match the SWELL dialog in panel.cpp so layout is consistent
-// across platforms.  Dialog units on Windows with 8pt MS Shell Dlg map
-// to roughly the same pixel sizes as SWELL's 1.5× scaling factor.
+// Layout (260×224 dialog units):
+//   y=  4  [LED] Status text                    [Start/Stop]
+//   y= 22  ─── separator ───
+//   y= 26  Host: [____________________] Port: [________]
+//   y= 42  [x] Bypass TLS cert validation
+//   y= 60  ─── separator ───
+//   y= 64  Log:                      [Refresh] [Clear]
+//   y= 78  [log area, stretches]
+//   y=206  [Apply]
 #include <winresrc.h>
 #include "resource.h"
 
-IDD_REACLAW_PANEL DIALOGEX 0, 0, 260, 220
+IDD_REACLAW_PANEL DIALOGEX 0, 0, 260, 224
 STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
 CAPTION "ReaClaw"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    CONTROL  "Enable ReaClaw server",       IDC_ENABLE,    "Button", BS_AUTOCHECKBOX|WS_TABSTOP,  6,   6, 200, 12
-    LTEXT    "Host:",                        IDC_STATIC,              6,  22,  30, 10
-    EDITTEXT IDC_HOST,                                               40,  20, 160, 12, ES_AUTOHSCROLL|WS_TABSTOP
-    LTEXT    "Port:",                        IDC_STATIC,              6,  38,  30, 10
-    EDITTEXT IDC_PORT,                                               40,  36,  60, 12, ES_AUTOHSCROLL|WS_TABSTOP
-    CONTROL  "Bypass TLS cert validation",  IDC_TLS_BYPASS,"Button", BS_AUTOCHECKBOX|WS_TABSTOP,  6,  54, 220, 12
-    LTEXT    "Log:",                         IDC_STATIC,              6,  70,  30, 10
-    PUSHBUTTON "Refresh",                    IDC_REFRESH,           200,  68,  54, 14
-    EDITTEXT IDC_LOG,                                                 6,  86, 248,  96, ES_READONLY|ES_MULTILINE|WS_VSCROLL|WS_TABSTOP
-    PUSHBUTTON "Apply",                      IDC_APPLY,             200, 198,  54, 14
+    // Status row: LED square | status text | Start/Stop button
+    LTEXT    "",                            IDC_STATUS_LED,    6,   6,  10, 10
+    LTEXT    "Stopped",                     IDC_STATUS_TEXT,  20,   6, 172, 10
+    PUSHBUTTON "Start",                     IDC_START_STOP,  198,   4,  56, 14
+
+    // Separator between status and settings
+    CONTROL  "", IDC_SEP1, "Static", SS_ETCHEDHORZ|WS_CHILD|WS_VISIBLE, 6, 22, 248, 1
+
+    // Settings: host and port on one row
+    LTEXT    "Host:",                        IDC_STATIC,       6,  30,  26, 10
+    EDITTEXT IDC_HOST,                                        36,  28, 128, 12, ES_AUTOHSCROLL|WS_TABSTOP
+    LTEXT    "Port:",                        IDC_STATIC,     170,  30,  22, 10
+    EDITTEXT IDC_PORT,                                       196,  28,  58, 12, ES_AUTOHSCROLL|WS_TABSTOP
+
+    // TLS bypass checkbox
+    CONTROL  "Bypass TLS cert validation",  IDC_TLS_BYPASS, "Button", BS_AUTOCHECKBOX|WS_TABSTOP, 6, 44, 220, 12
+
+    // Separator between settings and log
+    CONTROL  "", IDC_SEP2, "Static", SS_ETCHEDHORZ|WS_CHILD|WS_VISIBLE, 6, 60, 248, 1
+
+    // Log section header with action buttons
+    LTEXT    "Log:",                         IDC_STATIC,       6,  68,  20, 10
+    PUSHBUTTON "Refresh",                    IDC_REFRESH,     168,  66,  40, 12
+    PUSHBUTTON "Clear",                      IDC_CLEAR_LOG,   212,  66,  42, 12
+
+    // Log area — stretches with the window
+    EDITTEXT IDC_LOG,                                          6,  80, 248, 122, ES_READONLY|ES_MULTILINE|WS_VSCROLL|WS_TABSTOP
+
+    // Apply saves host/port/TLS and restarts server if running
+    PUSHBUTTON "Apply",                      IDC_APPLY,       200, 206,  54, 14
 END
