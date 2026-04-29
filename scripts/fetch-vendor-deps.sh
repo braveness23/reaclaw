@@ -34,8 +34,9 @@ cp "$VENDOR/reaper-sdk/sdk/"*.h "$VENDOR/reaper-sdk/"
 echo "==> Fetching WDL/swell @ $WDL_COMMIT (Linux/macOS panel support)"
 rm -rf /tmp/wdl-dl && mkdir -p /tmp/wdl-dl
 curl -fsSL "https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz" | tar xz -C /tmp/wdl-dl
+WDL_DIR=$(ls /tmp/wdl-dl | head -1)
 mkdir -p "$VENDOR/WDL"
-cp -r "/tmp/wdl-dl/WDL-$WDL_COMMIT/WDL/swell" "$VENDOR/WDL/"
+cp -r "/tmp/wdl-dl/$WDL_DIR/WDL/swell" "$VENDOR/WDL/"
 rm -rf /tmp/wdl-dl
 
 echo "==> Done. Vendor contents:"

@@ -39,8 +39,9 @@ jobs:
           cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
           mkdir -p /tmp/wdl-dl
           curl -fsSL https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz | tar xz -C /tmp/wdl-dl
+          WDL_DIR=$(ls /tmp/wdl-dl | head -1)
           mkdir -p $GITHUB_WORKSPACE/vendor/WDL
-          cp -r /tmp/wdl-dl/WDL-$WDL_COMMIT/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
+          cp -r /tmp/wdl-dl/$WDL_DIR/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
           rm -rf /tmp/wdl-dl
 
       - name: Configure
@@ -83,8 +84,9 @@ jobs:
           cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
           mkdir -p /tmp/wdl-dl
           curl -fsSL https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz | tar xz -C /tmp/wdl-dl
+          WDL_DIR=$(ls /tmp/wdl-dl | head -1)
           mkdir -p $GITHUB_WORKSPACE/vendor/WDL
-          cp -r /tmp/wdl-dl/WDL-$WDL_COMMIT/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
+          cp -r /tmp/wdl-dl/$WDL_DIR/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
           rm -rf /tmp/wdl-dl
 
       - name: Configure
