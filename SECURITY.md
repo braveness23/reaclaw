@@ -11,13 +11,8 @@ Understanding the security model before deploying ReaClaw is important.
 
 | Version | Supported |
 |---------|-----------|
-| v0.x (current development) | Yes — best-effort, patches released as needed |
-| v1.0+ (first stable release) | Yes — full support with SLA below |
-| < v0.1 | No |
-
-Pre-release (v0.x) builds receive security fixes, but patch cadence may be
-faster or slower than the commitments described below. Once v1.0.0 is tagged,
-the response SLA below applies in full.
+| v1.x (current stable) | Yes — full support with SLA below |
+| v0.x | No — upgrade to v1.x |
 
 ---
 

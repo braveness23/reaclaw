@@ -20,17 +20,17 @@ message(STATUS "OpenSSL include: ${OPENSSL_INCLUDE_DIR}")
 # ---------------------------------------------------------------------------
 # cpp-httplib — single header, HTTPS mode requires CPPHTTPLIB_OPENSSL_SUPPORT
 # ---------------------------------------------------------------------------
-# Vendor: vendor/httplib.h  (yhirose/cpp-httplib, latest release)
+# Vendor: vendor/httplib.h  (yhirose/cpp-httplib v0.41.0)
 
 # ---------------------------------------------------------------------------
 # nlohmann/json — single header
 # ---------------------------------------------------------------------------
-# Vendor: vendor/json.hpp  (nlohmann/json 3.x)
+# Vendor: vendor/json.hpp  (nlohmann/json v3.11.3)
 
 # ---------------------------------------------------------------------------
 # SQLite amalgamation — compiled as a C translation unit
 # ---------------------------------------------------------------------------
-# Vendor: vendor/sqlite3.c + vendor/sqlite3.h
+# Vendor: vendor/sqlite3.c + vendor/sqlite3.h  (SQLite 3.47.2)
 add_library(sqlite3 STATIC vendor/sqlite3.c)
 target_include_directories(sqlite3 PUBLIC vendor/)
 target_compile_options(sqlite3 PRIVATE
