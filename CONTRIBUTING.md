@@ -56,7 +56,13 @@ The following are bundled in `vendor/` and must be present:
 | `reaper-sdk/` | [justinfrankel/reaper-sdk](https://github.com/justinfrankel/reaper-sdk) — copy `sdk/*.h` into `vendor/reaper-sdk/` |
 | `WDL/swell/` | [justinfrankel/WDL](https://github.com/justinfrankel/WDL) — required on Linux and macOS (sparse clone `WDL/swell` into `vendor/WDL/`) |
 
-See `vendor/README.md` for exact fetch commands. OpenSSL is a system/vcpkg dependency and is not bundled.
+Run the helper script to fetch everything at once:
+
+```bash
+bash scripts/fetch-vendor-deps.sh
+```
+
+Or see `vendor/README.md` for manual fetch commands. OpenSSL is a system/vcpkg dependency and is not bundled.
 
 ---
 
@@ -75,7 +81,7 @@ The `.clang-format` config at the repo root governs style (Google base, 4-space 
 ## Testing
 
 - Unit tests live in `tests/`. Run with `ctest` after building.
-- Integration tests require a running REAPER instance with ReaClaw loaded.
+- Integration tests require a running REAPER instance with ReaClaw loaded. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for headless Linux setup instructions.
 - All tests must pass before a PR is merged.
 
 ```bash
@@ -110,4 +116,4 @@ For security issues, follow [SECURITY.md](SECURITY.md).
 
 ## Code of Conduct
 
-Be direct and constructive. Critique code, not people. Maintainers may close or lock issues and PRs that are off-topic or disrespectful.
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

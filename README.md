@@ -1,5 +1,9 @@
 # ReaClaw
 
+[![CI](https://github.com/braveness23/reaclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/braveness23/reaclaw/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/braveness23/reaclaw)](https://github.com/braveness23/reaclaw/releases/latest)
+
 **ReaClaw** is a native C++ REAPER extension that embeds an HTTPS server directly inside REAPER. It exposes a REST API that lets any HTTP-capable AI agent operate REAPER fully — browsing the action catalog, executing actions, querying project state, registering custom Lua ReaScripts, and running multi-step sequences with per-step feedback.
 
 Because ReaClaw is a native extension (not an external process), it has direct access to every REAPER API function with no bridge scripts, no scraping, and no limitations.
