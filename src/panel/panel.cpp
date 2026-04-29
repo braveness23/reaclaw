@@ -23,6 +23,12 @@
 #include "WDL/swell/swell.h"
 
 // ---- Dialog resource definition (non-Windows) ----------------------------
+// SWELL_DLG_WS_DEFAULT_SCALING was added to WDL in 2025 but is only defined
+// under SWELL_TARGET_OSX. Guard it here so Linux builds don't fail when the
+// WDL repo advances past the version we vendored.
+#ifndef SWELL_DLG_WS_DEFAULT_SCALING
+#define SWELL_DLG_WS_DEFAULT_SCALING 0
+#endif
 #include "WDL/swell/swell-dlggen.h"
 #include "panel/resource.h"
 

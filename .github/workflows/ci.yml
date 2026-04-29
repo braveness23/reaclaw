@@ -14,7 +14,7 @@ env:
   JSON_HPP_URL:   https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp
   HTTPLIB_URL:    https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.41.0/httplib.h
   REAPER_SDK_URL: https://github.com/justinfrankel/reaper-sdk.git
-  WDL_URL:        https://github.com/justinfrankel/WDL.git
+  WDL_COMMIT:     6aaf30c
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -37,10 +37,11 @@ jobs:
           unzip -j /tmp/sqlite.zip "*/sqlite3.c" "*/sqlite3.h" -d vendor/
           git clone --depth=1 $REAPER_SDK_URL vendor/reaper-sdk
           cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
-          git clone --depth=1 --filter=blob:none --sparse $WDL_URL /tmp/wdl-tmp
-          cd /tmp/wdl-tmp && git sparse-checkout set WDL/swell
+          mkdir -p /tmp/wdl-dl
+          curl -fsSL https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz | tar xz -C /tmp/wdl-dl
           mkdir -p $GITHUB_WORKSPACE/vendor/WDL
-          cp -r /tmp/wdl-tmp/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
+          cp -r /tmp/wdl-dl/WDL-$WDL_COMMIT/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
+          rm -rf /tmp/wdl-dl
 
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -80,10 +81,11 @@ jobs:
           unzip -j /tmp/sqlite.zip "*/sqlite3.c" "*/sqlite3.h" -d vendor/
           git clone --depth=1 $REAPER_SDK_URL vendor/reaper-sdk
           cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
-          git clone --depth=1 --filter=blob:none --sparse $WDL_URL /tmp/wdl-tmp
-          cd /tmp/wdl-tmp && git sparse-checkout set WDL/swell
+          mkdir -p /tmp/wdl-dl
+          curl -fsSL https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz | tar xz -C /tmp/wdl-dl
           mkdir -p $GITHUB_WORKSPACE/vendor/WDL
-          cp -r /tmp/wdl-tmp/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
+          cp -r /tmp/wdl-dl/WDL-$WDL_COMMIT/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
+          rm -rf /tmp/wdl-dl
 
       - name: Configure
         run: |

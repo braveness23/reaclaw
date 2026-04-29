@@ -10,7 +10,7 @@ SQLITE_ZIP_URL="https://www.sqlite.org/2024/sqlite-amalgamation-3470200.zip"
 JSON_HPP_URL="https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp"
 HTTPLIB_URL="https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.41.0/httplib.h"
 REAPER_SDK_URL="https://github.com/justinfrankel/reaper-sdk.git"
-WDL_URL="https://github.com/justinfrankel/WDL.git"
+WDL_COMMIT="6aaf30c"
 
 echo "==> Fetching cpp-httplib v0.41.0"
 curl -fsSL "$HTTPLIB_URL" -o "$VENDOR/httplib.h"
@@ -31,13 +31,12 @@ else
 fi
 cp "$VENDOR/reaper-sdk/sdk/"*.h "$VENDOR/reaper-sdk/"
 
-echo "==> Fetching WDL/swell (Linux/macOS panel support)"
-if [ -d /tmp/wdl-tmp ]; then rm -rf /tmp/wdl-tmp; fi
-git clone --depth=1 --filter=blob:none --sparse "$WDL_URL" /tmp/wdl-tmp
-git -C /tmp/wdl-tmp sparse-checkout set WDL/swell
+echo "==> Fetching WDL/swell @ $WDL_COMMIT (Linux/macOS panel support)"
+rm -rf /tmp/wdl-dl && mkdir -p /tmp/wdl-dl
+curl -fsSL "https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz" | tar xz -C /tmp/wdl-dl
 mkdir -p "$VENDOR/WDL"
-cp -r /tmp/wdl-tmp/WDL/swell "$VENDOR/WDL/"
-rm -rf /tmp/wdl-tmp
+cp -r "/tmp/wdl-dl/WDL-$WDL_COMMIT/WDL/swell" "$VENDOR/WDL/"
+rm -rf /tmp/wdl-dl
 
 echo "==> Done. Vendor contents:"
 ls "$VENDOR/"
