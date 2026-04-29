@@ -12,7 +12,7 @@ on:
 env:
   SQLITE_ZIP_URL: https://www.sqlite.org/2024/sqlite-amalgamation-3470200.zip
   JSON_HPP_URL:   https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp
-  HTTPLIB_URL:    https://raw.githubusercontent.com/yhirose/cpp-httplib/master/httplib.h
+  HTTPLIB_URL:    https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.41.0/httplib.h
   REAPER_SDK_URL: https://github.com/justinfrankel/reaper-sdk.git
   WDL_URL:        https://github.com/justinfrankel/WDL.git
 
