@@ -79,15 +79,15 @@ SWELL_DEFINE_DIALOG_RESOURCE_END(IDD_REACLAW_PANEL)
 
 #ifndef _WIN32
 #include <dlfcn.h>
-// SWELL_dllMain is defined in swell_stub.cpp.
-extern "C" int SWELL_dllMain(HINSTANCE hInst, DWORD callMode, LPVOID getFunc);
+        // SWELL_dllMain is defined in swell_stub.cpp.
+        extern "C" int SWELL_dllMain(HINSTANCE hInst, DWORD callMode, LPVOID getFunc);
 #endif
 
 namespace ReaClaw {
 namespace Panel {
 
-static HWND  g_hwnd      = nullptr;
-static int   g_cmd_id    = 0;
+static HWND g_hwnd = nullptr;
+static int g_cmd_id = 0;
 static custom_action_register_t g_action = {};
 static void* g_hInstance = nullptr;
 
@@ -98,70 +98,74 @@ static void* g_hInstance = nullptr;
 static HBRUSH g_led_running_brush = nullptr;  // green
 static HBRUSH g_led_stopped_brush = nullptr;  // gray
 
-static const UINT k_refresh_timer    = 1;
+static const UINT k_refresh_timer = 1;
 static const UINT k_refresh_interval = 2000;  // ms — status LED / text update
 
 // ---- Layout state (captured once at WM_INITDIALOG) -----------------------
 
-struct CtrlRect { int x, y, w, h; };
+struct CtrlRect {
+    int x, y, w, h;
+};
 
-static int      g_init_cx       = 0;
-static int      g_init_cy       = 0;
+static int g_init_cx = 0;
+static int g_init_cy = 0;
 static CtrlRect g_status_text_r = {};
-static CtrlRect g_start_stop_r  = {};
-static CtrlRect g_sep1_r        = {};
-static CtrlRect g_sep2_r        = {};
-static CtrlRect g_log_r         = {};
-static CtrlRect g_refresh_r     = {};
-static CtrlRect g_clear_log_r   = {};
-static CtrlRect g_apply_r       = {};
+static CtrlRect g_start_stop_r = {};
+static CtrlRect g_sep1_r = {};
+static CtrlRect g_sep2_r = {};
+static CtrlRect g_log_r = {};
+static CtrlRect g_refresh_r = {};
+static CtrlRect g_clear_log_r = {};
+static CtrlRect g_apply_r = {};
 
 static CtrlRect get_ctrl_rect(HWND parent, int id) {
     RECT rc = {};
     GetWindowRect(GetDlgItem(parent, id), &rc);
-    MapWindowPoints(HWND_DESKTOP, parent, reinterpret_cast<POINT*>(&rc), 2);
-    return {rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top};
+    // ScreenToClient is cross-platform (Win32 + SWELL); MapWindowPoints is Win32-only.
+    POINT pt = {rc.left, rc.top};
+    ScreenToClient(parent, &pt);
+    return {pt.x, pt.y, rc.right - rc.left, rc.bottom - rc.top};
 }
 
 static void capture_layout(HWND hwnd) {
     RECT client = {};
     GetClientRect(hwnd, &client);
-    g_init_cx      = client.right;
-    g_init_cy      = client.bottom;
+    g_init_cx = client.right;
+    g_init_cy = client.bottom;
     g_status_text_r = get_ctrl_rect(hwnd, IDC_STATUS_TEXT);
-    g_start_stop_r  = get_ctrl_rect(hwnd, IDC_START_STOP);
-    g_sep1_r        = get_ctrl_rect(hwnd, IDC_SEP1);
-    g_sep2_r        = get_ctrl_rect(hwnd, IDC_SEP2);
-    g_log_r         = get_ctrl_rect(hwnd, IDC_LOG);
-    g_refresh_r     = get_ctrl_rect(hwnd, IDC_REFRESH);
-    g_clear_log_r   = get_ctrl_rect(hwnd, IDC_CLEAR_LOG);
-    g_apply_r       = get_ctrl_rect(hwnd, IDC_APPLY);
+    g_start_stop_r = get_ctrl_rect(hwnd, IDC_START_STOP);
+    g_sep1_r = get_ctrl_rect(hwnd, IDC_SEP1);
+    g_sep2_r = get_ctrl_rect(hwnd, IDC_SEP2);
+    g_log_r = get_ctrl_rect(hwnd, IDC_LOG);
+    g_refresh_r = get_ctrl_rect(hwnd, IDC_REFRESH);
+    g_clear_log_r = get_ctrl_rect(hwnd, IDC_CLEAR_LOG);
+    g_apply_r = get_ctrl_rect(hwnd, IDC_APPLY);
 }
 
 static void relayout(HWND hwnd, int cx, int cy) {
     int dx = cx - g_init_cx;
     int dy = cy - g_init_cy;
 
-    // Batch all moves into a single deferred update to prevent flicker.
-    HDWP dwp = BeginDeferWindowPos(8);
-    if (!dwp) return;
-
-    auto defer = [&](int id, const CtrlRect& r, int dw, int dh, int mx, int my) {
-        DeferWindowPos(dwp, GetDlgItem(hwnd, id), nullptr,
-                       r.x + mx, r.y + my, r.w + dw, r.h + dh,
-                       SWP_NOZORDER | SWP_NOACTIVATE);
+    // BeginDeferWindowPos/DeferWindowPos/EndDeferWindowPos are Win32-only;
+    // use individual SetWindowPos calls which work on Win32 and SWELL.
+    auto move = [&](int id, const CtrlRect& r, int dw, int dh, int mx, int my) {
+        SetWindowPos(GetDlgItem(hwnd, id),
+                     nullptr,
+                     r.x + mx,
+                     r.y + my,
+                     r.w + dw,
+                     r.h + dh,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
     };
 
-    defer(IDC_STATUS_TEXT, g_status_text_r, dx,  0,  0,  0);  // stretch right
-    defer(IDC_START_STOP,  g_start_stop_r,   0,  0, dx,  0);  // slide right
-    defer(IDC_SEP1,        g_sep1_r,        dx,  0,  0,  0);  // stretch right
-    defer(IDC_SEP2,        g_sep2_r,        dx,  0,  0,  0);  // stretch right
-    defer(IDC_LOG,         g_log_r,         dx, dy,  0,  0);  // stretch right+down
-    defer(IDC_REFRESH,     g_refresh_r,      0,  0, dx,  0);  // slide right
-    defer(IDC_CLEAR_LOG,   g_clear_log_r,    0,  0, dx,  0);  // slide right
-    defer(IDC_APPLY,       g_apply_r,        0,  0, dx, dy);  // slide right+down
-
-    EndDeferWindowPos(dwp);
+    move(IDC_STATUS_TEXT, g_status_text_r, dx, 0, 0, 0);  // stretch right
+    move(IDC_START_STOP, g_start_stop_r, 0, 0, dx, 0);    // slide right
+    move(IDC_SEP1, g_sep1_r, dx, 0, 0, 0);                // stretch right
+    move(IDC_SEP2, g_sep2_r, dx, 0, 0, 0);                // stretch right
+    move(IDC_LOG, g_log_r, dx, dy, 0, 0);                 // stretch right+down
+    move(IDC_REFRESH, g_refresh_r, 0, 0, dx, 0);          // slide right
+    move(IDC_CLEAR_LOG, g_clear_log_r, 0, 0, dx, 0);      // slide right
+    move(IDC_APPLY, g_apply_r, 0, 0, dx, dy);             // slide right+down
 }
 
 // ---- Helpers ---------------------------------------------------------------
@@ -183,7 +187,8 @@ static std::string read_log() {
     std::string out;
     out.reserve(s.size() + 64);
     for (char c : s) {
-        if (c == '\n') out += '\r';
+        if (c == '\n')
+            out += '\r';
         out += c;
     }
     return out;
@@ -195,10 +200,13 @@ static std::string read_log() {
 // Scroll the log edit control to the last line so the newest entries are visible.
 static void scroll_log_to_bottom(HWND hwnd) {
     HWND log = GetDlgItem(hwnd, IDC_LOG);
-    if (!log) return;
-    int len = (int)SendMessage(log, WM_GETTEXTLENGTH, 0, 0);
+    if (!log)
+        return;
+    // WM_GETTEXTLENGTH and EM_SCROLLCARET are Win32-only; use GetWindowTextLength
+    // and EM_SCROLL (SB_BOTTOM) which are supported on Win32 and SWELL.
+    int len = GetWindowTextLength(log);
     SendMessage(log, EM_SETSEL, (WPARAM)len, (LPARAM)len);
-    SendMessage(log, EM_SCROLLCARET, 0, 0);
+    SendMessage(log, EM_SCROLL, SB_BOTTOM, 0);
 }
 
 // Load log from disk, push it into the edit control, and scroll to bottom.
@@ -218,8 +226,8 @@ static void update_status(HWND hwnd) {
     std::string status;
     if (running) {
         const char* scheme = g_config.tls_enabled ? "https" : "http";
-        status = std::string("Running  ") + scheme + "://" +
-                 g_config.host + ":" + std::to_string(g_config.port);
+        status = std::string("Running  ") + scheme + "://" + g_config.host + ":" +
+                 std::to_string(g_config.port);
     } else {
         status = "Stopped";
     }
@@ -233,8 +241,7 @@ static void update_status(HWND hwnd) {
 static void populate(HWND hwnd) {
     SetDlgItemText(hwnd, IDC_HOST, g_config.host.c_str());
     SetDlgItemText(hwnd, IDC_PORT, std::to_string(g_config.port).c_str());
-    CheckDlgButton(hwnd, IDC_TLS_BYPASS,
-                   !g_config.tls_enabled ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(hwnd, IDC_TLS_BYPASS, !g_config.tls_enabled ? BST_CHECKED : BST_UNCHECKED);
     refresh_log(hwnd);
     update_status(hwnd);
 }
@@ -247,8 +254,8 @@ static INT_PTR WINAPI dlgproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     switch (msg) {
         case WM_INITDIALOG:
             // Create LED brushes for the status indicator square.
-            g_led_running_brush = CreateSolidBrush(RGB(0, 192, 64));   // green
-            g_led_stopped_brush = CreateSolidBrush(RGB(110, 110, 110)); // gray
+            g_led_running_brush = CreateSolidBrush(RGB(0, 192, 64));     // green
+            g_led_stopped_brush = CreateSolidBrush(RGB(110, 110, 110));  // gray
             populate(hwnd);
             capture_layout(hwnd);
             // Periodic timer: keeps status text and LED current without
@@ -269,8 +276,8 @@ static INT_PTR WINAPI dlgproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         // Paint the status LED square: return the appropriate solid brush so
         // the static control's background becomes the LED color.
         case WM_CTLCOLORSTATIC: {
-            int id = GetDlgCtrlID((HWND)lParam);
-            if (id == IDC_STATUS_LED) {
+            // GetDlgCtrlID is Win32-only; compare HWNDs directly (works everywhere).
+            if ((HWND)lParam == GetDlgItem(hwnd, IDC_STATUS_LED)) {
                 bool running = Server::is_running();
                 COLORREF clr = running ? RGB(0, 192, 64) : RGB(110, 110, 110);
                 SetBkColor((HDC)wParam, clr);
@@ -307,14 +314,16 @@ static INT_PTR WINAPI dlgproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     // Read current field values into config.
                     char buf[512];
                     GetDlgItemText(hwnd, IDC_HOST, buf, (int)sizeof(buf));
-                    if (buf[0]) g_config.host = buf;
+                    if (buf[0])
+                        g_config.host = buf;
 
                     GetDlgItemText(hwnd, IDC_PORT, buf, (int)sizeof(buf));
                     int p = std::atoi(buf);
-                    if (p > 0 && p < 65536) g_config.port = p;
+                    if (p > 0 && p < 65536)
+                        g_config.port = p;
 
-                    g_config.tls_enabled =
-                        !(IsDlgButtonChecked(hwnd, IDC_TLS_BYPASS) == BST_CHECKED);
+                    g_config.tls_enabled = !(IsDlgButtonChecked(hwnd, IDC_TLS_BYPASS) ==
+                                             BST_CHECKED);
 
                     g_config.save();
 
@@ -333,20 +342,29 @@ static INT_PTR WINAPI dlgproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
         case WM_CONTEXTMENU: {
             bool running = Server::is_running();
-            bool docked  = DockIsChildOfDock && DockIsChildOfDock(hwnd, nullptr) >= 0;
+            bool docked = DockIsChildOfDock && DockIsChildOfDock(hwnd, nullptr) >= 0;
 
+            // AppendMenuA is Win32-only; InsertMenu (aliased to SWELL_InsertMenu on
+            // Linux/macOS) works cross-platform with MF_BYPOSITION to append.
             HMENU menu = CreatePopupMenu();
-            AppendMenuA(menu, MF_STRING, 1, running ? "Stop Server" : "Start Server");
-            AppendMenuA(menu, MF_STRING, 2, "Refresh Log");
-            AppendMenuA(menu, MF_SEPARATOR, 0, nullptr);
-            AppendMenuA(menu, MF_STRING | (docked ? MF_CHECKED : 0), 3,
-                        "Dock in Docker");
-            AppendMenuA(menu, MF_STRING, 4, "Close");
+            InsertMenu(menu,
+                       0,
+                       MF_BYPOSITION | MF_STRING,
+                       1,
+                       running ? "Stop Server" : "Start Server");
+            InsertMenu(menu, 1, MF_BYPOSITION | MF_STRING, 2, "Refresh Log");
+            InsertMenu(menu, 2, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+            InsertMenu(menu,
+                       3,
+                       MF_BYPOSITION | MF_STRING | (docked ? MF_CHECKED : 0),
+                       3,
+                       "Dock in Docker");
+            InsertMenu(menu, 4, MF_BYPOSITION | MF_STRING, 4, "Close");
 
             // Cast to SHORT for multi-monitor support (coordinates can be negative).
             POINT pt = {(SHORT)LOWORD(lParam), (SHORT)HIWORD(lParam)};
             int cmd = (int)TrackPopupMenu(
-                menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, nullptr);
+                    menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, nullptr);
             DestroyMenu(menu);
 
             switch (cmd) {
@@ -365,7 +383,8 @@ static INT_PTR WINAPI dlgproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     break;
                 case 3:
                     if (docked) {
-                        if (DockWindowRemove) DockWindowRemove(hwnd);
+                        if (DockWindowRemove)
+                            DockWindowRemove(hwnd);
                         // REAPER may destroy the HWND during DockWindowRemove.
                         // Recreate the dialog if needed, then show it floating.
                         if (create_window()) {
@@ -419,8 +438,10 @@ static bool hookcommand(int cmd, int /*flag*/) {
 }
 
 static int toggleaction(int cmd) {
-    if (cmd != g_cmd_id) return -1;
-    if (!g_hwnd) return 0;
+    if (cmd != g_cmd_id)
+        return -1;
+    if (!g_hwnd)
+        return 0;
     // When docked, inactive tabs are hidden by the docker but the panel is
     // still "open" — report it as on so toolbar buttons stay lit.
     bool docked = DockIsChildOfDock && DockIsChildOfDock(g_hwnd, nullptr) >= 0;
@@ -437,9 +458,10 @@ void init(reaper_plugin_info_t* rec, void* hInstance) {
     {
         using SwellGetFunc_t = void* (*)(const char*);
         auto swellGetFunc = reinterpret_cast<SwellGetFunc_t>(
-            dlsym(RTLD_DEFAULT, "SWELLAPI_GetFunc"));
+                dlsym(RTLD_DEFAULT, "SWELLAPI_GetFunc"));
         if (swellGetFunc) {
-            SWELL_dllMain((HINSTANCE)hInstance, DLL_PROCESS_ATTACH,
+            SWELL_dllMain((HINSTANCE)hInstance,
+                          DLL_PROCESS_ATTACH,
                           reinterpret_cast<void*>(swellGetFunc));
         } else {
             Log::warn("ReaClaw: SWELLAPI_GetFunc not found — control panel unavailable");
@@ -448,12 +470,13 @@ void init(reaper_plugin_info_t* rec, void* hInstance) {
     }
 #endif
 
-    if (!plugin_register || !GetMainHwnd) return;
+    if (!plugin_register || !GetMainHwnd)
+        return;
 
     // Register the toggle action so it appears in REAPER's Actions list.
     g_action.uniqueSectionId = 0;  // Main section
     g_action.idStr = "REACLAW_PANEL_TOGGLE";
-    g_action.name  = "ReaClaw: Control Panel";
+    g_action.name = "ReaClaw: Control Panel";
     g_action.extra = nullptr;
     g_cmd_id = plugin_register("custom_action", &g_action);
     if (!g_cmd_id) {
@@ -461,12 +484,11 @@ void init(reaper_plugin_info_t* rec, void* hInstance) {
         return;
     }
 
-    plugin_register("hookcommand",  (void*)hookcommand);
+    plugin_register("hookcommand", (void*)hookcommand);
     plugin_register("toggleaction", (void*)toggleaction);
 
     g_hwnd = CreateDialogParam(
-        (HINSTANCE)hInstance, MAKEINTRESOURCE(IDD_REACLAW_PANEL),
-        GetMainHwnd(), dlgproc, 0);
+            (HINSTANCE)hInstance, MAKEINTRESOURCE(IDD_REACLAW_PANEL), GetMainHwnd(), dlgproc, 0);
     if (!g_hwnd) {
 #ifdef _WIN32
         {
@@ -474,12 +496,19 @@ void init(reaper_plugin_info_t* rec, void* hInstance) {
             DWORD n = GetTempPathA(MAX_PATH, tmp);
             if (n > 0 && n < MAX_PATH) {
                 lstrcatA(tmp, "reaclaw-diag.txt");
-                HANDLE h = CreateFileA(tmp, GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS,
-                                       FILE_ATTRIBUTE_NORMAL, nullptr);
+                HANDLE h = CreateFileA(tmp,
+                                       GENERIC_WRITE,
+                                       0,
+                                       nullptr,
+                                       OPEN_ALWAYS,
+                                       FILE_ATTRIBUTE_NORMAL,
+                                       nullptr);
                 if (h != INVALID_HANDLE_VALUE) {
                     char buf[128];
-                    wsprintfA(buf, "5: CreateDialogParam failed GLE=%lu hInstance=%p\n",
-                              GetLastError(), hInstance);
+                    wsprintfA(buf,
+                              "5: CreateDialogParam failed GLE=%lu hInstance=%p\n",
+                              GetLastError(),
+                              hInstance);
                     SetFilePointer(h, 0, nullptr, FILE_END);
                     DWORD written;
                     WriteFile(h, buf, lstrlenA(buf), &written, nullptr);
@@ -505,12 +534,13 @@ void init(reaper_plugin_info_t* rec, void* hInstance) {
 // DockWindowRemove on Windows, so callers must not assume g_hwnd survives an
 // undock operation.  Returns true if g_hwnd is valid on exit.
 static bool create_window() {
-    if (g_hwnd && IsWindow(g_hwnd)) return true;
+    if (g_hwnd && IsWindow(g_hwnd))
+        return true;
     g_hwnd = nullptr;
-    if (!GetMainHwnd) return false;
+    if (!GetMainHwnd)
+        return false;
     g_hwnd = CreateDialogParam(
-        (HINSTANCE)g_hInstance, MAKEINTRESOURCE(IDD_REACLAW_PANEL),
-        GetMainHwnd(), dlgproc, 0);
+            (HINSTANCE)g_hInstance, MAKEINTRESOURCE(IDD_REACLAW_PANEL), GetMainHwnd(), dlgproc, 0);
     if (!g_hwnd) {
         Log::warn("ReaClaw: failed to (re)create control panel window");
         return false;
@@ -521,13 +551,15 @@ static bool create_window() {
 
 void show_toggle() {
     // Recreate the window if REAPER destroyed it (e.g. during DockWindowRemove).
-    if (!create_window()) return;
+    if (!create_window())
+        return;
 
     bool docked = DockIsChildOfDock && DockIsChildOfDock(g_hwnd, nullptr) >= 0;
     if (docked) {
         // Docked: inactive tabs are hidden by the docker — always activate.
         ShowWindow(g_hwnd, SW_SHOW);
-        if (DockWindowActivate) DockWindowActivate(g_hwnd);
+        if (DockWindowActivate)
+            DockWindowActivate(g_hwnd);
     } else if (IsWindowVisible(g_hwnd)) {
         // Floating and visible: hide it.
         ShowWindow(g_hwnd, SW_HIDE);
@@ -541,12 +573,13 @@ void show_toggle() {
 
 void destroy() {
     if (g_cmd_id && plugin_register) {
-        plugin_register("-hookcommand",  (void*)hookcommand);
+        plugin_register("-hookcommand", (void*)hookcommand);
         plugin_register("-toggleaction", (void*)toggleaction);
         plugin_register("-custom_action", &g_action);
     }
     if (g_hwnd) {
-        if (DockWindowRemove) DockWindowRemove(g_hwnd);
+        if (DockWindowRemove)
+            DockWindowRemove(g_hwnd);
         DestroyWindow(g_hwnd);
         g_hwnd = nullptr;
     }

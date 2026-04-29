@@ -71,8 +71,10 @@ __attribute__((visibility("default")))
     // Step 2 — version check
     {
         char buf[64];
-        wsprintfA(buf, "2: caller_version=0x%X expected=0x%X\n",
-                  rec->caller_version, REAPER_PLUGIN_VERSION);
+        wsprintfA(buf,
+                  "2: caller_version=0x%X expected=0x%X\n",
+                  rec->caller_version,
+                  REAPER_PLUGIN_VERSION);
         diag_write(buf);
     }
 #endif
@@ -93,7 +95,8 @@ __attribute__((visibility("default")))
     // Step 3 — LoadAPI result + critical pointer check
     {
         char buf[128];
-        wsprintfA(buf, "3: LoadAPI unresolved=%d ShowConsoleMsg=%s GetResourcePath=%s\n",
+        wsprintfA(buf,
+                  "3: LoadAPI unresolved=%d ShowConsoleMsg=%s GetResourcePath=%s\n",
                   unresolved,
                   ShowConsoleMsg ? "ok" : "NULL",
                   GetResourcePath ? "ok" : "NULL");
