@@ -68,8 +68,8 @@ add_library(reaper_reaclaw SHARED
     $<$<BOOL:${WIN32}>:src/panel/panel.rc>
 )
 
-target_include_directories(reaper_reaclaw PRIVATE
-    src/
+target_include_directories(reaper_reaclaw PRIVATE src/)
+target_include_directories(reaper_reaclaw SYSTEM PRIVATE
     vendor/
     vendor/reaper-sdk/
     vendor/WDL
