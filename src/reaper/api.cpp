@@ -9,7 +9,7 @@
 #include "app.h"
 #include "config/config.h"
 #include "db/db.h"
-#include "panel/panel.h"
+#include "panel/menu.h"
 #include "reaper/catalog.h"
 #include "reaper/executor.h"
 #include "server/server.h"
@@ -122,8 +122,8 @@ bool init(reaper_plugin_info_t* rec, void* hInstance) {
 
     Log::info("ReaClaw ready: https://" + g_config.host + ":" + std::to_string(g_config.port));
 
-    // Register dockable control panel (non-fatal if unavailable)
-    Panel::init(rec, hInstance);
+    // Register the Extensions > ReaClaw menu (non-fatal if unavailable)
+    Menu::init(rec, hInstance);
 
     return true;
 }
@@ -131,7 +131,7 @@ bool init(reaper_plugin_info_t* rec, void* hInstance) {
 void shutdown() {
     Log::info("ReaClaw shutting down...");
 
-    Panel::destroy();
+    Menu::destroy();
 
     // Unregister timer
     if (plugin_register) {

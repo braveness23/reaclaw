@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(reaper_reaclaw VERSION 1.1.0 LANGUAGES C CXX)
+project(reaper_reaclaw VERSION 1.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -63,9 +63,8 @@ add_library(reaper_reaclaw SHARED
     src/config/config.cpp
     src/util/tls.cpp
     src/util/logging.cpp
-    src/panel/panel.cpp
+    src/panel/menu.cpp
     src/panel/swell_stub.cpp
-    $<$<BOOL:${WIN32}>:src/panel/panel.rc>
 )
 
 target_include_directories(reaper_reaclaw PRIVATE src/)

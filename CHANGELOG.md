@@ -11,6 +11,31 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.2.0] - 2026-06-18
+
+### Added
+- **Extensions menu** — ReaClaw is now controlled from a native `Extensions › ReaClaw`
+  submenu (built via `hookcustommenu` + `AddExtensionsMainMenu()`):
+  - **Start/stop server** — toggles the HTTPS server (checked while running)
+  - **Status…** — message box with address, auth mode, uptime, and version
+  - **Open config file** — opens `config.json` in the OS default editor
+  - **View log** — opens the log file (or notes logging goes to the REAPER console)
+  - **Copy API key** — copies `auth.key` to the clipboard
+- Each item is also a registered action (`REACLAW_SERVER_TOGGLE`, `REACLAW_STATUS`,
+  `REACLAW_OPEN_CONFIG`, `REACLAW_VIEW_LOG`, `REACLAW_COPY_API_KEY`) — visible in the
+  Actions list and bindable to keys/toolbar buttons.
+
+### Removed
+- **Dockable control panel** (`src/panel/panel.cpp`, `panel.h`, `panel.rc`, `resource.h`)
+  and its action `REACLAW_PANEL_TOGGLE`, superseded by the Extensions menu. The SWELL
+  function-pointer table (`swell_stub.cpp`) is retained.
+
+### Notes
+- Menu actions dispatch through `hookcommand2` (the correct hook for `custom_action`s),
+  not the older main-section-only `hookcommand`.
+
+---
+
 ## [1.1.0] - 2026-04-11
 
 ### Added
