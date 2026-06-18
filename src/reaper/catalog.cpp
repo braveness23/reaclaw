@@ -1,6 +1,7 @@
 #include "reaper/catalog.h"
 
 #include "db/db.h"
+#include "reaper/native_actions.gen.h"
 #include "util/logging.h"
 
 // REAPER SDK — extern declarations of all API function pointers
@@ -16,7 +17,7 @@ namespace {
 // Bump whenever build() changes how the catalog is populated, so existing
 // installs (whose catalog was built by an older version) rebuild on next load
 // even when the REAPER version is unchanged.
-constexpr int k_catalog_version = 2;
+constexpr int k_catalog_version = 3;
 
 // Highest native main-section command ID to probe. REAPER's built-in action
 // IDs fit within a 16-bit range; scanning to this bound captures them all.
@@ -63,10 +64,21 @@ void build(DB& db, const std::string& reaper_version) {
     db.execute("DELETE FROM actions");
     db.execute("DELETE FROM actions_fts");
 
-    // Primary pass: resolve every native main-section command ID to its name via
-    // kbd_getTextFromCmd. kbd_enumerateActions alone only returns actions that
-    // already have a key binding (~4 on a fresh install), so it cannot back a
-    // name-searchable catalog. Native action IDs fit within a 16-bit range.
+    // Bundled-native pass: REAPER's built-in actions are not enumerable via the
+    // SDK (kbd_getTextFromCmd / kbd_enumerateActions return nothing for them), so
+    // seed the catalog from a static ID->name table. The live passes below then
+    // overlay whatever extensions/scripts are actually installed.
+    for (const auto& na : k_native_actions) {
+        db.query(
+                "INSERT OR REPLACE INTO actions(id, name, category, section) "
+                "VALUES(?1, ?2, ?3, 'main')",
+                {std::to_string(na.id), std::string(na.name), extract_category(na.name)});
+    }
+
+    // Live pass: resolve currently-registered command IDs (extensions, ReaPack,
+    // ReaScripts) to their names via kbd_getTextFromCmd. This reflects whatever
+    // is actually installed; it does NOT cover native built-ins (handled above).
+    // Probe the full command-ID range; IDs fit within 16 bits.
     if (kbd_getTextFromCmd) {
         for (int cmd = 1; cmd <= k_max_native_cmd_id; cmd++) {
             const char* name = kbd_getTextFromCmd(cmd, section);
