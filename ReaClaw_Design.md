@@ -68,7 +68,7 @@ When REAPER loads the extension (`ReaperPluginEntry` is called):
 3. Bind all needed REAPER API function pointers via `GetFunc`
 4. Register a main-thread timer callback via `plugin_register("timer", ...)`
 5. Generate a self-signed TLS cert if none exists and `tls.generate_if_missing` is true
-6. Build the action catalog index in SQLite (enumerate via `kbd_enumerateActions`)
+6. Build the action catalog index in SQLite (probe native command IDs via `kbd_getTextFromCmd`, plus `kbd_enumerateActions` for bound custom/script actions)
 7. Reconcile registered scripts — for each script in the `scripts` table, verify it is still registered with REAPER; call `AddRemoveReaScript(true, ...)` for any that are missing (handles REAPER reinstall or `reaper-kb.ini` reset)
 8. Start the `cpp-httplib` SSL server on the configured port in a background thread
 9. Log `"ReaClaw listening on https://0.0.0.0:{port}"` to the REAPER console
@@ -134,17 +134,30 @@ extern "C" REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
 ```cpp
 KbdSectionInfo *section = SectionFromUniqueID(0); // Main section
 
-int idx = 0;
-const char *name = nullptr;
-int cmd_id = 0;
+// Primary pass: resolve every native command ID to its name. kbd_enumerateActions
+// only returns actions that already have a key binding (a handful on a fresh
+// install), so it cannot back a name-searchable catalog; kbd_getTextFromCmd
+// resolves a name for any command ID. Native action IDs fit in a 16-bit range.
+for (int cmd = 1; cmd <= 0xFFFF; cmd++) {
+    const char *name = kbd_getTextFromCmd(cmd, section);
+    if (name && name[0])
+        ; // Store {cmd, name} in SQLite actions table
+}
 
-while ((cmd_id = kbd_enumerateActions(section, idx, &name)) != 0) {
-    // Store {cmd_id, name} in SQLite actions table
+// Secondary pass: bound custom/named actions (ReaScripts, extensions) whose
+// command IDs fall outside the native range.
+int idx = 0;
+const char *en = nullptr;
+int cmd_id = 0;
+while ((cmd_id = kbd_enumerateActions(section, idx, &en)) != 0) {
+    // Store {cmd_id, en} in SQLite actions table
     idx++;
 }
 ```
 
-Called once at startup. The catalog is rebuilt if the stored REAPER version differs from `GetAppVersion()`.
+Called once at startup. The catalog is rebuilt if the stored REAPER version differs from `GetAppVersion()`, or if the catalog builder version (`catalog_version` in `meta`) was bumped.
+
+**Native actions:** the two passes above only surface actions registered through REAPER's plugin/gaccel API (SWS, ReaPack, ReaScripts, etc.). REAPER's *native built-in* actions (e.g. `Item: Split items at edit cursor`) are not returned by `kbd_getTextFromCmd` or `kbd_enumerateActions` — there is no SDK call that enumerates them by name. ReaClaw therefore seeds the catalog from a **bundled static ID→name table** (`tools/native_actions.tsv`, compiled in via `src/reaper/native_actions.gen.h`) before the live passes run; the live passes then overlay whatever extensions are actually installed. Native command IDs are stable across REAPER versions/platforms, so one table serves all builds. See `tools/README.md` to regenerate.
 
 **V1 scope:** Only the Main section (ID 0) is indexed. REAPER has additional sections (MIDI Editor, Media Explorer, etc.) containing section-specific actions. These are not indexed or executable in V1; this is a known limitation. Future versions can add a `section` parameter to catalog and execute endpoints.
 

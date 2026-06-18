@@ -70,8 +70,10 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 
 ### Action Catalog Indexer (`src/reaper/catalog.cpp`)
 
-- [x] On startup, check if `actions` table is empty or REAPER version changed
-  - [x] If rebuild needed: truncate `actions`, call `SectionFromUniqueID(0)` + `kbd_enumerateActions` loop
+- [x] On startup, check if `actions` table is empty, REAPER version changed, or catalog builder version changed
+  - [x] If rebuild needed: truncate `actions`, then:
+    - [x] Seed native built-in actions from the bundled static table (`src/reaper/native_actions.gen.h`) — REAPER does not expose these via any SDK enumeration call
+    - [x] Live-overlay installed extension/script actions: probe command-ID range (`1..0xFFFF`) via `kbd_getTextFromCmd`, plus a `kbd_enumerateActions` pass
   - [x] Derive category from name prefix (e.g. `"Track: "` → `"Track"`)
   - [x] Bulk-insert into `actions`; rebuild `actions_fts`
   - [x] Store current `GetAppVersion()` result for next-run comparison
@@ -257,30 +259,39 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 
 ---
 
-## Phase 3: Dockable Control Panel
+## Phase 3: Extensions Menu (v1.2.0)
 
-**Goal:** Native REAPER docker panel for controlling ReaClaw without editing config.json.
+**Goal:** Control ReaClaw from a native `Extensions › ReaClaw` menu without editing config.json.
 
-- [x] `src/panel/resource.h` — control IDs
-- [x] `src/panel/swell_stub.cpp` — SWELL function pointer table (SWELL_PROVIDED_BY_APP; no GTK compile needed)
-- [x] `src/panel/panel.h` — Panel::init / show_toggle / destroy
-- [x] `src/panel/panel.cpp` — dialog resource + dialog proc + dock integration
-- [x] `src/reaper/api.cpp` — call Panel::init after server start; Panel::destroy on shutdown
-- [x] `src/reaper/api.h` — added hInstance parameter to init()
-- [x] `src/main.cpp` — pass hInstance to ReaClaw::init()
-- [x] `CMakeLists.txt` — add panel sources, vendor/WDL include, SWELL_PROVIDED_BY_APP define
+> **Superseded the dockable control panel (v1.1.0).** The original Phase 3 was a
+> dockable SWELL/Win32 dialog (`src/panel/panel.cpp`, `panel.rc`, `resource.h`).
+> It was replaced in v1.2.0 by a lightweight menu under REAPER's main "Extensions"
+> menu — simpler, less GUI surface, and no docking edge cases. The panel sources
+> were removed; `swell_stub.cpp` (SWELL function table) is retained.
 
-### Panel controls
-- Enable/Disable ReaClaw server checkbox (starts/stops the HTTPS server; extension stays loaded)
-- Host text field
-- Port text field
-- Bypass TLS cert validation checkbox
-- Log file viewer (read-only multiline edit + Refresh button)
-- Apply button (writes config.json, restarts server if running)
+- [x] `src/panel/menu.cpp` — registers actions + builds the submenu via `hookcustommenu`
+- [x] `src/panel/menu.h` — Menu::init / destroy
+- [x] `src/panel/swell_stub.cpp` — SWELL function pointer table (retained from v1.1.0)
+- [x] `src/reaper/api.cpp` — call Menu::init after server start; Menu::destroy on shutdown
+- [x] `CMakeLists.txt` — build `menu.cpp` in place of the panel sources/resource
+
+### Menu items (Extensions › ReaClaw)
+- **Start/stop server** — toggles the HTTPS server (checked while running); extension stays loaded
+- **Status…** — message box: address, auth mode, uptime, version
+- **Open config file** — opens `config.json` in the OS default editor
+- **View log** — opens the log file (or notes that logging goes to the REAPER console)
+- **Copy API key** — copies `auth.key` to the clipboard
+
+### Implementation notes
+- Each item is a `custom_action` (also shows in the Actions list / bindable to keys/toolbar).
+- Menu structure added on `hookcustommenu` flag 0; the Start/stop check mark set on flag 1.
+- Actions dispatch through **`hookcommand2`** (the correct hook for `custom_action`s) —
+  not the older main-section-only `hookcommand`.
+- `AddExtensionsMainMenu()` ensures the top-level "Extensions" menu exists.
 
 ### To use
-Open REAPER → Actions → search "ReaClaw: Control Panel" → run or assign to toolbar.
-The panel can be docked anywhere in REAPER's docker system.
+The menu appears as **Extensions › ReaClaw**. Items are also in the Actions list
+(search "ReaClaw:") and can be assigned to keys or toolbar buttons.
 
 ---
 

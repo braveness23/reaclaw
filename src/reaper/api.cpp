@@ -9,7 +9,7 @@
 #include "app.h"
 #include "config/config.h"
 #include "db/db.h"
-#include "panel/panel.h"
+#include "panel/menu.h"
 #include "reaper/catalog.h"
 #include "reaper/executor.h"
 #include "server/server.h"
@@ -28,6 +28,7 @@ static constexpr const char* k_required_fns[] = {
         "GetAppVersion",
         "ShowConsoleMsg",
         "kbd_enumerateActions",
+        "kbd_getTextFromCmd",
         "SectionFromUniqueID",
         "CountTracks",
         "GetTrack",
@@ -90,7 +91,7 @@ bool init(reaper_plugin_info_t* rec, void* hInstance) {
     }
     Log::info("Database: " + g_config.db_path);
 
-    // Build action catalog (called from main thread — safe to use kbd_enumerateActions)
+    // Build action catalog (called from main thread — safe to use kbd_getTextFromCmd)
     Catalog::build(g_db, GetAppVersion() ? GetAppVersion() : "unknown");
 
     // Reconcile registered scripts: re-register any scripts that are in the
@@ -122,8 +123,8 @@ bool init(reaper_plugin_info_t* rec, void* hInstance) {
 
     Log::info("ReaClaw ready: https://" + g_config.host + ":" + std::to_string(g_config.port));
 
-    // Register dockable control panel (non-fatal if unavailable)
-    Panel::init(rec, hInstance);
+    // Register the Extensions > ReaClaw menu (non-fatal if unavailable)
+    Menu::init(rec, hInstance);
 
     return true;
 }
@@ -131,7 +132,7 @@ bool init(reaper_plugin_info_t* rec, void* hInstance) {
 void shutdown() {
     Log::info("ReaClaw shutting down...");
 
-    Panel::destroy();
+    Menu::destroy();
 
     // Unregister timer
     if (plugin_register) {

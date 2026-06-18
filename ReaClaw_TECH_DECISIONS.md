@@ -12,7 +12,9 @@ Key architectural decisions and rationale. Read this before modifying the design
 - A native extension runs inside REAPER's process and has direct access to the full REAPER C++ SDK via `GetFunc()` — every function REAPER exposes is available.
 - No bridge scripts. No scraping REAPER's web interface. No limitations on what can be queried or controlled.
 - Script registration via `AddRemoveReaScript()` is a direct API call.
-- Full action enumeration via `kbd_enumerateActions()` — all 65K+ commands.
+- Action enumeration is two-sourced:
+  - **Native built-in actions** come from a **bundled static ID→name table** (`tools/native_actions.tsv` → generated `src/reaper/native_actions.gen.h`, ~4300 entries). REAPER does **not** expose its native actions through any SDK enumeration call — `kbd_getTextFromCmd`/`kbd_enumerateActions` return nothing for them (verified: SWS off → live enumeration yields only ~10 extension actions, zero native). Native command IDs are stable across REAPER versions/platforms, so one bundled table serves all builds.
+  - **Extension/script actions** (SWS, ReaPack, ReaScripts, …) are live-enumerated at startup via `kbd_getTextFromCmd()` + `kbd_enumerateActions()`, so the catalog reflects whatever is actually installed.
 - REAPER loads the extension automatically at startup from the `UserPlugins` directory.
 
 **Alternatives Rejected:**
