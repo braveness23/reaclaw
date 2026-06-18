@@ -70,8 +70,8 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 
 ### Action Catalog Indexer (`src/reaper/catalog.cpp`)
 
-- [x] On startup, check if `actions` table is empty or REAPER version changed
-  - [x] If rebuild needed: truncate `actions`, call `SectionFromUniqueID(0)` + `kbd_enumerateActions` loop
+- [x] On startup, check if `actions` table is empty, REAPER version changed, or catalog builder version changed
+  - [x] If rebuild needed: truncate `actions`, then `SectionFromUniqueID(0)` + probe native command-ID range (`1..0xFFFF`) via `kbd_getTextFromCmd`, plus a `kbd_enumerateActions` pass for bound custom/script actions
   - [x] Derive category from name prefix (e.g. `"Track: "` → `"Track"`)
   - [x] Bulk-insert into `actions`; rebuild `actions_fts`
   - [x] Store current `GetAppVersion()` result for next-run comparison

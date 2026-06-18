@@ -28,6 +28,7 @@ static constexpr const char* k_required_fns[] = {
         "GetAppVersion",
         "ShowConsoleMsg",
         "kbd_enumerateActions",
+        "kbd_getTextFromCmd",
         "SectionFromUniqueID",
         "CountTracks",
         "GetTrack",
@@ -90,7 +91,7 @@ bool init(reaper_plugin_info_t* rec, void* hInstance) {
     }
     Log::info("Database: " + g_config.db_path);
 
-    // Build action catalog (called from main thread — safe to use kbd_enumerateActions)
+    // Build action catalog (called from main thread — safe to use kbd_getTextFromCmd)
     Catalog::build(g_db, GetAppVersion() ? GetAppVersion() : "unknown");
 
     // Reconcile registered scripts: re-register any scripts that are in the
