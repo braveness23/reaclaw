@@ -29,8 +29,13 @@
 // SWELL_dllMain is defined in swell_stub.cpp.
 extern "C" int SWELL_dllMain(HINSTANCE hInst, DWORD callMode, LPVOID getFunc);
 #else
-#include <shellapi.h>
+// clang-format off
+// windows.h must precede shellapi.h — it defines the base Win32 types
+// (UINT, DWORD, POINT, EXTERN_C, ...) that shellapi.h relies on. Pinned so
+// clang-format's alphabetical include sort doesn't reorder them.
 #include <windows.h>
+#include <shellapi.h>
+// clang-format on
 #endif
 
 #include "app.h"
