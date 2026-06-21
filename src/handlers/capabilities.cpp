@@ -20,14 +20,22 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
 
     nlohmann::json direct = {
             {"tracks",
-             {{"create", "POST /state/tracks {create:[{name,color,folder_depth,volume_db,pan,"
-                         "muted,soloed,armed}]}"},
-              {"update", "POST /state/tracks/{index}  (same fields) or batch via "
-                         "POST /state/tracks {update:[{index,...}]}"},
+             {{"create",
+               "POST /state/tracks {create:[{name,color,folder_depth,volume_db,pan,"
+               "muted,soloed,armed}]}"},
+              {"update",
+               "POST /state/tracks/{index}  (same fields) or batch via "
+               "POST /state/tracks {update:[{index,...}]}"},
               {"delete", "DELETE /state/tracks/{index}"},
               {"writable_fields",
-               nlohmann::json::array({"name", "color", "folder_depth", "volume_db", "pan", "muted",
-                                      "soloed", "armed"})}}},
+               nlohmann::json::array({"name",
+                                      "color",
+                                      "folder_depth",
+                                      "volume_db",
+                                      "pan",
+                                      "muted",
+                                      "soloed",
+                                      "armed"})}}},
             {"fx",
              {{"add", "POST /state/tracks/{index}/fx {name,enabled,params}"},
               {"read", "GET /state/tracks/{index}/fx/{slot}"},
@@ -40,8 +48,11 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"read", "sends[] in GET /state/tracks"}}},
             {"selection", {{"set", "POST /state/selection {tracks:[i,...]|\"all\"|\"none\"}"}}},
             {"read",
-             nlohmann::json::array({"GET /state", "GET /state/tracks", "GET /state/items",
-                                    "GET /state/selection", "GET /state/automation"})},
+             nlohmann::json::array({"GET /state",
+                                    "GET /state/tracks",
+                                    "GET /state/items",
+                                    "GET /state/selection",
+                                    "GET /state/automation"})},
             {"actions",
              {{"run", "POST /execute/action {id}"},
               {"sequence", "POST /execute/sequence {steps:[...]}"},
@@ -53,13 +64,18 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
     // Things that have no direct verb yet — reach them via an action ID or a
     // generated Lua script. Kept honest so the agent doesn't probe blindly.
     nlohmann::json via_script_or_action = nlohmann::json::array(
-            {"media items / takes (create, move, trim, fades)", "MIDI notes/events",
-             "markers & regions", "tempo / time-signature map edits", "envelope point writes",
-             "rendering / freezing", "project open / save"});
+            {"media items / takes (create, move, trim, fades)",
+             "MIDI notes/events",
+             "markers & regions",
+             "tempo / time-signature map edits",
+             "envelope point writes",
+             "rendering / freezing",
+             "project open / save"});
 
     json_ok(res,
-            {{"coverage_model", "tiered: structured verbs for common objects, "
-                                "action-runner + Lua escape hatch for the long tail"},
+            {{"coverage_model",
+              "tiered: structured verbs for common objects, "
+              "action-runner + Lua escape hatch for the long tail"},
              {"version", REACLAW_VERSION},
              {"direct", direct},
              {"via_script_or_action", via_script_or_action}});

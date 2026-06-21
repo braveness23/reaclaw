@@ -109,6 +109,17 @@ FixNamespaceComments: true
 NamespaceIndentation: None
 
 # ---------------------------------------------------------------------------
+# Macros — the SWELL dialog-resource DSL is a sequence of brace-less macro
+# "statements"; without these hints clang-format mis-tracks scope and
+# over-indents everything after the resource block (panel/dialogs.cpp).
+# ---------------------------------------------------------------------------
+StatementMacros:
+  - SWELL_DEFINE_DIALOG_RESOURCE_BEGIN
+  - SWELL_DEFINE_DIALOG_RESOURCE_END
+MacroBlockBegin: "^BEGIN$"
+MacroBlockEnd: "^END$"
+
+# ---------------------------------------------------------------------------
 # Comments
 # ---------------------------------------------------------------------------
 ReflowComments: true

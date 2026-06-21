@@ -228,8 +228,9 @@ void handle_execute_sequence(const httplib::Request& req, httplib::Response& res
             return {{"ok", true}, {"cmd_id", cmd_id}};
         });
 
-        std::string step_nm =
-                step.contains("id") ? display_name(step["id"], step_result.value("cmd_id", 0)) : "";
+        std::string step_nm = step.contains("id")
+                                      ? display_name(step["id"], step_result.value("cmd_id", 0))
+                                      : "";
 
         nlohmann::json entry = {{"label", label}, {"action_id", step.value("id", 0)}};
         if (!step_nm.empty())

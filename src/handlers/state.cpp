@@ -527,10 +527,7 @@ void handle_state_automation(const httplib::Request& req, httplib::Response& res
 namespace {
 
 // Parse a numeric path param; returns false (and writes a 400) if not an int.
-bool path_int(const httplib::Request& req,
-              httplib::Response& res,
-              const char* key,
-              int& out) {
+bool path_int(const httplib::Request& req, httplib::Response& res, const char* key, int& out) {
     try {
         out = std::stoi(req.path_params.at(key));
         return true;

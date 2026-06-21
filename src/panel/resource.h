@@ -10,13 +10,13 @@
 
 // ---- Status dialog ---------------------------------------------------------
 #define IDD_REACLAW_STATUS 300
-#define IDC_ST_LED 301      // colored square: green=running, gray=stopped
-#define IDC_ST_STATE 302    // "Running" / "Stopped"
-#define IDC_ST_ADDR 303     // scheme://host:port
-#define IDC_ST_AUTH 304     // auth mode
-#define IDC_ST_UPTIME 305   // h m s
-#define IDC_ST_VERSION 306  // build version
-#define IDC_ST_COPYADDR 307 // copy address button
+#define IDC_ST_LED 301       // colored square: green=running, gray=stopped
+#define IDC_ST_STATE 302     // "Running" / "Stopped"
+#define IDC_ST_ADDR 303      // scheme://host:port
+#define IDC_ST_AUTH 304      // auth mode
+#define IDC_ST_UPTIME 305    // h m s
+#define IDC_ST_VERSION 306   // build version
+#define IDC_ST_COPYADDR 307  // copy address button
 
 // ---- API key dialog --------------------------------------------------------
 #define IDD_REACLAW_APIKEY 320

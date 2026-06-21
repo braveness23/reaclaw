@@ -317,8 +317,7 @@ void show_modeless(HWND& slot, int dlg_id, DLGPROC proc) {
         SetForegroundWindow(slot);
         return;
     }
-    slot = CreateDialogParam(
-            (HINSTANCE)g_hInstance, MAKEINTRESOURCE(dlg_id), main_hwnd(), proc, 0);
+    slot = CreateDialogParam((HINSTANCE)g_hInstance, MAKEINTRESOURCE(dlg_id), main_hwnd(), proc, 0);
     if (!slot) {
         Log::warn("ReaClaw: failed to create dialog " + std::to_string(dlg_id));
         return;
@@ -328,7 +327,12 @@ void show_modeless(HWND& slot, int dlg_id, DLGPROC proc) {
     GetWindowRect(main_hwnd(), &mr);
     GetWindowRect(slot, &dr);
     int dw = dr.right - dr.left, dh = dr.bottom - dr.top;
-    SetWindowPos(slot, nullptr, mr.left + ((mr.right - mr.left) - dw) / 2, mr.top + 80, dw, dh,
+    SetWindowPos(slot,
+                 nullptr,
+                 mr.left + ((mr.right - mr.left) - dw) / 2,
+                 mr.top + 80,
+                 dw,
+                 dh,
                  SWP_NOZORDER | SWP_NOACTIVATE);
     ShowWindow(slot, SW_SHOW);
     SetForegroundWindow(slot);
