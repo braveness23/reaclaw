@@ -9,6 +9,45 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Action names in logs & history** — executing an action now logs and returns the
+  resolved human-readable name, not just the numeric id. `POST /execute/action` (and
+  each sequence step) returns `action_name`; `GET /history` rows carry `target_name`
+  (new `execution_history.target_name` column, migrated on open). Names resolve from
+  the bundled catalog, so they work for native actions even without SWS. (#8)
+- **Readable track structure** — `GET /state/tracks` now includes `folder_depth`
+  (`1`=folder parent, `0`=normal, negative=closes folders) and `color` (`"#RRGGBB"`
+  or `null`), so agents can verify folders/colors without screenshotting the GUI.
+  (Perception roadmap Q2 / #9)
+- **Polished menu dialogs** — the Extensions › ReaClaw *Status*, *View log*, and
+  *Copy API key* surfaces are now proper SWELL/Win32 dialogs (live status with LED +
+  copy-address, scrollable log viewer with refresh, API-key field with copy +
+  "Copied!" confirmation) instead of plain `MessageBox` popups. New
+  `src/panel/dialogs.{h,cpp}`, `src/panel/resource.h`, `src/panel/dialogs.rc`. (#2)
+
+- **High-level structured commands (tiered coverage)** — the "easy commands" that
+  collapse the 146-call friction-log session into a handful of requests:
+  - Tracks: `POST /state/tracks` (create + batch update), `DELETE /state/tracks/{i}`,
+    and `POST /state/tracks/{i}` now also writes `name`, `color`, and `folder_depth`
+    (on top of mute/solo/arm/volume/pan).
+  - FX: `POST /state/tracks/{i}/fx` (add by name), `GET`/`POST`/`DELETE`
+    `/state/tracks/{i}/fx/{slot}` — enable/bypass and parameter get/set (normalized
+    0..1, by param index or name).
+  - Routing: `POST`/`DELETE /state/tracks/{i}/sends[/{send}]`; track reads now
+    include a `sends[]` array (`dest_track`, `volume_db`, `pan`).
+  - Selection: `POST /state/selection` (`[i,...]`, `"all"`, or `"none"`).
+  - `GET /capabilities` — manifest of what's supported directly vs. via an action
+    or Lua script.
+
+### Changed
+- `GET /state/tracks` track objects now include a `sends` array.
+
+### Docs
+- Added `ReaClaw_IDEAS.md` — perception/learning/discovery idea queue and the
+  direction decisions taken for the Phase 4 build-out.
+- `ReaClaw_TECH_DECISIONS.md` §16 — API coverage is **tiered** (structured verbs +
+  action-runner + Lua escape hatch); resolves the open question in #7.
+
 ---
 
 ## [1.2.0] - 2026-06-18

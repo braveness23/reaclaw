@@ -277,10 +277,15 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 
 ### Menu items (Extensions › ReaClaw)
 - **Start/stop server** — toggles the HTTPS server (checked while running); extension stays loaded
-- **Status…** — message box: address, auth mode, uptime, version
+- **Status…** — live SWELL dialog: status LED, address (+Copy), auth mode, uptime, version
 - **Open config file** — opens `config.json` in the OS default editor
-- **View log** — opens the log file (or notes that logging goes to the REAPER console)
-- **Copy API key** — copies `auth.key` to the clipboard
+- **View log** — scrollable SWELL log viewer with Refresh
+- **Copy API key** — SWELL dialog: key field + Copy button with "Copied!" confirmation
+
+> The Status / View log / Copy API key surfaces use SWELL dialog resources
+> (`src/panel/dialogs.{h,cpp}`, `resource.h`, `dialogs.rc`), replacing the former
+> plain `MessageBox` popups (Phase 4 Stage 1 / #2). Dialogs are modeless and
+> appear top-centered on the main window. Verified live on REAPER 7.74 (aarch64).
 
 ### Implementation notes
 - Each item is a `custom_action` (also shows in the Actions list / bindable to keys/toolbar).
@@ -295,9 +300,57 @@ The menu appears as **Extensions › ReaClaw**. Items are also in the Actions li
 
 ---
 
+## Phase 4: Perception, Ergonomics & Learning (v1.3.0+)
+
+**Goal:** the two halves of the "magic wand + hears itself" thesis — easy
+high-level commands (control) and the perception/learning loop. Direction set
+2026-06-20 (see `ReaClaw_IDEAS.md` → *Decisions taken*): tiered coverage,
+audio analysis basic-built-in/advanced-optional, phased with check-ins. Built in
+stages, smallest/lowest-risk first.
+
+### Stage 1 — Quick wins
+- [x] **#8** Log action names (id + name) in execution log + `GET /history`
+  (`target_name` column) + `action_name` in `/execute/action` and sequence step
+  responses. Helper `Catalog::action_name()`. Verified live (native + SWS).
+- [x] **Q2/#9 (partial)** Readable structure: `folder_depth` + `color` added to
+  `GET /state/tracks`. Verified live (folder parent/child/close + custom colors).
+- [x] **#2** Replace plain `MessageBox` menu dialogs with polished SWELL dialogs
+  (Status / API key / Log). New `panel/dialogs.{h,cpp}`, `resource.h`, `dialogs.rc`.
+  Verified live (renders, copy + "Copied!" confirmation, scrollable log).
+
+### Stage 2 — Easy commands (tiered coverage; #7/#9/#10) — **complete**
+- [x] Track create/delete; writable name, color, folder_depth (superset of the
+      former 5-field `POST /state/tracks/{index}`). `POST /state/tracks` (create),
+      `DELETE /state/tracks/{index}`.
+- [x] `add_fx` by name + param get/set; routing/sends. `POST/GET/DELETE`
+      `/state/tracks/{i}/fx[/{slot}]` (params normalized, by index or name);
+      `POST/DELETE /state/tracks/{i}/sends[/{send}]`; `sends[]` added to track reads.
+- [x] Batch track writes (`POST /state/tracks {create,update}`); selection write
+      (`POST /state/selection {tracks:[...]|"all"|"none"}`).
+- [x] `GET /capabilities` manifest; `ReaClaw_TECH_DECISIONS.md` §16 coverage
+      philosophy (tiered). All verified live on REAPER 7.74 (aarch64); 38/38 tests.
+
+### Stage 3 — Agent friendliness (#10)
+- [ ] ReaClaw Skill (action cheat-sheet + recipes + "don't" list)
+- [ ] MCP wrapper (typed intent tools over the REST API)
+- [ ] Semantic catalog search; recipes surface
+
+### Stage 4 — Hear itself (Q1, Q3)
+- [ ] Audio analysis: loudness/true-peak/RMS/spectral/onsets/clip (built-in)
+- [ ] Consequence-aware hints inline on mutating responses (~10–20 rules)
+
+### Stage 5 — Pictures + advanced listening (Q4, Q5, Q7)
+- [ ] Audio visualization; targeted screenshots (on demand); key/tempo via
+      optional external tool
+
+### Stage 6 — Learns over time (Q8)
+- [ ] Mine correction logs → learned suggestions (local-first, opt-in)
+
+---
+
 ## Ongoing (All Phases)
 
-- [x] Keep unit and integration tests passing before each commit — 36/36 unit tests pass; 12/12 integration tests pass against live REAPER 7.67
+- [x] Keep unit and integration tests passing before each commit — 38/38 unit tests pass; verified live against REAPER 7.74 (aarch64)
 - [x] Update `docs/API.md` as endpoints are added or changed
 - [x] Add `CHANGELOG.md` entry for each tagged release
 - [x] Keep `vendor/` library versions pinned and documented in `CMakeLists.txt` comments

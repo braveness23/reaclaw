@@ -5,11 +5,14 @@
 //
 //   Extensions > ReaClaw >
 //     Start/stop server   (checked while the server is running)
-//     Status...           (host:port, uptime, version — message box)
+//     Status...           (live SWELL dialog: address, auth, uptime, version)
 //     Open config file
-//     View log
+//     View log            (scrollable SWELL log viewer)
 //     ----
-//     Copy API key
+//     Copy API key        (SWELL dialog with copy button + confirmation)
+//
+// The Status / View log / Copy API key items open polished SWELL dialogs
+// (see panel/dialogs.cpp) instead of plain MessageBox popups.
 //
 // Each item is a registered REAPER action, so it also appears in the Actions
 // list and can be bound to a key or toolbar button. The submenu is built in the
@@ -40,6 +43,7 @@ extern "C" int SWELL_dllMain(HINSTANCE hInst, DWORD callMode, LPVOID getFunc);
 
 #include "app.h"
 #include "config/config.h"
+#include "panel/dialogs.h"
 #include "panel/menu.h"
 #include "server/server.h"
 #include "util/logging.h"
@@ -97,51 +101,6 @@ static void open_with_default_app(const std::string& path) {
 #endif
 }
 
-// Copy text to the system clipboard (Win32 + SWELL share this API surface).
-static void copy_to_clipboard(HWND owner, const std::string& text) {
-    if (!OpenClipboard(owner))
-        return;
-    EmptyClipboard();
-    HANDLE h = GlobalAlloc(GMEM_MOVEABLE, (int)text.size() + 1);
-    if (h) {
-        void* p = GlobalLock(h);
-        if (p) {
-            std::memcpy(p, text.c_str(), text.size() + 1);
-            GlobalUnlock(h);
-            SetClipboardData(CF_TEXT, h);
-        }
-    }
-    CloseClipboard();
-}
-
-static std::string format_uptime() {
-    auto secs = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() -
-                                                                 g_start_time)
-                        .count();
-    long h = (long)(secs / 3600);
-    long m = (long)((secs % 3600) / 60);
-    long s = (long)(secs % 60);
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%ldh %ldm %lds", h, m, s);
-    return buf;
-}
-
-static void show_status() {
-    bool running = Server::is_running();
-    const char* scheme = g_config.tls_enabled ? "https" : "http";
-    std::string msg;
-    msg += "Server:   ";
-    msg += running ? "running" : "stopped";
-    msg += "\n";
-    msg += "Address:  ";
-    msg += scheme;
-    msg += "://" + g_config.host + ":" + std::to_string(g_config.port) + "\n";
-    msg += "Auth:     " + g_config.auth_type + "\n";
-    msg += "Uptime:   " + format_uptime() + "\n";
-    msg += "Version:  " REACLAW_VERSION;
-    MessageBox(GetMainHwnd ? GetMainHwnd() : nullptr, msg.c_str(), "ReaClaw Status", MB_OK);
-}
-
 static void toggle_server() {
     if (Server::is_running()) {
         Server::stop();
@@ -170,7 +129,7 @@ static bool hookcommand2(KbdSectionInfo* /*sec*/,
         return true;
     }
     if (cmd == g_cmd_status) {
-        show_status();
+        Dialogs::show_status();
         return true;
     }
     if (cmd == g_cmd_config) {
@@ -178,21 +137,11 @@ static bool hookcommand2(KbdSectionInfo* /*sec*/,
         return true;
     }
     if (cmd == g_cmd_log) {
-        if (g_config.log_file.empty())
-            MessageBox(GetMainHwnd ? GetMainHwnd() : nullptr,
-                       "No log file is configured.\nReaClaw is logging to the REAPER console "
-                       "(View > Show console output).\n\nSet logging.file in config.json to write "
-                       "to a file.",
-                       "ReaClaw Log",
-                       MB_OK);
-        else
-            open_with_default_app(g_config.log_file);
+        Dialogs::show_log();
         return true;
     }
     if (cmd == g_cmd_copykey) {
-        copy_to_clipboard(GetMainHwnd ? GetMainHwnd() : nullptr, g_config.auth_key);
-        std::string msg = "API key copied to clipboard:\n\n" + g_config.auth_key;
-        MessageBox(GetMainHwnd ? GetMainHwnd() : nullptr, msg.c_str(), "ReaClaw API Key", MB_OK);
+        Dialogs::show_api_key();
         return true;
     }
     return false;
@@ -258,6 +207,9 @@ void init(reaper_plugin_info_t* /*rec*/, void* hInstance) {
         Log::warn("ReaClaw: plugin_register null — Extensions menu unavailable");
         return;
     }
+
+    // Dialogs share this binary's module instance for resource lookup.
+    Dialogs::init(hInstance);
 
     g_cmd_toggle = reg_action(g_a_toggle, "REACLAW_SERVER_TOGGLE", "ReaClaw: Start/stop server");
     g_cmd_status = reg_action(g_a_status, "REACLAW_STATUS", "ReaClaw: Status");

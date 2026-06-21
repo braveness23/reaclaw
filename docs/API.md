@@ -111,31 +111,104 @@ Project and transport state snapshot.
 
 ### GET /state/tracks
 
-All tracks with name, mute, solo, armed, volume, pan, and FX list.
+All tracks with name, mute, solo, armed, volume, pan, folder nesting, color, and FX list.
 
 ```json
 {
   "tracks": [
     { "index": 0, "name": "Kick", "muted": false, "soloed": false,
-      "armed": true, "volume_db": 0.0, "pan": 0.0, "fx": [...] }
+      "armed": true, "volume_db": 0.0, "pan": 0.0,
+      "folder_depth": 1, "color": "#EC436F", "fx": [...] }
   ]
 }
 ```
 
+`folder_depth`: `1` = folder parent (children follow), `0` = normal track,
+negative = closes that many folder levels (last track in a folder).
+`color`: track custom color as `"#RRGGBB"`, or `null` when the track uses the
+default color. Each track also carries a `sends` array
+(`{index, dest_track, volume_db, pan}`) so routing is verifiable via the API.
+
 ### POST /state/tracks/{index}
 
-Set track properties directly (no action lookup needed). Supported fields:
-`muted` (bool), `soloed` (bool), `armed` (bool), `volume_db` (float), `pan` (float −1.0→1.0)
+Set track properties directly (no action lookup needed). Writable fields:
+`name` (string), `color` (`"#RRGGBB"` or `null` to clear), `folder_depth` (int),
+`muted` (bool), `soloed` (bool), `armed` (bool), `volume_db` (float), `pan`
+(float −1.0→1.0). Returns the updated track. 404 if index out of range.
 
 ```json
 // Request
-{ "muted": true, "volume_db": -6.0 }
-
-// Response — updated track state
-{ "index": 0, "name": "Kick", "muted": true, "volume_db": -6.0, "pan": 0.0 }
+{ "name": "Kick", "color": "#33AA55", "volume_db": -6.0 }
 ```
 
-Returns 404 if index is out of range.
+### POST /state/tracks
+
+Create and/or batch-update tracks in one call. `create` appends tracks in order;
+`update` patches existing tracks by `index`. Each spec accepts the same writable
+fields as `POST /state/tracks/{index}`.
+
+```json
+// Request
+{ "create": [ { "name": "DRUMS", "color": "#CC3333", "folder_depth": 1 },
+              { "name": "Kick", "folder_depth": -1, "volume_db": -3.0 } ],
+  "update": [ { "index": 0, "name": "Master Bus" } ] }
+
+// Response
+{ "created": [ {track}, ... ], "updated": [ {track}, ... ] }
+```
+
+### DELETE /state/tracks/{index}
+
+Remove a track. Returns `{ "deleted": <index> }`; 404 if out of range.
+
+### POST /state/tracks/{index}/fx
+
+Add an FX by name (e.g. `"ReaComp"`, `"ReaGate"`, or a full `"VST: ..."`).
+
+```json
+// Request
+{ "name": "ReaComp", "enabled": true,
+  "params": [ { "name": "Threshold", "value": 0.25 } ] }
+
+// Response
+{ "track": 2, "slot": 0, "name": "VST: ReaComp (Cockos)", "enabled": true }
+```
+
+`params` values are **normalized 0..1**, referenced by `index` or `name`.
+Returns 400 (`FX not found: ...`) if the plugin can't be resolved.
+
+### GET /state/tracks/{index}/fx/{slot}
+
+FX slot detail incl. parameter list (`index`, `name`, normalized `value`,
+`formatted`).
+
+### POST /state/tracks/{index}/fx/{slot}
+
+Set `enabled` (bool) and/or `params` (`[{index|name, value}]`). Returns the
+updated FX slot with its params.
+
+### DELETE /state/tracks/{index}/fx/{slot}
+
+Remove an FX slot.
+
+### POST /state/tracks/{index}/sends
+
+Add a send from this track to another. `{ "to_track": j, "volume_db": x, "pan": y }`
+(volume/pan optional). Returns `{ track, send_index, dest_track, volume_db, pan }`.
+
+### DELETE /state/tracks/{index}/sends/{send}
+
+Remove a send by its index.
+
+### POST /state/selection
+
+Set the track selection. `{ "tracks": [i, ...] }`, or `"all"` / `"none"`.
+Returns `{ "selected_tracks": [...] }`.
+
+### GET /capabilities
+
+Manifest of what the API supports directly (structured verbs) vs. via an action
+or a generated Lua script — reflects the tiered coverage model.
 
 ### GET /state/items
 
@@ -164,10 +237,15 @@ Execute a single action by numeric ID or registered script action ID.
 {
   "status": "success",
   "action_id": 40285,
+  "action_name": "Track: Toggle mute for selected tracks",
   "executed_at": "2026-04-07T14:24:10Z",
   "feedback": { "transport": {...}, "tracks": [...] }
 }
 ```
+
+`action_name` is the resolved human-readable name (from the bundled catalog;
+omitted only when the id is unknown). Sequence step results include `action_name`
+per step the same way.
 
 Returns 408 if the REAPER main thread doesn't respond within 5 seconds.
 
@@ -314,6 +392,7 @@ Query params: `limit` (default 50, max 500), `offset` (default 0), `agent_id` (o
       "id": 1042,
       "type": "action",
       "target_id": "40285",
+      "target_name": "Track: Toggle mute for selected tracks",
       "agent_id": "claude-sonnet-4-6",
       "status": "success",
       "executed_at": "2026-04-07T14:24:10Z"
@@ -322,4 +401,5 @@ Query params: `limit` (default 50, max 500), `offset` (default 0), `agent_id` (o
 }
 ```
 
-`type` is one of `"action"`, `"sequence"`.
+`type` is one of `"action"`, `"sequence"`. `target_name` is the resolved action
+name (omitted for rows logged before this field existed, or unknown ids).

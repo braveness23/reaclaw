@@ -101,6 +101,25 @@ TEST_F(DBTest, ExecutionHistoryInsertAndQuery) {
     EXPECT_EQ(rows[0].at("status"),    "success");
 }
 
+TEST_F(DBTest, ExecutionHistoryHasTargetNameColumn) {
+    auto cols = db.query(
+        "SELECT name FROM pragma_table_info('execution_history') WHERE name='target_name'", {});
+    EXPECT_EQ(cols.size(), 1u);
+}
+
+TEST_F(DBTest, ExecutionHistoryTargetNameRoundTrips) {
+    db.query(
+        "INSERT INTO execution_history(type, target_id, target_name, agent_id, status, error) "
+        "VALUES(?1,?2,?3,?4,?5,?6)",
+        {"action", "40702", "Track: Insert new track", "sparky", "success", ""});
+
+    auto rows = db.query(
+        "SELECT target_id, target_name FROM execution_history", {});
+    ASSERT_EQ(rows.size(), 1u);
+    EXPECT_EQ(rows[0].at("target_id"),   "40702");
+    EXPECT_EQ(rows[0].at("target_name"), "Track: Insert new track");
+}
+
 TEST_F(DBTest, ScriptsInsertAndQuery) {
     db.query(
         "INSERT INTO scripts(id, name, body, script_path, tags) "
