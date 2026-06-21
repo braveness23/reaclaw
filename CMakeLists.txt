@@ -64,7 +64,9 @@ add_library(reaper_reaclaw SHARED
     src/util/tls.cpp
     src/util/logging.cpp
     src/panel/menu.cpp
+    src/panel/dialogs.cpp
     src/panel/swell_stub.cpp
+    $<$<BOOL:${WIN32}>:src/panel/dialogs.rc>
 )
 
 target_include_directories(reaper_reaclaw PRIVATE src/)

@@ -9,6 +9,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Action names in logs & history** — executing an action now logs and returns the
+  resolved human-readable name, not just the numeric id. `POST /execute/action` (and
+  each sequence step) returns `action_name`; `GET /history` rows carry `target_name`
+  (new `execution_history.target_name` column, migrated on open). Names resolve from
+  the bundled catalog, so they work for native actions even without SWS. (#8)
+- **Readable track structure** — `GET /state/tracks` now includes `folder_depth`
+  (`1`=folder parent, `0`=normal, negative=closes folders) and `color` (`"#RRGGBB"`
+  or `null`), so agents can verify folders/colors without screenshotting the GUI.
+  (Perception roadmap Q2 / #9)
+- **Polished menu dialogs** — the Extensions › ReaClaw *Status*, *View log*, and
+  *Copy API key* surfaces are now proper SWELL/Win32 dialogs (live status with LED +
+  copy-address, scrollable log viewer with refresh, API-key field with copy +
+  "Copied!" confirmation) instead of plain `MessageBox` popups. New
+  `src/panel/dialogs.{h,cpp}`, `src/panel/resource.h`, `src/panel/dialogs.rc`. (#2)
+
+### Docs
+- Added `ReaClaw_IDEAS.md` — perception/learning/discovery idea queue and the
+  direction decisions taken for the Phase 4 build-out.
+
 ---
 
 ## [1.2.0] - 2026-06-18

@@ -277,10 +277,15 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 
 ### Menu items (Extensions › ReaClaw)
 - **Start/stop server** — toggles the HTTPS server (checked while running); extension stays loaded
-- **Status…** — message box: address, auth mode, uptime, version
+- **Status…** — live SWELL dialog: status LED, address (+Copy), auth mode, uptime, version
 - **Open config file** — opens `config.json` in the OS default editor
-- **View log** — opens the log file (or notes that logging goes to the REAPER console)
-- **Copy API key** — copies `auth.key` to the clipboard
+- **View log** — scrollable SWELL log viewer with Refresh
+- **Copy API key** — SWELL dialog: key field + Copy button with "Copied!" confirmation
+
+> The Status / View log / Copy API key surfaces use SWELL dialog resources
+> (`src/panel/dialogs.{h,cpp}`, `resource.h`, `dialogs.rc`), replacing the former
+> plain `MessageBox` popups (Phase 4 Stage 1 / #2). Dialogs are modeless and
+> appear top-centered on the main window. Verified live on REAPER 7.74 (aarch64).
 
 ### Implementation notes
 - Each item is a `custom_action` (also shows in the Actions list / bindable to keys/toolbar).
@@ -309,7 +314,9 @@ stages, smallest/lowest-risk first.
   responses. Helper `Catalog::action_name()`. Verified live (native + SWS).
 - [x] **Q2/#9 (partial)** Readable structure: `folder_depth` + `color` added to
   `GET /state/tracks`. Verified live (folder parent/child/close + custom colors).
-- [ ] **#2** Replace plain `MessageBox` menu dialogs with polished SWELL dialogs.
+- [x] **#2** Replace plain `MessageBox` menu dialogs with polished SWELL dialogs
+  (Status / API key / Log). New `panel/dialogs.{h,cpp}`, `resource.h`, `dialogs.rc`.
+  Verified live (renders, copy + "Copied!" confirmation, scrollable log).
 
 ### Stage 2 — Easy commands (tiered coverage; #7/#9/#10)
 - [ ] Track create/delete; writable name, color, folder_depth (superset of the

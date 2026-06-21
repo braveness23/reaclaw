@@ -1,0 +1,46 @@
+// ReaClaw menu dialogs — Windows resource definitions.
+// Mirrors the SWELL macro resources in dialogs.cpp (Linux/macOS).
+#include <winresrc.h>
+#include "resource.h"
+
+IDD_REACLAW_STATUS DIALOGEX 0, 0, 250, 108
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "ReaClaw Status"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT       "",             IDC_ST_LED,       8,   8,  10, 10
+    LTEXT       "Stopped",      IDC_ST_STATE,    22,   8, 130, 10
+    PUSHBUTTON  "Copy address", IDC_ST_COPYADDR,168,   6,  76, 14
+    CONTROL     "", IDC_STATIC, "Static", SS_ETCHEDHORZ|WS_CHILD|WS_VISIBLE, 8, 24, 236, 1
+    LTEXT       "Address:",     IDC_STATIC,       8,  32,  56, 10
+    LTEXT       "",             IDC_ST_ADDR,     66,  32, 178, 10
+    LTEXT       "Auth:",        IDC_STATIC,       8,  46,  56, 10
+    LTEXT       "",             IDC_ST_AUTH,     66,  46, 178, 10
+    LTEXT       "Uptime:",      IDC_STATIC,       8,  60,  56, 10
+    LTEXT       "",             IDC_ST_UPTIME,   66,  60, 178, 10
+    LTEXT       "Version:",     IDC_STATIC,       8,  74,  56, 10
+    LTEXT       "",             IDC_ST_VERSION,  66,  74, 178, 10
+    DEFPUSHBUTTON "Close",      IDOK,           194,  90,  50, 14
+END
+
+IDD_REACLAW_APIKEY DIALOGEX 0, 0, 300, 82
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "ReaClaw API Key"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT       "API key:",     IDC_STATIC,       8,   8,  80, 10
+    EDITTEXT    IDC_AK_KEY,                        8,  20, 284, 14, ES_AUTOHSCROLL|ES_READONLY|WS_TABSTOP
+    PUSHBUTTON  "Copy to clipboard", IDC_AK_COPY,  8,  42, 104, 14
+    LTEXT       "",             IDC_AK_CONFIRM, 120,  44, 120, 10
+    DEFPUSHBUTTON "Close",      IDOK,           242,  60,  50, 14
+END
+
+IDD_REACLAW_LOG DIALOGEX 0, 0, 420, 300
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
+CAPTION "ReaClaw Log"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    EDITTEXT    IDC_LG_TEXT,                       6,   6, 408, 266, ES_READONLY|ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL|WS_TABSTOP
+    PUSHBUTTON  "Refresh",      IDC_LG_REFRESH,    6, 278,  60, 16
+    DEFPUSHBUTTON "Close",      IDOK,            358, 278,  56, 16
+END
