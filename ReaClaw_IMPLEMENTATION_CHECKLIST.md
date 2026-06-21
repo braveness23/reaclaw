@@ -330,10 +330,17 @@ stages, smallest/lowest-risk first.
 - [x] `GET /capabilities` manifest; `ReaClaw_TECH_DECISIONS.md` §16 coverage
       philosophy (tiered). All verified live on REAPER 7.74 (aarch64); 38/38 tests.
 
-### Stage 3 — Agent friendliness (#10)
-- [ ] ReaClaw Skill (action cheat-sheet + recipes + "don't" list)
-- [ ] MCP wrapper (typed intent tools over the REST API)
-- [ ] Semantic catalog search; recipes surface
+### Stage 3 — Agent friendliness (#10) — **complete**
+- [x] ReaClaw Skill (`skill/reaclaw/SKILL.md`) — structured-verb recipes, action
+      cheat-sheet, modal-action "don't" list, decision guide. Lives outside the
+      extension (zero-dependency, highest ROI).
+- [x] MCP wrapper (`mcp/`) — Python MCP server (FastMCP) exposing 18 typed tools
+      over the REST API; importable `ReaClawClient` core (stdlib HTTP). Verified
+      live: 18 tools registered; create/set/fx/send/selection round-trip.
+- [x] Semantic catalog search — in the MCP layer (`search_actions`): embeds the
+      ~6700-action catalog via local Ollama (`nomic-embed-text`), caches by
+      catalog signature, cosine ranking; graceful keyword fallback. (Recipes
+      surface is covered by the Skill.)
 
 ### Stage 4 — Hear itself (Q1, Q3)
 - [ ] Audio analysis: loudness/true-peak/RMS/spectral/onsets/clip (built-in)

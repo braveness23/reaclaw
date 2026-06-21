@@ -163,3 +163,9 @@ vendor/sqlite3.c
 vendor/sqlite3.h
 vendor/reaper-sdk/
 vendor/WDL/
+
+# Python (MCP server)
+__pycache__/
+*.pyc
+mcp/.venv/
+.venv/
