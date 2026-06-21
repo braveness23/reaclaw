@@ -96,7 +96,7 @@ selection state.
 For media items, MIDI notes, markers/regions, tempo map, envelopes, or render:
 
 ```http
-POST /scripts/register { "name":"...", "body":"-- Lua using reaper.* API" }
+POST /scripts/register { "name":"...", "script":"-- Lua using reaper.* API" }
 → returns a command id; run it via /execute/action {id:"_<that id>"}
 ```
 
