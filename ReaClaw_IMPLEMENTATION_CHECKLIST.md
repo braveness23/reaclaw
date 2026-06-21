@@ -295,9 +295,50 @@ The menu appears as **Extensions › ReaClaw**. Items are also in the Actions li
 
 ---
 
+## Phase 4: Perception, Ergonomics & Learning (v1.3.0+)
+
+**Goal:** the two halves of the "magic wand + hears itself" thesis — easy
+high-level commands (control) and the perception/learning loop. Direction set
+2026-06-20 (see `ReaClaw_IDEAS.md` → *Decisions taken*): tiered coverage,
+audio analysis basic-built-in/advanced-optional, phased with check-ins. Built in
+stages, smallest/lowest-risk first.
+
+### Stage 1 — Quick wins
+- [x] **#8** Log action names (id + name) in execution log + `GET /history`
+  (`target_name` column) + `action_name` in `/execute/action` and sequence step
+  responses. Helper `Catalog::action_name()`. Verified live (native + SWS).
+- [x] **Q2/#9 (partial)** Readable structure: `folder_depth` + `color` added to
+  `GET /state/tracks`. Verified live (folder parent/child/close + custom colors).
+- [ ] **#2** Replace plain `MessageBox` menu dialogs with polished SWELL dialogs.
+
+### Stage 2 — Easy commands (tiered coverage; #7/#9/#10)
+- [ ] Track create/delete; writable name, color, folder_depth (superset of the
+      current 5-field `POST /state/tracks/{index}`)
+- [ ] `add_fx` by name + param get/set; routing/sends
+- [ ] Batch track writes; selection write (`POST /state/selection`)
+- [ ] `GET /capabilities` manifest; `TECH_DECISIONS` entry for coverage philosophy
+
+### Stage 3 — Agent friendliness (#10)
+- [ ] ReaClaw Skill (action cheat-sheet + recipes + "don't" list)
+- [ ] MCP wrapper (typed intent tools over the REST API)
+- [ ] Semantic catalog search; recipes surface
+
+### Stage 4 — Hear itself (Q1, Q3)
+- [ ] Audio analysis: loudness/true-peak/RMS/spectral/onsets/clip (built-in)
+- [ ] Consequence-aware hints inline on mutating responses (~10–20 rules)
+
+### Stage 5 — Pictures + advanced listening (Q4, Q5, Q7)
+- [ ] Audio visualization; targeted screenshots (on demand); key/tempo via
+      optional external tool
+
+### Stage 6 — Learns over time (Q8)
+- [ ] Mine correction logs → learned suggestions (local-first, opt-in)
+
+---
+
 ## Ongoing (All Phases)
 
-- [x] Keep unit and integration tests passing before each commit — 36/36 unit tests pass; 12/12 integration tests pass against live REAPER 7.67
+- [x] Keep unit and integration tests passing before each commit — 38/38 unit tests pass; verified live against REAPER 7.74 (aarch64)
 - [x] Update `docs/API.md` as endpoints are added or changed
 - [x] Add `CHANGELOG.md` entry for each tagged release
 - [x] Keep `vendor/` library versions pinned and documented in `CMakeLists.txt` comments
