@@ -54,12 +54,32 @@ parent to `1` and its **last** child to `-1`.
 FX param `value` is **normalized 0..1**, addressed by param `name` (exact, e.g.
 `"Threshold"`) or `index`. Read the slot first to learn names/current values.
 
-## Verify without screenshots
+## Verify with structure first — screenshots only when asked
 
-`GET /state/tracks` returns each track's `name`, `folder_depth`, `color`,
-`volume_db`, `pan`, mute/solo/arm, `fx[]`, and `sends[]` (`dest_track`,
-`volume_db`, `pan`). Use this to confirm structure — you almost never need a
-screenshot. `GET /state` gives tempo/transport/project.
+**Default to reading state, not looking.** `GET /state/tracks` returns each
+track's `name`, `folder_depth`, `color`, `volume_db`, `pan`, mute/solo/arm,
+`fx[]`, and `sends[]` (`dest_track`, `volume_db`, `pan`); `GET /state` gives
+tempo/transport/project. This is enough to build and confirm almost anything —
+you rarely need to see the screen. For state the JSON can't express (e.g. a
+ReaEQ band's enabled flag), have a registered Lua script write a report file and
+read that.
+
+**When you DO need to see it** (the user asks "show me", or you're verifying
+something inherently visual like a theme/color/layout), capture the live REAPER
+window and read the image yourself — no human needed:
+
+```bash
+# X11 (DISPLAY set, e.g. :0.0). Reads the real on-screen framebuffer.
+ffmpeg -y -f x11grab -i "$DISPLAY" -frames:v 1 /tmp/reaper.png
+# crop to a region: crop=W:H:X:Y  (mixer = full-width bottom strip; arrange = top)
+ffmpeg -y -i /tmp/reaper.png -vf "crop=1920:230:0:850" /tmp/mixer.png
+```
+
+Then `Read` the PNG. Use `ffmpeg x11grab`, **not `xwd`** — `xwd` returns blank
+client areas for REAPER's GDK/SWELL windows. REAPER's window may be occluded by
+other apps; raise/maximize it first or crop to the part you need. (Wayland:
+`grim /tmp/reaper.png`.) A reusable, host-generic version of this lives as the
+`screenshot` skill if installed.
 
 ## Actions (the middle tier)
 

@@ -111,6 +111,14 @@ full-screen grab — framed and downscaled to bound cost.
 > the real fix was readable structure (→ Q2). So Q5 ranks **below** Q2; it
 > complements it, doesn't replace it. Also relates to **#10** "verify-without-eyes."
 
+> **Status (2026-06-21):** the *capability* is proven and the recipe is baked into
+> `skill/reaclaw/SKILL.md`. On X11, `ffmpeg -f x11grab -i "$DISPLAY"` captures the
+> live REAPER window (arrange, mixer, even SWELL dialogs) where `xwd` fails; the
+> agent then `Read`s the PNG, cropping to a region with ffmpeg. This honors the
+> guiding principle: structure-first by default, screenshot on demand. What remains
+> for a fuller Q5 is *ergonomics* — named surface targets (mixer/FX/arrange) and
+> auto-framing/downscaling — not the underlying ability.
+
 ### Q6 — Discover-before-generate
 The agent should **search the existing action catalog before generating a new
 script** — reuse over regenerate. (Note: the catalog already indexes native +
