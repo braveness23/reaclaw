@@ -235,18 +235,34 @@ class ReaClawClient:
                 )
             chunk = texts[i : i + batch]
             data = json.dumps({"model": self.embed_model, "input": chunk}).encode()
-            req = urllib.request.Request(
-                self.ollama_url + "/api/embed", data=data, method="POST"
-            )
-            req.add_header("Content-Type", "application/json")
-            try:
-                with urllib.request.urlopen(req, timeout=self.embed_timeout) as resp:
-                    payload = json.loads(resp.read())
-            except (urllib.error.URLError, OSError) as e:
-                raise ReaClawError(f"Ollama embed failed: {e}") from e
-            embs = payload.get("embeddings")
-            if not embs:
-                raise ReaClawError("Ollama returned no embeddings")
+            # Retry transient failures (timeouts / dropped connections) so one
+            # blip doesn't discard the whole multi-minute catalog build.
+            last_err: Optional[Exception] = None
+            embs = None
+            for attempt in range(3):
+                req = urllib.request.Request(
+                    self.ollama_url + "/api/embed", data=data, method="POST"
+                )
+                req.add_header("Content-Type", "application/json")
+                try:
+                    with urllib.request.urlopen(req, timeout=self.embed_timeout) as resp:
+                        payload = json.loads(resp.read())
+                    embs = payload.get("embeddings")
+                    if embs and len(embs) == len(chunk):
+                        break
+                    last_err = ReaClawError(
+                        f"expected {len(chunk)} embeddings, got {len(embs) if embs else 0}"
+                    )
+                except (urllib.error.URLError, OSError, json.JSONDecodeError) as e:
+                    last_err = e
+                if attempt < 2:
+                    print(
+                        f"[reaclaw-mcp] embed batch retry ({attempt + 1}/2): {last_err}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            if embs is None or len(embs) != len(chunk):
+                raise ReaClawError(f"Ollama embed failed after retries: {last_err}")
             out.extend(embs)
         arr = np.asarray(out, dtype=np.float32)
         norms = np.linalg.norm(arr, axis=1, keepdims=True)

@@ -79,6 +79,11 @@ is printed to stderr so it never looks hung. Tunables:
 Until the cache is warm, semantic searches transparently fall back to keyword
 search, so the tool is always usable.
 
+**Tip:** point `OLLAMA_URL` at a faster machine on your network for the warm-up
+(e.g. `OLLAMA_URL=http://<host>:11434`); the embeddings backend doesn't have to
+be local. The cache is written wherever the MCP server runs, so the warm-up cost
+is paid once regardless of which Ollama produced the vectors.
+
 ## Without the MCP framework
 
 `reaclaw_mcp.client.ReaClawClient` is a plain Python class (stdlib HTTP) usable
