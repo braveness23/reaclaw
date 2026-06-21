@@ -185,6 +185,13 @@ bool DB::run_schema() {
     if (cols.empty()) {
         execute("ALTER TABLE scripts ADD COLUMN reaper_cmd_id INTEGER NOT NULL DEFAULT 0");
     }
+    // Migration: add target_name to execution_history (added in v1.1) so the
+    // audit log is readable, not just numeric ids.
+    auto hcols = query(
+            "SELECT name FROM pragma_table_info('execution_history') WHERE name='target_name'", {});
+    if (hcols.empty()) {
+        execute("ALTER TABLE execution_history ADD COLUMN target_name TEXT");
+    }
     return true;
 }
 

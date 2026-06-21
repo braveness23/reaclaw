@@ -2,6 +2,7 @@
 
 #include "app.h"
 #include "handlers/common.h"
+#include "reaper/catalog.h"
 #include "reaper/executor.h"
 #include "util/logging.h"
 
@@ -23,13 +24,14 @@ void log_history(const std::string& type,
                  const std::string& target_id,
                  const std::string& ag,
                  const std::string& status,
-                 const std::string& err_msg = "") {
+                 const std::string& err_msg = "",
+                 const std::string& target_name = "") {
     if (!g_config.log_all_executions)
         return;
     g_db.query(
-            "INSERT INTO execution_history(type, target_id, agent_id, status, error) "
-            "VALUES(?1, ?2, ?3, ?4, ?5)",
-            {type, target_id, ag, status, err_msg});
+            "INSERT INTO execution_history(type, target_id, target_name, agent_id, status, error) "
+            "VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+            {type, target_id, target_name, ag, status, err_msg});
 }
 
 // Resolve a JSON id value (int or string) to a REAPER command id.
@@ -54,6 +56,19 @@ int resolve_cmd_id(const nlohmann::json& id_val) {
         return NamedCommandLookup(name.c_str());
     }
     return 0;
+}
+
+// Resolve a human-readable name for logging/history. HTTP-thread safe (DB reads
+// only, no REAPER SDK). String IDs prefer the registered script's name; otherwise
+// fall back to the catalog name for the resolved command id. Returns "" if unknown.
+std::string display_name(const nlohmann::json& id_val, int resolved_cmd_id) {
+    if (id_val.is_string()) {
+        auto rows = g_db.query("SELECT name FROM scripts WHERE id = ?1",
+                               {id_val.get<std::string>()});
+        if (!rows.empty() && !rows[0].at("name").empty())
+            return rows[0].at("name");
+    }
+    return Catalog::action_name(g_db, resolved_cmd_id);
 }
 
 // Lightweight post-execution feedback snapshot (threadsafe reads).
@@ -109,24 +124,28 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
     std::string id_str = body["id"].is_number() ? std::to_string(body["id"].get<int>())
                                                 : body["id"].get<std::string>();
 
-    Log::info("Execute action: " + id_str + (ag.empty() ? "" : " (agent: " + ag + ")"));
-
     auto result = Executor::post([body]() -> nlohmann::json {
         int cmd_id = resolve_cmd_id(body["id"]);
         if (cmd_id == 0)
             return {{"_not_found", true}};
         Main_OnCommand(cmd_id, 0);
-        return {{"ok", true}};
+        return {{"ok", true}, {"cmd_id", cmd_id}};
     });
 
+    int cmd_id = result.value("cmd_id", 0);
+    std::string nm = display_name(body["id"], cmd_id);
+    std::string name_suffix = nm.empty() ? "" : " (" + nm + ")";
+    Log::info("Execute action: " + id_str + name_suffix +
+              (ag.empty() ? "" : " (agent: " + ag + ")"));
+
     if (result.contains("_timeout")) {
-        log_history("action", id_str, ag, "timeout");
+        log_history("action", id_str, ag, "timeout", "", nm);
         json_error(res, 408, "Main thread timeout", "TIMEOUT");
         return;
     }
     if (result.contains("_error")) {
         std::string err = result["_error"].get<std::string>();
-        log_history("action", id_str, ag, "failed", err);
+        log_history("action", id_str, ag, "failed", err, nm);
         json_error(res, 500, err, "INTERNAL_ERROR");
         return;
     }
@@ -135,7 +154,7 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
         return;
     }
 
-    log_history("action", id_str, ag, "success");
+    log_history("action", id_str, ag, "success", "", nm);
 
     // Track execution stats for registered scripts (string IDs)
     if (body["id"].is_string()) {
@@ -147,6 +166,8 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
 
     nlohmann::json resp = {
             {"status", "success"}, {"action_id", body["id"]}, {"executed_at", now_iso()}};
+    if (!nm.empty())
+        resp["action_name"] = nm;
     if (want_feedback)
         resp["feedback"] = build_feedback();
     json_ok(res, resp);
@@ -204,30 +225,35 @@ void handle_execute_sequence(const httplib::Request& req, httplib::Response& res
             if (cmd_id == 0)
                 return {{"_not_found", true}};
             Main_OnCommand(cmd_id, 0);
-            return {{"ok", true}};
+            return {{"ok", true}, {"cmd_id", cmd_id}};
         });
 
+        std::string step_nm =
+                step.contains("id") ? display_name(step["id"], step_result.value("cmd_id", 0)) : "";
+
         nlohmann::json entry = {{"label", label}, {"action_id", step.value("id", 0)}};
+        if (!step_nm.empty())
+            entry["action_name"] = step_nm;
 
         if (step_result.contains("_timeout")) {
             entry["status"] = "timeout";
             had_failure = true;
-            log_history("sequence", step_id, ag, "timeout");
+            log_history("sequence", step_id, ag, "timeout", "", step_nm);
         } else if (step_result.contains("_not_found") || step_result.contains("_bad_request")) {
             entry["status"] = "failed";
             entry["error"] = "action not found or invalid id";
             had_failure = true;
-            log_history("sequence", step_id, ag, "failed", "not found");
+            log_history("sequence", step_id, ag, "failed", "not found", step_nm);
         } else if (step_result.contains("_error")) {
             std::string err = step_result["_error"].get<std::string>();
             entry["status"] = "failed";
             entry["error"] = err;
             had_failure = true;
-            log_history("sequence", step_id, ag, "failed", err);
+            log_history("sequence", step_id, ag, "failed", err, step_nm);
         } else {
             entry["status"] = "success";
             steps_completed++;
-            log_history("sequence", step_id, ag, "success");
+            log_history("sequence", step_id, ag, "success", "", step_nm);
         }
 
         if (feedback_between)

@@ -126,4 +126,13 @@ int count(DB& db) {
     return static_cast<int>(db.scalar_int("SELECT COUNT(*) FROM actions"));
 }
 
+std::string action_name(DB& db, int cmd_id) {
+    if (cmd_id == 0)
+        return "";
+    auto rows = db.query("SELECT name FROM actions WHERE id = ?1", {std::to_string(cmd_id)});
+    if (rows.empty())
+        return "";
+    return rows[0].at("name");
+}
+
 }  // namespace ReaClaw::Catalog

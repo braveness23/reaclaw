@@ -40,14 +40,14 @@ void handle_history(const httplib::Request& req, httplib::Response& res) {
     if (filter_agent.empty()) {
         total = g_db.scalar_int("SELECT COUNT(*) FROM execution_history");
         rows = g_db.query(
-                "SELECT id, type, target_id, agent_id, status, error, executed_at "
+                "SELECT id, type, target_id, target_name, agent_id, status, error, executed_at "
                 "FROM execution_history ORDER BY executed_at DESC LIMIT ?1 OFFSET ?2",
                 {std::to_string(limit), std::to_string(offset)});
     } else {
         total = g_db.scalar_int("SELECT COUNT(*) FROM execution_history WHERE agent_id = ?1",
                                 {filter_agent});
         rows = g_db.query(
-                "SELECT id, type, target_id, agent_id, status, error, executed_at "
+                "SELECT id, type, target_id, target_name, agent_id, status, error, executed_at "
                 "FROM execution_history WHERE agent_id = ?1 "
                 "ORDER BY executed_at DESC LIMIT ?2 OFFSET ?3",
                 {filter_agent, std::to_string(limit), std::to_string(offset)});
@@ -66,6 +66,9 @@ void handle_history(const httplib::Request& req, httplib::Response& res) {
                                 {"agent_id", r.count("agent_id") ? r.at("agent_id") : nullptr},
                                 {"status", r.count("status") ? r.at("status") : ""},
                                 {"executed_at", r.count("executed_at") ? r.at("executed_at") : ""}};
+        if (r.count("target_name") && !r.at("target_name").empty()) {
+            entry["target_name"] = r.at("target_name");
+        }
         if (r.count("error") && !r.at("error").empty()) {
             entry["error"] = r.at("error");
         }

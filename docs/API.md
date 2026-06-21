@@ -111,16 +111,22 @@ Project and transport state snapshot.
 
 ### GET /state/tracks
 
-All tracks with name, mute, solo, armed, volume, pan, and FX list.
+All tracks with name, mute, solo, armed, volume, pan, folder nesting, color, and FX list.
 
 ```json
 {
   "tracks": [
     { "index": 0, "name": "Kick", "muted": false, "soloed": false,
-      "armed": true, "volume_db": 0.0, "pan": 0.0, "fx": [...] }
+      "armed": true, "volume_db": 0.0, "pan": 0.0,
+      "folder_depth": 1, "color": "#EC436F", "fx": [...] }
   ]
 }
 ```
+
+`folder_depth`: `1` = folder parent (children follow), `0` = normal track,
+negative = closes that many folder levels (last track in a folder).
+`color`: track custom color as `"#RRGGBB"`, or `null` when the track uses the
+default color.
 
 ### POST /state/tracks/{index}
 
@@ -164,10 +170,15 @@ Execute a single action by numeric ID or registered script action ID.
 {
   "status": "success",
   "action_id": 40285,
+  "action_name": "Track: Toggle mute for selected tracks",
   "executed_at": "2026-04-07T14:24:10Z",
   "feedback": { "transport": {...}, "tracks": [...] }
 }
 ```
+
+`action_name` is the resolved human-readable name (from the bundled catalog;
+omitted only when the id is unknown). Sequence step results include `action_name`
+per step the same way.
 
 Returns 408 if the REAPER main thread doesn't respond within 5 seconds.
 
@@ -314,6 +325,7 @@ Query params: `limit` (default 50, max 500), `offset` (default 0), `agent_id` (o
       "id": 1042,
       "type": "action",
       "target_id": "40285",
+      "target_name": "Track: Toggle mute for selected tracks",
       "agent_id": "claude-sonnet-4-6",
       "status": "success",
       "executed_at": "2026-04-07T14:24:10Z"
@@ -322,4 +334,5 @@ Query params: `limit` (default 50, max 500), `offset` (default 0), `agent_id` (o
 }
 ```
 
-`type` is one of `"action"`, `"sequence"`.
+`type` is one of `"action"`, `"sequence"`. `target_name` is the resolved action
+name (omitted for rows logged before this field existed, or unknown ids).

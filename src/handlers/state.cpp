@@ -90,6 +90,25 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
         guid_str = guid_to_string(g);
     }
 
+    // Folder nesting: 1 = folder parent (children follow), 0 = normal track,
+    // negative = closes that many folder levels (last track in folder).
+    int folder_depth = 0;
+    if (auto* fd = static_cast<int*>(GetSetMediaTrackInfo(track, "I_FOLDERDEPTH", nullptr)))
+        folder_depth = *fd;
+
+    // Custom track color: I_CUSTOMCOLOR carries the OS-native color OR'd with
+    // 0x1000000 when a custom color is set, or 0 when the track uses the default.
+    nlohmann::json color = nullptr;
+    if (auto* c = static_cast<int*>(GetSetMediaTrackInfo(track, "I_CUSTOMCOLOR", nullptr))) {
+        if (*c & 0x1000000) {
+            int r = 0, g = 0, b = 0;
+            ColorFromNative(*c & 0xFFFFFF, &r, &g, &b);
+            char hex[8];
+            snprintf(hex, sizeof(hex), "#%02X%02X%02X", r & 0xFF, g & 0xFF, b & 0xFF);
+            color = hex;
+        }
+    }
+
     int send_count = GetTrackNumSends(track, 1);
 
     return {{"index", index},
@@ -100,6 +119,8 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
             {"armed", armed},
             {"volume_db", vol_to_db(vol)},
             {"pan", pan},
+            {"folder_depth", folder_depth},
+            {"color", color},
             {"fx", fx_arr},
             {"send_count", send_count}};
 }
