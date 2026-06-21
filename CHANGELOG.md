@@ -39,6 +39,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `GET /capabilities` — manifest of what's supported directly vs. via an action
     or Lua script.
 
+- **Agent-friendliness layer (Stage 3)** — sits outside the C++ extension:
+  - **Agent Skill** (`skill/reaclaw/SKILL.md`) — loads ReaClaw know-how into an
+    agent's context: structured-verb recipes, action cheat-sheet, a modal-action
+    "don't" list, and a decision guide.
+  - **MCP server** (`mcp/`) — Python (FastMCP) server exposing 18 typed tools over
+    the REST API; the `ReaClawClient` core uses only the stdlib and is usable
+    standalone.
+  - **Semantic action search** — `search_actions` embeds the action catalog via a
+    local Ollama model (`nomic-embed-text`), caches it, and ranks by cosine
+    similarity so natural-language queries map to actions; falls back to keyword
+    search when embeddings are unavailable.
+
 ### Changed
 - `GET /state/tracks` track objects now include a `sends` array.
 

@@ -1,0 +1,5 @@
+# ReaClaw MCP server dependencies.
+# The REST client itself uses only the Python standard library; these are for
+# the MCP framing and semantic search.
+mcp>=1.2.0
+numpy>=1.24

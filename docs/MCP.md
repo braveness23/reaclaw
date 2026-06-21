@@ -9,6 +9,22 @@ ReaClaw is not an MCP server itself — it speaks plain HTTPS/JSON. The MCP laye
 
 ---
 
+## Reference implementation (`mcp/`)
+
+A ready-to-run Python MCP server now ships in **[`mcp/`](../mcp/)** — see
+[`mcp/README.md`](../mcp/README.md). It exposes 18 typed tools over the REST API
+(tracks, FX, routing, selection, actions, scripts) plus **semantic action
+search** (local Ollama embeddings, keyword fallback). Run it with
+`python -m reaclaw_mcp.server` (stdio). The tool definitions below document the
+underlying REST mapping; the reference server implements them and more.
+
+There is also a bundled **agent Skill** at [`skill/reaclaw/`](../skill/reaclaw/)
+that loads ReaClaw know-how (structured-verb recipes, action cheat-sheet, a
+"don't call these modal actions" list, and a decision guide) into an agent's
+working context — the highest-ROI, zero-dependency option.
+
+---
+
 ## Tool Definitions
 
 ### `reaclawSearchCatalog`
