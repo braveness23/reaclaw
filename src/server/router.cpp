@@ -3,6 +3,7 @@
 #include "app.h"
 #include "auth/auth.h"
 #include "config/config.h"
+#include "handlers/capabilities.h"
 #include "handlers/catalog.h"
 #include "handlers/common.h"
 #include "handlers/execute.h"
@@ -89,11 +90,66 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     svr.Get("/state/automation", auth_wrap(cfg, Handlers::handle_state_automation));
     svr.Get("/state", auth_wrap(cfg, Handlers::handle_state));
 
+    // Create + batch update tracks.
+    svr.Post("/state/tracks", auth_wrap(cfg, Handlers::handle_state_tracks_post));
+
+    // FX sub-resources (registered before the bare track index route; httplib
+    // does full-path regex matching, so /fx and /sends paths never fall through
+    // to the single-track handler).
+    svr.Post(R"(/state/tracks/(\d+)/fx)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 Handlers::handle_state_add_fx(req, res);
+             }));
+    svr.Get(R"(/state/tracks/(\d+)/fx/(\d+))",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
+                Handlers::handle_state_get_fx(req, res);
+            }));
+    svr.Post(R"(/state/tracks/(\d+)/fx/(\d+))",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
+                 Handlers::handle_state_set_fx(req, res);
+             }));
+    svr.Delete(R"(/state/tracks/(\d+)/fx/(\d+))",
+               auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                   const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                   const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
+                   Handlers::handle_state_delete_fx(req, res);
+               }));
+
+    // Send sub-resources.
+    svr.Post(R"(/state/tracks/(\d+)/sends)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 Handlers::handle_state_add_send(req, res);
+             }));
+    svr.Delete(R"(/state/tracks/(\d+)/sends/(\d+))",
+               auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                   const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                   const_cast<httplib::Request&>(req).path_params["send"] = req.matches[2];
+                   Handlers::handle_state_delete_send(req, res);
+               }));
+
+    // Single-track update + delete.
     svr.Post(R"(/state/tracks/(\d+))",
              auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  Handlers::handle_state_set_track(req, res);
              }));
+    svr.Delete(R"(/state/tracks/(\d+))",
+               auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                   const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                   Handlers::handle_state_delete_track(req, res);
+               }));
+
+    // Selection write.
+    svr.Post("/state/selection", auth_wrap(cfg, Handlers::handle_state_set_selection));
+
+    // Capability manifest.
+    svr.Get("/capabilities", auth_wrap(cfg, Handlers::handle_capabilities));
 
     // --- Execute ---
     svr.Post("/execute/action", auth_wrap(cfg, Handlers::handle_execute_action));

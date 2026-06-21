@@ -25,9 +25,28 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "Copied!" confirmation) instead of plain `MessageBox` popups. New
   `src/panel/dialogs.{h,cpp}`, `src/panel/resource.h`, `src/panel/dialogs.rc`. (#2)
 
+- **High-level structured commands (tiered coverage)** — the "easy commands" that
+  collapse the 146-call friction-log session into a handful of requests:
+  - Tracks: `POST /state/tracks` (create + batch update), `DELETE /state/tracks/{i}`,
+    and `POST /state/tracks/{i}` now also writes `name`, `color`, and `folder_depth`
+    (on top of mute/solo/arm/volume/pan).
+  - FX: `POST /state/tracks/{i}/fx` (add by name), `GET`/`POST`/`DELETE`
+    `/state/tracks/{i}/fx/{slot}` — enable/bypass and parameter get/set (normalized
+    0..1, by param index or name).
+  - Routing: `POST`/`DELETE /state/tracks/{i}/sends[/{send}]`; track reads now
+    include a `sends[]` array (`dest_track`, `volume_db`, `pan`).
+  - Selection: `POST /state/selection` (`[i,...]`, `"all"`, or `"none"`).
+  - `GET /capabilities` — manifest of what's supported directly vs. via an action
+    or Lua script.
+
+### Changed
+- `GET /state/tracks` track objects now include a `sends` array.
+
 ### Docs
 - Added `ReaClaw_IDEAS.md` — perception/learning/discovery idea queue and the
   direction decisions taken for the Phase 4 build-out.
+- `ReaClaw_TECH_DECISIONS.md` §16 — API coverage is **tiered** (structured verbs +
+  action-runner + Lua escape hatch); resolves the open question in #7.
 
 ---
 

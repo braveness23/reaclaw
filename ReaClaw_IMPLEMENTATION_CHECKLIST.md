@@ -318,12 +318,17 @@ stages, smallest/lowest-risk first.
   (Status / API key / Log). New `panel/dialogs.{h,cpp}`, `resource.h`, `dialogs.rc`.
   Verified live (renders, copy + "Copied!" confirmation, scrollable log).
 
-### Stage 2 — Easy commands (tiered coverage; #7/#9/#10)
-- [ ] Track create/delete; writable name, color, folder_depth (superset of the
-      current 5-field `POST /state/tracks/{index}`)
-- [ ] `add_fx` by name + param get/set; routing/sends
-- [ ] Batch track writes; selection write (`POST /state/selection`)
-- [ ] `GET /capabilities` manifest; `TECH_DECISIONS` entry for coverage philosophy
+### Stage 2 — Easy commands (tiered coverage; #7/#9/#10) — **complete**
+- [x] Track create/delete; writable name, color, folder_depth (superset of the
+      former 5-field `POST /state/tracks/{index}`). `POST /state/tracks` (create),
+      `DELETE /state/tracks/{index}`.
+- [x] `add_fx` by name + param get/set; routing/sends. `POST/GET/DELETE`
+      `/state/tracks/{i}/fx[/{slot}]` (params normalized, by index or name);
+      `POST/DELETE /state/tracks/{i}/sends[/{send}]`; `sends[]` added to track reads.
+- [x] Batch track writes (`POST /state/tracks {create,update}`); selection write
+      (`POST /state/selection {tracks:[...]|"all"|"none"}`).
+- [x] `GET /capabilities` manifest; `ReaClaw_TECH_DECISIONS.md` §16 coverage
+      philosophy (tiered). All verified live on REAPER 7.74 (aarch64); 38/38 tests.
 
 ### Stage 3 — Agent friendliness (#10)
 - [ ] ReaClaw Skill (action cheat-sheet + recipes + "don't" list)

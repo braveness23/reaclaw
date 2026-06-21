@@ -221,6 +221,37 @@ The REAPER SDK distinguishes threadsafe from non-threadsafe API functions. `Main
 
 ---
 
+## 16. API Coverage: Tiered
+
+**Decision:** ReaClaw offers **tiered** coverage of REAPER, not a single uniform layer:
+
+1. **Structured verbs** for the objects agents touch constantly — tracks
+   (create/delete; writable name, color, folder depth, vol, pan, mute, solo,
+   arm), track FX (add by name, enable, parameter get/set, delete), routing
+   (sends add/delete + readable in `/state/tracks`), and selection.
+2. **Action-runner** (`/execute/action`, `/execute/sequence`) over the full
+   bundled + installed action catalog (`/catalog/search`) for the long tail.
+3. **Lua escape hatch** (`/scripts/register`) for anything not exposed as a verb
+   or action.
+
+`GET /capabilities` advertises which tier covers what, so an agent can tell at a
+glance what is directly supported vs. what needs an action or a script.
+
+**Rationale:** A real session (the 36-track friction log, #9) showed that the
+five-field track write was far too thin — naming, FX insertion, folders, color,
+and routing all had to be coerced out of parameterless action IDs or hand-written
+Lua, costing 146 calls and many dead ends. Mirroring the entire ~865-function
+SDK as REST is the opposite mistake: a large, low-value maintenance surface.
+Tiered coverage targets the common 20% with typed verbs while keeping the action
+and Lua layers for everything else. Settled with Dave on 2026-06-20 (resolves the
+open question in issue #7). See `ReaClaw_IDEAS.md` and the Phase 4 checklist.
+
+**Not in scope as verbs (reach via action or script):** media items/takes, MIDI
+events, markers/regions, tempo/time-signature map, envelope point writes, render/
+freeze, project open/save. These may graduate to verbs later if usage warrants.
+
+---
+
 ## Summary
 
 | Concern | Decision |
@@ -240,3 +271,4 @@ The REAPER SDK distinguishes threadsafe from non-threadsafe API functions. `Main
 | Rate limiting | None |
 | Config | JSON at GetResourcePath()/reaclaw/config.json |
 | Plugin name | reaper_reaclaw.{dll,dylib,so} |
+| API coverage | Tiered: structured verbs + action-runner + Lua escape hatch |
