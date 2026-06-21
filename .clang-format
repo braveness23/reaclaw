@@ -1,7 +1,7 @@
 ---
 # ReaClaw clang-format configuration
 # Base: Google style with project-specific overrides
-# Requires clang-format 14+
+# Requires clang-format 18+
 Language: Cpp
 BasedOnStyle: Google
 Standard: c++17
