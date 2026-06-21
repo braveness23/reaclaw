@@ -19,6 +19,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`1`=folder parent, `0`=normal, negative=closes folders) and `color` (`"#RRGGBB"`
   or `null`), so agents can verify folders/colors without screenshotting the GUI.
   (Perception roadmap Q2 / #9)
+- **Screenshot recipe in the agent Skill** — `skill/reaclaw/SKILL.md` now documents
+  how to *see* REAPER when asked: capture the live window with `ffmpeg x11grab`
+  (not `xwd`, which returns blank GDK/SWELL client areas), crop to a region, and
+  `Read` the PNG. Structure-first stays the default; vision is the on-demand
+  fallback. (Perception roadmap Q5)
 - **Polished menu dialogs** — the Extensions › ReaClaw *Status*, *View log*, and
   *Copy API key* surfaces are now proper SWELL/Win32 dialogs (live status with LED +
   copy-address, scrollable log viewer with refresh, API-key field with copy +
