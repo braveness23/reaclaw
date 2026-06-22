@@ -1,5 +1,9 @@
 # REAPER API Deep Dive: Gap Analysis vs ReaClaw
 
+> **Consolidated into [`ReaClaw_ROADMAP.md`](ReaClaw_ROADMAP.md).** This document is the
+> source/reference material for the *control/coverage* half (Tiers A–D). The roadmap is the
+> authority for what's next and in what order; the Tier A/B/C gaps here became Epics 1–2.
+
 ## Context
 
 This is a research document, not an implementation plan. The goal is to map the full automation

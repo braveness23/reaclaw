@@ -8,6 +8,7 @@
 2. `ReaClaw_IMPLEMENTATION_CHECKLIST.md` — phase-by-phase task list; shows what's done, what's in scope, and what's deferred
 3. `ReaClaw_Design.md` — full design spec including API contracts, data models, and security model
 4. `SECURITY.md` — security model, scope, and deployment guidance
+5. `ReaClaw_ROADMAP.md` — the consolidated forward plan (control + perception); maps the open epics to GitHub issues
 
 Do not propose changes that contradict settled decisions in `TECH_DECISIONS.md`. If a decision seems wrong, raise it with the user rather than silently overriding it.
 

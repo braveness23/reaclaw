@@ -1,5 +1,9 @@
 # ReaClaw — Ideas Queue
 
+> **Consolidated into [`ReaClaw_ROADMAP.md`](ReaClaw_ROADMAP.md).** This document is the
+> source/reference material for the *perception/learning* half (Q1–Q8). The roadmap is the
+> authority for what's next; the live ideas here became Epics 3–5 (Q2/Q6 are shipped).
+
 **Status:** raw idea backlog. Nothing here is decided or scoped. Each item is a
 concept to discuss and potentially implement — **no implementation choices are
 captured on purpose.** When an item graduates, it moves into
