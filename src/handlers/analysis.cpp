@@ -189,14 +189,12 @@ nlohmann::json source_meta(PCM_source* src) {
 
 // Build the analysis payload for an already-resolved source. `which` selects
 // which measure groups to compute (loudness and/or spectral).
-nlohmann::json analyze_source(PCM_source* src,
-                              double start,
-                              double end,
-                              bool want_loudness,
-                              bool want_spectral) {
+nlohmann::json
+analyze_source(PCM_source* src, double start, double end, bool want_loudness, bool want_spectral) {
     nlohmann::json out;
     out["source"] = source_meta(src);
-    out["window"] = {{"start", start}, {"end", end > 0.0 ? nlohmann::json(end) : nlohmann::json(nullptr)}};
+    out["window"] = {{"start", start},
+                     {"end", end > 0.0 ? nlohmann::json(end) : nlohmann::json(nullptr)}};
 
     if (want_loudness) {
         double lufs = measure_db(src, 0, start, end);
@@ -235,7 +233,8 @@ nlohmann::json analyze_source(PCM_source* src,
                                {"centroid_hz", sp.centroid_hz},
                                {"dominant_band", dom},
                                {"frames_analyzed", sp.frames},
-                               {"bands_hz", {{"low", "<250"}, {"mid", "250-4000"}, {"high", ">4000"}}},
+                               {"bands_hz",
+                                {{"low", "<250"}, {"mid", "250-4000"}, {"high", ">4000"}}},
                                {"method", "estimated_dsp"},
                                {"confidence", 0.6}};
         } else {
@@ -256,7 +255,9 @@ void parse_measures(const httplib::Request& req, bool& loudness, bool& spectral)
     }
     loudness = spectral = false;
     std::string m = it->second;
-    auto has = [&](const char* k) { return m.find(k) != std::string::npos; };
+    auto has = [&](const char* k) {
+        return m.find(k) != std::string::npos;
+    };
     if (has("loud") || has("lufs") || has("rms") || has("peak") || has("clip"))
         loudness = true;
     if (has("spectr") || has("band") || has("eq"))

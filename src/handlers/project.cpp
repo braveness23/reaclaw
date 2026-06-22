@@ -322,12 +322,15 @@ void handle_extstate_get(const httplib::Request& req, httplib::Response& res) {
     auto result = Executor::post([section, key, has_key]() -> nlohmann::json {
         if (has_key) {
             std::vector<char> buf(1 << 16, 0);
-            int got = GetProjExtState(
-                    nullptr, section.c_str(), key.c_str(), buf.data(), static_cast<int>(buf.size()));
+            int got = GetProjExtState(nullptr,
+                                      section.c_str(),
+                                      key.c_str(),
+                                      buf.data(),
+                                      static_cast<int>(buf.size()));
             return {{"section", section},
                     {"key", key},
-                    {"value", got > 0 ? nlohmann::json(std::string(buf.data()))
-                                      : nlohmann::json(nullptr)}};
+                    {"value",
+                     got > 0 ? nlohmann::json(std::string(buf.data())) : nlohmann::json(nullptr)}};
         }
         nlohmann::json values = nlohmann::json::object();
         for (int idx = 0;; idx++) {

@@ -96,8 +96,7 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                "POST /state/selection {tracks:[i,...]|\"all\"|\"none\", "
                "items:[j,...]|\"all\"|\"none\"}"}}},
             {"perception",
-             {{"analyze_item",
-               "GET /analysis/item/{index}?measures=loudness,spectral&start=&end="},
+             {{"analyze_item", "GET /analysis/item/{index}?measures=loudness,spectral&start=&end="},
               {"analyze_file", "GET /analysis/file?path=ABS&measures=&start=&end="},
               {"measures",
                "loudness: lufs_i/rms_i/peak_db/true_peak_db (exact offline analysis) + "
@@ -142,11 +141,10 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
 
     // Things that have no direct verb yet — reach them via an action ID or a
     // generated Lua script. Kept honest so the agent doesn't probe blindly.
-    nlohmann::json via_script_or_action = nlohmann::json::array(
-            {"take FX chains (TakeFX_*)",
-             "MIDI notes/events",
-             "rendering / freezing",
-             "project open / save"});
+    nlohmann::json via_script_or_action = nlohmann::json::array({"take FX chains (TakeFX_*)",
+                                                                 "MIDI notes/events",
+                                                                 "rendering / freezing",
+                                                                 "project open / save"});
 
     json_ok(res,
             {{"coverage_model",

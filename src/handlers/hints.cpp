@@ -71,9 +71,8 @@ void track_invariants(nlohmann::json& h, MediaTrack* t, int idx, const char* sub
         add(h,
             "routes_nowhere",
             "warn",
-            ti +
-                    " does not route to the master (parent send off and no send chain reaches "
-                    "it) — its audio dead-ends.");
+            ti + " does not route to the master (parent send off and no send chain reaches "
+                 "it) — its audio dead-ends.");
 
     if (GetMediaTrackInfo_Value(t, "B_PHASE") != 0.0)
         add(h, "phase_inverted", "info", ti + " has its phase inverted.");

@@ -66,8 +66,8 @@ bool parse_body(const httplib::Request& req, httplib::Response& res, nlohmann::j
 nlohmann::json with_undo(const char* desc, const std::function<nlohmann::json()>& body) {
     Undo_BeginBlock2(nullptr);
     nlohmann::json r = body();
-    const bool changed =
-            !(r.contains("_not_found") || r.contains("_bad_request") || r.contains("_error"));
+    const bool changed = !(r.contains("_not_found") || r.contains("_bad_request") ||
+                           r.contains("_error"));
     Undo_EndBlock2(nullptr, desc, changed ? -1 : 0);
     return r;
 }
@@ -257,8 +257,8 @@ void handle_items_post(const httplib::Request& req, httplib::Response& res) {
                     SetMediaItemInfo_Value(it, "D_POSITION", pos);
                     double length = spec.value("length", -1.0);
                     if (spec.contains("file") && spec["file"].is_string()) {
-                        PCM_source* src =
-                                PCM_Source_CreateFromFile(spec["file"].get<std::string>().c_str());
+                        PCM_source* src = PCM_Source_CreateFromFile(
+                                spec["file"].get<std::string>().c_str());
                         if (src) {
                             MediaItem_Take* tk = AddTakeToMediaItem(it);
                             SetMediaItemTake_Source(tk, src);

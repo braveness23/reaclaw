@@ -14,8 +14,10 @@ namespace ReaClaw::Handlers {
 // (estimated DSP over decoded samples), and clipping derived from true-peak.
 // Every result is tagged with a `method` and `confidence` so the agent knows how
 // much to trust each number.
-void handle_analysis_item(const httplib::Request& req, httplib::Response& res);  // GET /analysis/item/{index}
-void handle_analysis_file(const httplib::Request& req, httplib::Response& res);  // GET /analysis/file?path=
+void handle_analysis_item(const httplib::Request& req,
+                          httplib::Response& res);  // GET /analysis/item/{index}
+void handle_analysis_file(const httplib::Request& req,
+                          httplib::Response& res);  // GET /analysis/file?path=
 
 // Live per-track peak metering (introspection of REAPER's own meters; only
 // meaningful while audio is running).
