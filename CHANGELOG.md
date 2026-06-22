@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-21
+
 ### Added
 - **Action names in logs & history** — executing an action now logs and returns the
   resolved human-readable name, not just the numeric id. `POST /execute/action` (and
