@@ -2,6 +2,7 @@
 
 #include "app.h"
 #include "handlers/common.h"
+#include "handlers/hints.h"
 #include "reaper/executor.h"
 #include "util/logging.h"
 
@@ -511,7 +512,9 @@ void handle_state_set_track(const httplib::Request& req, httplib::Response& res)
                 return {{"_not_found", true}};
 
             apply_track_props(track, body);
-            return track_to_json(track, index);
+            auto j = track_to_json(track, index);
+            j["hints"] = Hints::for_track(track, index);
+            return j;
         });
     });
 
@@ -780,7 +783,8 @@ void handle_state_add_fx(const httplib::Request& req, httplib::Response& res) {
                     {"slot", slot},
                     {"name", resolved},
                     {"enabled", TrackFX_GetEnabled(t, slot)},
-                    {"offline", TrackFX_GetOffline(t, slot)}};
+                    {"offline", TrackFX_GetOffline(t, slot)},
+                    {"hints", Hints::for_fx(t, index, slot)}};
         });
     });
     if (executor_error(res, result))
@@ -957,7 +961,8 @@ void handle_state_add_send(const httplib::Request& req, httplib::Response& res) 
                     {"send_index", sidx},
                     {"dest_track", to_track},
                     {"volume_db", vol_to_db(sv)},
-                    {"pan", sp}};
+                    {"pan", sp},
+                    {"hints", Hints::for_send(src, index, dst)}};
         });
     });
     if (executor_error(res, result))

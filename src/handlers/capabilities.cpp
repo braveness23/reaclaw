@@ -95,6 +95,20 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
              {{"set",
                "POST /state/selection {tracks:[i,...]|\"all\"|\"none\", "
                "items:[j,...]|\"all\"|\"none\"}"}}},
+            {"perception",
+             {{"analyze_item",
+               "GET /analysis/item/{index}?measures=loudness,spectral&start=&end="},
+              {"analyze_file", "GET /analysis/file?path=ABS&measures=&start=&end="},
+              {"measures",
+               "loudness: lufs_i/rms_i/peak_db/true_peak_db (exact offline analysis) + "
+               "clipping; spectral: low/mid/high band energy + centroid_hz (estimated DSP)"},
+              {"meters", "GET /state/meters — live per-track + master peak/peak-hold (dBFS)"},
+              {"tagging",
+               "every measure carries method (offline_analysis|estimated_dsp|introspection|"
+               "derived) + confidence so the agent knows how much to trust it"},
+              {"hints",
+               "mutating responses to track/FX/send/item edits carry a hints[] array of "
+               "consequence-aware warnings ({code,severity,message})"}}},
             {"project",
              {{"read", "GET /project  (dirty, length, notes)"},
               {"set_notes", "POST /project/notes {notes}"},
@@ -116,6 +130,7 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                                     "GET /state/automation",
                                     "GET /state/markers",
                                     "GET /state/tempo",
+                                    "GET /state/meters",
                                     "GET /project"})},
             {"actions",
              {{"run", "POST /execute/action {id}"},

@@ -573,3 +573,76 @@ close/reopen, unlike the global SQLite store).
 > Note: REAPER stores ext-state keys case-insensitively and reports them
 > upper-cased in the enumerated `values` map; look-ups by `key` are
 > case-insensitive.
+
+---
+
+## Phase 4 — Audio perception (v1.5.0, #18)
+
+"The agent hears itself." Built-in, always-available analysis plus consequence
+hints. Every measure carries a **`method`** and **`confidence`** so the agent
+knows how much to trust it:
+
+| method | meaning | confidence |
+|--------|---------|-----------|
+| `offline_analysis` | REAPER's exact offline decode (loudness/peak via `CalculateNormalization`) | 1.0 |
+| `derived` | computed from an exact measure (clipping from true-peak) | 1.0 |
+| `introspection` | REAPER's own live meters | 1.0 |
+| `estimated_dsp` | ReaClaw's own DSP over decoded samples (spectral FFT) | 0.6 |
+
+### GET /analysis/item/{index}
+
+Analyse a media item's active take source. Query: `measures=` (comma list of
+`loudness` / `spectral`, default both), `start=` / `end=` (source-relative
+seconds; default whole source). 400 if the item is empty or a MIDI take (no
+audio source). Runs on the main thread with a 30 s budget — for very long
+sources, pass a `start`/`end` window (else a `408` is possible).
+
+```json
+{
+  "item_index": 1,
+  "source": { "file": "...", "type": "WAVE", "length": 1.5, "sample_rate": 44100, "num_channels": 1 },
+  "window": { "start": 0.0, "end": null },
+  "loudness": { "lufs_i": -22.3, "rms_i": -21.7, "peak_db": -18.1, "true_peak_db": -18.1,
+                "method": "offline_analysis", "confidence": 1.0 },
+  "clipping": { "digital": false, "inter_sample": false, "true_peak_db": -18.1,
+                "method": "derived", "confidence": 1.0 },
+  "spectral": { "low": 0.00001, "mid": 0.9999, "high": 1e-8, "centroid_hz": 440.0,
+                "dominant_band": "mid", "frames_analyzed": 17,
+                "bands_hz": { "low": "<250", "mid": "250-4000", "high": ">4000" },
+                "method": "estimated_dsp", "confidence": 0.6 }
+}
+```
+
+- **loudness** — `lufs_i` (integrated LUFS), `rms_i`, `peak_db`, `true_peak_db`
+  (all dBFS/LUFS; `-150` = silence).
+- **clipping** — `digital` (sample peak ≥ 0 dBFS), `inter_sample` (true-peak > 0 dBTP).
+- **spectral** — fractional energy in three bands (sum ≈ 1) + spectral
+  `centroid_hz`; a rough digest, not a calibrated analyzer.
+
+### GET /analysis/file?path=…
+
+Same payload for an arbitrary audio file (e.g. a freshly rendered stem/mix).
+`path` must be an absolute path REAPER can decode; 404 if it can't be opened.
+
+### GET /state/meters
+
+Live per-track and master peak metering — `peak_db` and `peak_hold_db` as
+`[L, R]` arrays in dBFS, plus `audio_running`. These are REAPER's own meters
+(`method: introspection`) and are only meaningful while audio is running
+(play/record); `-150` = no signal.
+
+### Consequence-aware hints
+
+Mutating responses for **track update**, **add FX**, **add send**, and **item
+create/update** now carry a `hints` array — the *consequence of that specific
+edit* against the current session:
+
+```json
+"hints": [ { "code": "muted_track", "severity": "warn",
+             "message": "This track is on track 0, which is muted — you won't hear it." } ]
+```
+
+Invariants (hand-authored set): `muted_track`, `solo_elsewhere`,
+`near_silent_fader`, `routes_nowhere`, `phase_inverted`, `recarm_no_input`,
+`fx_offline`, `fx_bypassed`, `send_dest_routes_nowhere`, `send_dest_muted`,
+`empty_item`, `midi_no_instrument`. Empty array when nothing trips.

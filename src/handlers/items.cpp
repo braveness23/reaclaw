@@ -1,6 +1,7 @@
 #include "handlers/items.h"
 
 #include "handlers/common.h"
+#include "handlers/hints.h"
 #include "reaper/executor.h"
 #include "util/logging.h"
 
@@ -270,7 +271,9 @@ void handle_items_post(const httplib::Request& req, httplib::Response& res) {
                     SetMediaItemInfo_Value(it, "D_LENGTH", length >= 0.0 ? length : 1.0);
                     apply_item_props(it, spec);  // honor take/selection on create too
                     int idx = static_cast<int>(GetMediaItemInfo_Value(it, "IP_ITEMNUMBER"));
-                    created.push_back(item_to_json(it, idx));
+                    auto j = item_to_json(it, idx);
+                    j["hints"] = Hints::for_item(it, idx);
+                    created.push_back(j);
                 }
             }
             if (has_update) {
@@ -311,7 +314,9 @@ void handle_item_update(const httplib::Request& req, httplib::Response& res) {
                 return {{"_not_found", true}};
             apply_item_props(it, body);
             UpdateArrange();
-            return item_to_json(it, index);
+            auto j = item_to_json(it, index);
+            j["hints"] = Hints::for_item(it, index);
+            return j;
         });
     });
     if (exec_error(res, result))

@@ -3,6 +3,7 @@
 #include "app.h"
 #include "auth/auth.h"
 #include "config/config.h"
+#include "handlers/analysis.h"
 #include "handlers/capabilities.h"
 #include "handlers/catalog.h"
 #include "handlers/common.h"
@@ -207,6 +208,15 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                }));
     svr.Get("/state/items", auth_wrap(cfg, Handlers::handle_items_get));
     svr.Post("/state/items", auth_wrap(cfg, Handlers::handle_items_post));
+
+    // --- Audio perception (Epic #18) ---
+    svr.Get("/state/meters", auth_wrap(cfg, Handlers::handle_meters));
+    svr.Get(R"(/analysis/item/(\d+))",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                Handlers::handle_analysis_item(req, res);
+            }));
+    svr.Get("/analysis/file", auth_wrap(cfg, Handlers::handle_analysis_file));
 
     // Markers & regions.
     svr.Get("/state/markers", auth_wrap(cfg, Handlers::handle_markers_get));
