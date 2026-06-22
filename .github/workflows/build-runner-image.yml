@@ -1,0 +1,40 @@
+name: Build runner image
+
+# Builds and pushes the self-hosted CI runner image (reaclaw-ci-runner) to GHCR.
+# Runs on a GitHub-hosted runner (not the self-hosted one) so it works even
+# before the k3s scale set exists / when the toolchain image is being changed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/runner-image/Dockerfile'
+      - '.github/workflows/build-runner-image.yml'
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  build:
+    name: Build and push reaclaw-ci-runner
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .github/runner-image
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/reaclaw-ci-runner:latest
+            ghcr.io/${{ github.repository_owner }}/reaclaw-ci-runner:${{ github.sha }}
