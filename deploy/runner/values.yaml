@@ -1,0 +1,47 @@
+# Helm values for a gha-runner-scale-set bound to braveness23/reaclaw.
+#
+# Runner scale sets are repo-scoped, so ReaClaw needs its own set (the
+# arc-runner-omega / arc-runner-omega-private sets only serve their repos). This
+# registers an in-cluster runner for reaclaw; CI jobs target it via
+# `runs-on: arc-runner-reaclaw`.
+#
+# Install (see deploy/scripts/install-runner.sh — the GitHub token is supplied at
+# install time and is NOT stored in git):
+#   GITHUB_PAT=ghp_xxx deploy/scripts/install-runner.sh
+#
+# which runs:
+#   helm upgrade --install arc-runner-reaclaw \
+#     oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+#     --version 0.14.0 -n arc-runners -f deploy/runner/values.yaml
+
+githubConfigUrl: https://github.com/braveness23/reaclaw
+
+# Pre-created secret (made by install-runner.sh), so no token lives in git.
+githubConfigSecret: arc-runner-reaclaw-github-secret
+
+controllerServiceAccount:
+  name: arc-controller-gha-rs-controller
+  namespace: arc-systems
+
+runnerScaleSetName: arc-runner-reaclaw
+runnerGroup: Default
+maxRunners: 2
+minRunners: 0
+
+template:
+  spec:
+    containers:
+      - name: runner
+        image: ghcr.io/braveness23/reaclaw-ci-runner:latest
+        command:
+          - /home/runner/run.sh
+        env:
+          - name: ACTIONS_RUNNER_PRINT_LOG_TO_STDOUT
+            value: "1"
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: "1"
+            memory: 1Gi
