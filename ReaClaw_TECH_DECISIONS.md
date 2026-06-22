@@ -275,6 +275,46 @@ render/freeze, project open/save. These may graduate later if usage warrants.
 
 ---
 
+## 17. Audio Perception: built-in, exact-where-possible, tagged (Epic #18)
+
+**Decision:** ReaClaw analyses audio **in-process**, built-in and always
+available (no external tool), and **tags every measure** with a `method` and
+`confidence` so the agent trusts each number appropriately:
+
+- **Loudness / level — exact.** LUFS-I, RMS-I, peak, and true-peak come from
+  REAPER's own offline analyser (`CalculateNormalization`, full decode). Tagged
+  `offline_analysis`, confidence 1.0. Clipping is `derived` from true-peak.
+- **Spectral balance — estimated.** A rough low/mid/high band-energy digest +
+  spectral centroid, computed by decoding samples (`PCM_source::GetSamples`)
+  through a small in-tree FFT. Tagged `estimated_dsp`, confidence 0.6 — a digest,
+  not a calibrated analyzer.
+- **Metering — introspection.** `/state/meters` reads REAPER's live meters
+  (`Track_GetPeakInfo`/`Track_GetPeakHoldDB`); only meaningful while audio runs.
+
+**Consequence vs. observation (from IDEAS).** Analysis endpoints are *independent
+observations* the agent asks for. **Hints** are the *consequence of a specific
+edit* and ride inline on that edit's mutating response (`hints[]`) — a small
+hand-authored invariant set, distinct from (though sharing a channel with) the
+future learned suggestions of Epic #5.
+
+**Rationale:** "Most REAPER bridges are blind command pipes." The cheap, exact
+loudness path already existed in the SDK, so it would be perverse to estimate it;
+spectral has no built-in primitive, so a tagged estimate is the honest answer.
+Token economy (IDEAS): prefer a number/digest over an image, targeted over total,
+heavier feedback opt-in (`measures=` filter, `start`/`end` windowing).
+
+**Open questions (carried, deliberately unresolved):**
+- **DSP locus.** Analysis runs on the main thread (SDK safety) inside a 30 s
+  budget; a long source can freeze the UI briefly or `408`. A dedicated
+  out-of-process analyzer would fix both at a footprint/complexity cost — revisit
+  if long-render analysis becomes common.
+- **Onset / density** detection is deferred (transient analysis is higher
+  complexity and outside #18's acceptance criteria).
+- **Musical attributes** (key/tempo/pitch) stay gated behind the optional
+  external tool of Epic #4, per the 2026-06-20 "advanced optional" decision.
+
+---
+
 ## Summary
 
 | Concern | Decision |

@@ -9,6 +9,42 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-22
+
+Epic #18 — Audio perception ("the agent hears itself"). The headline
+differentiator: the agent can now **measure its own output** and is told the
+**consequence of its own edits**. Built-in, always-available, no external tool.
+Every measure is tagged with a `method` + `confidence` so the agent trusts each
+number correctly. Verified live on REAPER 7.74 (aarch64): 12/12 checks, incl. a
+440 Hz sine resolving to a 439.997 Hz spectral centroid.
+
+### Added
+- **Loudness analysis** — `GET /analysis/item/{index}` and
+  `GET /analysis/file?path=` return exact offline LUFS-I / RMS-I / peak /
+  true-peak (via REAPER's `CalculateNormalization` full-decode) plus derived
+  clipping (digital + inter-sample). `?measures=` filter and `start`/`end`
+  windowing. (#18)
+- **Spectral balance** — a rough low/mid/high band-energy digest + spectral
+  centroid, computed by decoding samples (`PCM_source::GetSamples`) through a
+  small in-tree FFT. Tagged `estimated_dsp`, confidence 0.6. (#18)
+- **Live metering** — `GET /state/meters`: per-track + master `peak_db` /
+  `peak_hold_db` (dBFS) from REAPER's own meters, plus `audio_running`. (#18)
+- **Consequence-aware hints (Q3)** — mutating responses for track update, add
+  FX, add send, and item create/update carry a `hints[]` array of hand-authored
+  invariants surfaced inline (`muted_track`, `solo_elsewhere`,
+  `near_silent_fader`, `routes_nowhere`, `recarm_no_input`, `fx_offline`,
+  `fx_bypassed`, `send_dest_routes_nowhere`, `send_dest_muted`, `empty_item`,
+  `midi_no_instrument`, `phase_inverted`). (#18)
+- All analysis output tagged `method` (`offline_analysis` / `estimated_dsp` /
+  `introspection` / `derived`) + `confidence`. `/capabilities` gains a
+  `perception` section; `docs/API.md` and TECH_DECISIONS §17 updated.
+
+### Deferred (within #18)
+- Onset/density detection (transient analysis) — not in the epic's acceptance
+  criteria; the Lua escape hatch + the loudness/spectral surface cover the
+  near-term need. DSP locus (in-process vs. dedicated analyzer) recorded as an
+  open question in TECH_DECISIONS §17.
+
 ## [1.4.0] - 2026-06-22
 
 Epic #17 — Tier-B content manipulation. Media items, takes, and sources were
