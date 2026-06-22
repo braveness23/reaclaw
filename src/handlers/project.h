@@ -33,4 +33,12 @@ void handle_tempo_post(const httplib::Request& req, httplib::Response& res);  //
 // Beat <-> time conversion utilities.
 void handle_time_convert(const httplib::Request& req, httplib::Response& res);  // GET /time
 
+// Epic #17 — per-project ext state (persistent agent scratchpad in the .rpp).
+void handle_extstate_get(const httplib::Request& req,
+                         httplib::Response& res);  // GET    /project/extstate
+void handle_extstate_post(const httplib::Request& req,
+                          httplib::Response& res);  // POST   /project/extstate
+void handle_extstate_delete(const httplib::Request& req,
+                            httplib::Response& res);  // DELETE /project/extstate
+
 }  // namespace ReaClaw::Handlers

@@ -142,6 +142,41 @@ void apply_track_props(MediaTrack* track, const nlohmann::json& b) {
         double p = std::max(-1.0, std::min(1.0, b["pan"].get<double>()));
         GetSetMediaTrackInfo(track, "D_PAN", &p);
     }
+    // --- Tier-B track extras (Epic #17) ---
+    if (b.contains("phase") && b["phase"].is_boolean()) {
+        bool ph = b["phase"].get<bool>();
+        GetSetMediaTrackInfo(track, "B_PHASE", &ph);
+    }
+    if (b.contains("n_channels") && b["n_channels"].is_number_integer()) {
+        // 2..128, even numbers only.
+        int nc = std::max(2, std::min(128, b["n_channels"].get<int>()));
+        nc &= ~1;
+        GetSetMediaTrackInfo(track, "I_NCHAN", &nc);
+    }
+    if (b.contains("pan_mode") && b["pan_mode"].is_number_integer()) {
+        int pm = b["pan_mode"].get<int>();
+        GetSetMediaTrackInfo(track, "I_PANMODE", &pm);
+    }
+    if (b.contains("dual_pan_l") && b["dual_pan_l"].is_number()) {
+        double d = std::max(-1.0, std::min(1.0, b["dual_pan_l"].get<double>()));
+        GetSetMediaTrackInfo(track, "D_DUALPANL", &d);
+    }
+    if (b.contains("dual_pan_r") && b["dual_pan_r"].is_number()) {
+        double d = std::max(-1.0, std::min(1.0, b["dual_pan_r"].get<double>()));
+        GetSetMediaTrackInfo(track, "D_DUALPANR", &d);
+    }
+    if (b.contains("rec_input") && b["rec_input"].is_number_integer()) {
+        int ri = b["rec_input"].get<int>();
+        GetSetMediaTrackInfo(track, "I_RECINPUT", &ri);
+    }
+    if (b.contains("midi_hw_out") && b["midi_hw_out"].is_number_integer()) {
+        int mo = b["midi_hw_out"].get<int>();
+        GetSetMediaTrackInfo(track, "I_MIDIHWOUT", &mo);
+    }
+    if (b.contains("main_send") && b["main_send"].is_boolean()) {
+        bool ms = b["main_send"].get<bool>();
+        GetSetMediaTrackInfo(track, "B_MAINSEND", &ms);
+    }
 }
 
 // Apply any present send properties (category 0 = track sends) from a JSON
@@ -257,7 +292,9 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
         char fx_name[256] = {};
         TrackFX_GetFXName(track, fx, fx_name, sizeof(fx_name));
         bool enabled = TrackFX_GetEnabled(track, fx);
-        fx_arr.push_back({{"slot", fx}, {"name", fx_name}, {"enabled", enabled}});
+        bool offline = TrackFX_GetOffline(track, fx);
+        fx_arr.push_back(
+                {{"slot", fx}, {"name", fx_name}, {"enabled", enabled}, {"offline", offline}});
     }
 
     std::string guid_str;
@@ -283,6 +320,32 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
             color = hex;
         }
     }
+
+    // Tier-B track extras (Epic #17): phase, channel count, pan mode + dual-pan
+    // positions, record input, MIDI hardware output, parent send.
+    bool phase = false;
+    if (auto* ph = static_cast<bool*>(GetSetMediaTrackInfo(track, "B_PHASE", nullptr)))
+        phase = *ph;
+    int n_channels = 2;
+    if (auto* nc = static_cast<int*>(GetSetMediaTrackInfo(track, "I_NCHAN", nullptr)))
+        n_channels = *nc;
+    int pan_mode = 0;
+    if (auto* pm = static_cast<int*>(GetSetMediaTrackInfo(track, "I_PANMODE", nullptr)))
+        pan_mode = *pm;
+    double dual_pan_l = 0.0, dual_pan_r = 0.0;
+    if (auto* d = static_cast<double*>(GetSetMediaTrackInfo(track, "D_DUALPANL", nullptr)))
+        dual_pan_l = *d;
+    if (auto* d = static_cast<double*>(GetSetMediaTrackInfo(track, "D_DUALPANR", nullptr)))
+        dual_pan_r = *d;
+    int rec_input = -1;
+    if (auto* ri = static_cast<int*>(GetSetMediaTrackInfo(track, "I_RECINPUT", nullptr)))
+        rec_input = *ri;
+    int midi_hw_out = -1;
+    if (auto* mo = static_cast<int*>(GetSetMediaTrackInfo(track, "I_MIDIHWOUT", nullptr)))
+        midi_hw_out = *mo;
+    bool main_send = true;
+    if (auto* ms = static_cast<bool*>(GetSetMediaTrackInfo(track, "B_MAINSEND", nullptr)))
+        main_send = *ms;
 
     int send_count = GetTrackNumSends(track, 1);
 
@@ -321,6 +384,14 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
             {"pan", pan},
             {"folder_depth", folder_depth},
             {"color", color},
+            {"phase", phase},
+            {"n_channels", n_channels},
+            {"pan_mode", pan_mode},
+            {"dual_pan_l", dual_pan_l},
+            {"dual_pan_r", dual_pan_r},
+            {"rec_input", rec_input},
+            {"midi_hw_out", midi_hw_out},
+            {"main_send", main_send},
             {"fx", fx_arr},
             {"send_count", send_count},
             {"sends", sends}};
@@ -468,50 +539,8 @@ void handle_state_set_track(const httplib::Request& req, httplib::Response& res)
     json_ok(res, result);
 }
 
-// GET /state/items
-void handle_state_items(const httplib::Request& req, httplib::Response& res) {
-    (void)req;
-    auto cached = state_cache_get("items");
-    if (!cached.is_null()) {
-        json_ok(res, cached);
-        return;
-    }
-
-    int n = CountMediaItems(nullptr);
-    nlohmann::json items = nlohmann::json::array();
-
-    for (int i = 0; i < n; i++) {
-        MediaItem* item = GetMediaItem(nullptr, i);
-        if (!item)
-            continue;
-
-        double pos = GetMediaItemInfo_Value(item, "D_POSITION");
-        double length = GetMediaItemInfo_Value(item, "D_LENGTH");
-
-        MediaTrack* track = GetMediaItemTrack(item);
-        int track_idx = -1;
-        if (track) {
-            track_idx = static_cast<int>(GetMediaTrackInfo_Value(track, "IP_TRACKNUMBER")) - 1;
-        }
-
-        std::string take_name;
-        MediaItem_Take* take = GetActiveTake(item);
-        if (take) {
-            if (const char* tn = GetTakeName(take))
-                take_name = tn;
-        }
-
-        items.push_back({{"index", i},
-                         {"position", pos},
-                         {"length", length},
-                         {"track_index", track_idx},
-                         {"take_name", take_name}});
-    }
-
-    nlohmann::json data = {{"items", items}, {"total", n}};
-    state_cache_set("items", data);
-    json_ok(res, data);
-}
+// GET /state/items now lives in handlers/items.cpp (enriched with take + source
+// metadata as part of Epic #17 Tier-B content manipulation).
 
 // GET /state/selection
 void handle_state_selection(const httplib::Request& req, httplib::Response& res) {
@@ -741,6 +770,8 @@ void handle_state_add_fx(const httplib::Request& req, httplib::Response& res) {
                 return {{"_bad_request", true}, {"_message", "FX not found: " + fx_name}};
             if (body.contains("enabled") && body["enabled"].is_boolean())
                 TrackFX_SetEnabled(t, slot, body["enabled"].get<bool>());
+            if (body.contains("offline") && body["offline"].is_boolean())
+                TrackFX_SetOffline(t, slot, body["offline"].get<bool>());
             if (body.contains("params"))
                 apply_fx_params(t, slot, body["params"]);
             char resolved[256] = {};
@@ -748,7 +779,8 @@ void handle_state_add_fx(const httplib::Request& req, httplib::Response& res) {
             return {{"track", index},
                     {"slot", slot},
                     {"name", resolved},
-                    {"enabled", TrackFX_GetEnabled(t, slot)}};
+                    {"enabled", TrackFX_GetEnabled(t, slot)},
+                    {"offline", TrackFX_GetOffline(t, slot)}};
         });
     });
     if (executor_error(res, result))
@@ -777,6 +809,7 @@ void handle_state_get_fx(const httplib::Request& req, httplib::Response& res) {
                 {"slot", slot},
                 {"name", nm},
                 {"enabled", TrackFX_GetEnabled(t, slot)},
+                {"offline", TrackFX_GetOffline(t, slot)},
                 {"params", fx_params_json(t, slot)}};
     });
     if (executor_error(res, result))
@@ -803,6 +836,8 @@ void handle_state_set_fx(const httplib::Request& req, httplib::Response& res) {
                 return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
             if (body.contains("enabled") && body["enabled"].is_boolean())
                 TrackFX_SetEnabled(t, slot, body["enabled"].get<bool>());
+            if (body.contains("offline") && body["offline"].is_boolean())
+                TrackFX_SetOffline(t, slot, body["offline"].get<bool>());
             if (body.contains("params"))
                 apply_fx_params(t, slot, body["params"]);
             char nm[256] = {};
@@ -811,12 +846,57 @@ void handle_state_set_fx(const httplib::Request& req, httplib::Response& res) {
                     {"slot", slot},
                     {"name", nm},
                     {"enabled", TrackFX_GetEnabled(t, slot)},
+                    {"offline", TrackFX_GetOffline(t, slot)},
                     {"params", fx_params_json(t, slot)}};
         });
     });
     if (executor_error(res, result))
         return;
     invalidate_state_cache();
+    json_ok(res, result);
+}
+
+// POST /state/tracks/{index}/fx/{slot}/copy — copy (or move) this FX to another
+// track. Body: { "to_track": j, "to_slot": -1, "move": false }. to_slot -1
+// appends to the destination chain.
+void handle_fx_copy(const httplib::Request& req, httplib::Response& res) {
+    int index = 0, slot = 0;
+    if (!path_int(req, res, "index", index) || !path_int(req, res, "slot", slot))
+        return;
+    nlohmann::json body;
+    if (!parse_body(req, res, body))
+        return;
+    if (!body.contains("to_track") || !body["to_track"].is_number_integer()) {
+        json_error(res, 400, "Missing required field: to_track", "BAD_REQUEST");
+        return;
+    }
+    int to_track = body["to_track"].get<int>();
+    int to_slot = body.value("to_slot", -1);
+    bool move = body.value("move", false);
+    auto result = Executor::post([index, slot, to_track, to_slot, move]() -> nlohmann::json {
+        return with_undo("ReaClaw: copy FX", [&]() -> nlohmann::json {
+            int n = CountTracks(nullptr);
+            if (index < 0 || index >= n || to_track < 0 || to_track >= n)
+                return {{"_not_found", true}};
+            MediaTrack* src = GetTrack(nullptr, index);
+            MediaTrack* dst = GetTrack(nullptr, to_track);
+            if (!src || !dst)
+                return {{"_not_found", true}};
+            if (slot < 0 || slot >= TrackFX_GetCount(src))
+                return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
+            TrackFX_CopyToTrack(src, slot, dst, to_slot, move);
+            return {{"from_track", index},
+                    {"from_slot", slot},
+                    {"to_track", to_track},
+                    {"moved", move},
+                    {"dest_fx_count", TrackFX_GetCount(dst)}};
+        });
+    });
+    if (executor_error(res, result))
+        return;
+    invalidate_state_cache();
+    Log::info("FX copy: track " + std::to_string(index) + " slot " + std::to_string(slot) +
+              " -> track " + std::to_string(to_track));
     json_ok(res, result);
 }
 
@@ -946,43 +1026,71 @@ void handle_state_delete_send(const httplib::Request& req, httplib::Response& re
     json_ok(res, result);
 }
 
-// POST /state/selection — set the track selection.
-// Body: { "tracks": [i, ...] } or { "tracks": "all" } or { "tracks": "none" }
+// POST /state/selection — set the track and/or item selection.
+// Body may contain "tracks" and/or "items", each of which is an index array,
+// or the string "all" or "none":
+//   { "tracks": [i, ...] | "all" | "none", "items": [j, ...] | "all" | "none" }
 void handle_state_set_selection(const httplib::Request& req, httplib::Response& res) {
     nlohmann::json body;
     if (!parse_body(req, res, body))
         return;
-    if (!body.contains("tracks")) {
-        json_error(res, 400, "Missing required field: tracks", "BAD_REQUEST");
+    if (!body.contains("tracks") && !body.contains("items")) {
+        json_error(res, 400, "Provide 'tracks' and/or 'items'", "BAD_REQUEST");
         return;
     }
     auto result = Executor::post([body]() -> nlohmann::json {
-        int n = CountTracks(nullptr);
-        for (int i = 0; i < n; i++)
-            SetTrackSelected(GetTrack(nullptr, i), false);
+        nlohmann::json out = nlohmann::json::object();
 
-        const auto& sel = body["tracks"];
-        if (sel.is_string()) {
-            std::string s = sel.get<std::string>();
-            if (s == "all")
-                for (int i = 0; i < n; i++)
-                    SetTrackSelected(GetTrack(nullptr, i), true);
-            // "none" leaves everything deselected
-        } else if (sel.is_array()) {
-            for (const auto& e : sel) {
-                if (!e.is_number_integer())
-                    continue;
-                int i = e.get<int>();
-                if (i >= 0 && i < n)
-                    SetTrackSelected(GetTrack(nullptr, i), true);
+        if (body.contains("tracks")) {
+            int n = CountTracks(nullptr);
+            for (int i = 0; i < n; i++)
+                SetTrackSelected(GetTrack(nullptr, i), false);
+            const auto& sel = body["tracks"];
+            if (sel.is_string()) {
+                if (sel.get<std::string>() == "all")
+                    for (int i = 0; i < n; i++)
+                        SetTrackSelected(GetTrack(nullptr, i), true);
+            } else if (sel.is_array()) {
+                for (const auto& e : sel) {
+                    if (!e.is_number_integer())
+                        continue;
+                    int i = e.get<int>();
+                    if (i >= 0 && i < n)
+                        SetTrackSelected(GetTrack(nullptr, i), true);
+                }
             }
+            nlohmann::json selected = nlohmann::json::array();
+            for (int i = 0; i < n; i++)
+                if (GetMediaTrackInfo_Value(GetTrack(nullptr, i), "I_SELECTED") != 0.0)
+                    selected.push_back(i);
+            out["selected_tracks"] = selected;
         }
 
-        nlohmann::json selected = nlohmann::json::array();
-        for (int i = 0; i < n; i++)
-            if (GetMediaTrackInfo_Value(GetTrack(nullptr, i), "I_SELECTED") != 0.0)
-                selected.push_back(i);
-        return {{"selected_tracks", selected}};
+        if (body.contains("items")) {
+            int n = CountMediaItems(nullptr);
+            for (int i = 0; i < n; i++)
+                SetMediaItemSelected(GetMediaItem(nullptr, i), false);
+            const auto& sel = body["items"];
+            if (sel.is_string()) {
+                if (sel.get<std::string>() == "all")
+                    for (int i = 0; i < n; i++)
+                        SetMediaItemSelected(GetMediaItem(nullptr, i), true);
+            } else if (sel.is_array()) {
+                for (const auto& e : sel) {
+                    if (!e.is_number_integer())
+                        continue;
+                    int i = e.get<int>();
+                    if (i >= 0 && i < n)
+                        SetMediaItemSelected(GetMediaItem(nullptr, i), true);
+                }
+            }
+            nlohmann::json selected = nlohmann::json::array();
+            for (int i = 0; i < n; i++)
+                if (GetMediaItemInfo_Value(GetMediaItem(nullptr, i), "B_UISEL") != 0.0)
+                    selected.push_back(i);
+            out["selected_items"] = selected;
+        }
+        return out;
     });
     if (executor_error(res, result))
         return;

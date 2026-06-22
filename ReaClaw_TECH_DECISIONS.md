@@ -255,9 +255,23 @@ mutation is now a single undoable step), FX presets + real-unit param metadata,
 send extended props (mute/phase/mono/mode), project extras (dirty/length/notes),
 and a MIDI-editor catalog section.
 
-**Still not in scope as verbs (reach via action or script):** media items/takes,
-MIDI events, render/freeze, project open/save. These may graduate later if usage
-warrants.
+**Graduated to verbs (Epic #17, v1.4.0):** media items/takes/sources. Items moved
+from read-only to full CRUD (create/move/split/trim/delete, position/length/fade/
+vol/mute writes), with take properties (vol/pan/pitch/playrate/preserve-pitch) and
+source metadata (file/type/length/sample-rate/channels) on reads. Also graduated:
+track extras (phase, channel count, pan mode + dual-pan, rec input, MIDI hw out,
+parent send), FX copy-to-track and online/offline, item selection write, and a
+persistent per-project ext-state scratchpad (`/project/extstate`). Justified the
+same way as Epic #16 — these are the objects *inside* a track that a real arranging
+session manipulates constantly, so a thin typed verb beats coercing them out of Lua.
+
+**Tier-C deferred within Epic #17 (still reach via action or script):** take FX
+chains (`TakeFX_*`), MIDI note/event CRUD (Lua already covers it well), and
+multi-project support. Lower frequency / higher complexity; the Lua escape hatch
+is the right layer for now.
+
+**Still not in scope as verbs (reach via action or script):** MIDI events,
+render/freeze, project open/save. These may graduate later if usage warrants.
 
 ---
 

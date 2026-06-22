@@ -360,6 +360,29 @@ Extends tiered coverage with the high-value SDK gaps from
 - [x] **Catalog `interactive` flag** — modal-dialog detection (name heuristic + curated IDs).
 - [x] `GET /capabilities` + `ReaClaw_TECH_DECISIONS.md` §16 updated (graduation recorded).
 
+### Epic #17 — Tier-B content manipulation (v1.4.0) — **complete**
+Adds the write surface for the objects *inside* a track (roadmap Epic 2). All
+mutations wrapped in undo blocks; verified live on REAPER 7.74 (aarch64), 19/19
+live checks pass. New handler file `src/handlers/items.cpp`.
+- [x] **Item CRUD** — `POST /state/items` (create + batch update),
+      `POST /state/items/{index}` (update), `POST /state/items/{index}/split`,
+      `DELETE /state/items/{index}`, `GET /state/items/{index}`. Create accepts a
+      `file` (PCM source); update moves items across tracks
+      (`MoveMediaItemToTrack`), writes position/length/fades/vol/mute/selected.
+- [x] **Audio source metadata** — `source{file,type,length,length_is_beats,
+      sample_rate,num_channels}` exposed on item reads (active take).
+- [x] **Take properties** — `take{name,volume_db,pan,pitch,playrate,
+      preserve_pitch,polarity_flipped}` readable + writable.
+- [x] **Track extras** — `phase`, `n_channels`, `pan_mode`, `dual_pan_l/r`,
+      `rec_input`, `midi_hw_out`, `main_send` in track reads/writes.
+- [x] **FX copy** — `POST /state/tracks/{i}/fx/{slot}/copy {to_track,to_slot,move}`.
+- [x] **FX online/offline** — `offline` in FX reads; accepted in FX set/add.
+- [x] **Item selection write** — `POST /state/selection {items:[...]|"all"|"none"}`.
+- [x] **Project ext state** — `GET/POST/DELETE /project/extstate {section,key,value}`.
+- [x] `GET /capabilities`, `docs/API.md`, `CHANGELOG.md` updated.
+- Tier-C (take FX chains, MIDI note CRUD, multi-project) intentionally deferred —
+      Lua escape hatch covers them; see `ReaClaw_TECH_DECISIONS.md` §16.
+
 ### Stage 4 — Hear itself (Q1, Q3)
 - [ ] Audio analysis: loudness/true-peak/RMS/spectral/onsets/clip (built-in)
 - [ ] Consequence-aware hints inline on mutating responses (~10–20 rules)

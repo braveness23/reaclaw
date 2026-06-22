@@ -10,7 +10,6 @@ namespace ReaClaw::Handlers {
 void handle_state(const httplib::Request& req, httplib::Response& res);
 void handle_state_tracks(const httplib::Request& req, httplib::Response& res);
 void handle_state_set_track(const httplib::Request& req, httplib::Response& res);
-void handle_state_items(const httplib::Request& req, httplib::Response& res);
 void handle_state_selection(const httplib::Request& req, httplib::Response& res);
 void handle_state_automation(const httplib::Request& req, httplib::Response& res);
 
@@ -30,5 +29,8 @@ void handle_state_set_selection(const httplib::Request& req, httplib::Response& 
 void handle_fx_get_preset(const httplib::Request& req, httplib::Response& res);
 void handle_fx_set_preset(const httplib::Request& req, httplib::Response& res);
 void handle_automation_write(const httplib::Request& req, httplib::Response& res);
+
+// Epic #17 — Tier-B content manipulation.
+void handle_fx_copy(const httplib::Request& req, httplib::Response& res);
 
 }  // namespace ReaClaw::Handlers

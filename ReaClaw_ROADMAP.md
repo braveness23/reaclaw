@@ -22,6 +22,13 @@ Shipped:
   folder, `add_fx` + params, sends/routing, batch writes, selection write, `GET
   /capabilities`), and agent-friendliness (ReaClaw **Skill**, Python **MCP** with 18 typed
   tools, **semantic catalog search** via local Ollama).
+- **Epic 1 — Tier-A control verbs** — `v1.3.0` (#16): undo grouping, markers/regions,
+  tempo map + beat↔time, FX presets + real-unit param metadata, envelope writes,
+  send extended props, project extras, MIDI-editor catalog.
+- **Epic 2 — Tier-B content manipulation** — `v1.4.0` (#17): media item CRUD,
+  take properties, source metadata, track extras, FX copy + online/offline, item
+  selection write, per-project ext state. (Tier-C — take FX, MIDI note CRUD,
+  multi-project — intentionally deferred to the Lua escape hatch.)
 
 That means two of the original ideas are effectively **done**: **Q2** (session
 introspection — the structured `/state` surface) and **Q6** (discover-before-generate —
@@ -36,8 +43,8 @@ What remains is everything below.
 
 | # | Epic | Half | Sources | Issue |
 |---|------|------|---------|-------|
-| 1 | Tier-A control verbs | Control | API_ANALYSIS Tier A | [#16](https://github.com/braveness23/reaclaw/issues/16) |
-| 2 | Tier-B/C content manipulation | Control | API_ANALYSIS Tiers B/C | [#17](https://github.com/braveness23/reaclaw/issues/17) |
+| 1 | Tier-A control verbs ✅ *done (v1.3.0)* | Control | API_ANALYSIS Tier A | [#16](https://github.com/braveness23/reaclaw/issues/16) |
+| 2 | Tier-B/C content manipulation ✅ *Tier-B done (v1.4.0); Tier-C deferred* | Control | API_ANALYSIS Tiers B/C | [#17](https://github.com/braveness23/reaclaw/issues/17) |
 | 3 | Audio perception ("hears itself") | Perception | IDEAS Q1, Q3 | [#18](https://github.com/braveness23/reaclaw/issues/18) |
 | 4 | Visual perception & musical probes | Perception | IDEAS Q4, Q5, Q7 | [#19](https://github.com/braveness23/reaclaw/issues/19) |
 | 5 | Learned suggestions (the moat) | Learning | IDEAS Q8 | [#20](https://github.com/braveness23/reaclaw/issues/20) |
