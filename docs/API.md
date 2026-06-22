@@ -179,8 +179,9 @@ Returns 400 (`FX not found: ...`) if the plugin can't be resolved.
 
 ### GET /state/tracks/{index}/fx/{slot}
 
-FX slot detail incl. parameter list (`index`, `name`, normalized `value`,
-`formatted`).
+FX slot detail incl. parameter list. Each param: `index`, `name`, normalized
+`value` (0..1), `formatted` (display string), and the real-unit range `raw`
+(current value), `min`, `max`, `mid` — so an agent can reason in real units.
 
 ### POST /state/tracks/{index}/fx/{slot}
 
@@ -403,3 +404,82 @@ Query params: `limit` (default 50, max 500), `offset` (default 0), `agent_id` (o
 
 `type` is one of `"action"`, `"sequence"`. `target_name` is the resolved action
 name (omitted for rows logged before this field existed, or unknown ids).
+
+---
+
+## Phase 4 — Tier-A control verbs (v1.3.0, #16)
+
+All structured mutations below run inside a REAPER **undo block**, so each lands
+as one user-undoable step (a validation no-op creates no undo point).
+
+### GET /undo
+
+`{ "can_undo": "<desc>"|null, "can_redo": "<desc>"|null }` — what the next
+undo/redo would do.
+
+### POST /undo · POST /redo
+
+Perform one undo / redo step. Returns `{ "undone"|"redone": <bool>, "description": "<desc>" }`.
+
+### GET /state/markers
+
+`{ "markers": [ { enum_index, id, is_region, position, region_end, name, color } ] }`.
+`color` is `"#RRGGBB"` or `""`.
+
+### POST /state/markers
+
+Add a marker or region. `{ position, name?, is_region?, region_end?,
+color?("#RRGGBB"), id? }` (`id` = -1/omitted auto-assigns). Returns `{ id, is_region, position }`.
+
+### DELETE /state/markers/{id}
+
+Delete by displayed marker/region id. Query: `?is_region=true|false`.
+
+### GET /state/tempo
+
+Full tempo / time-signature map: `{ count, markers: [ { index, time, measure,
+beat, bpm, timesig_num, timesig_denom, linear } ] }`.
+
+### POST /state/tempo
+
+Add a tempo/time-sig marker. `{ time, bpm, timesig_num?, timesig_denom?, linear? }`.
+
+### GET /time
+
+Beat↔time conversion. `?time=SEC` → `{ time, full_beats, beat_in_measure,
+measure, measure_length_beats, timesig_denom }`. `?beats=B[&measure=M]` →
+`{ beats, time }`.
+
+### GET /state/tracks/{index}/fx/{slot}/preset
+
+`{ track, slot, preset, preset_index, preset_count }`.
+
+### POST /state/tracks/{index}/fx/{slot}/preset
+
+Load a preset by `{ "name": "..." }` or step with `{ "navigate": -1|1 }`.
+Returns the preset state. 400 if the preset isn't found / didn't change.
+
+### POST /state/tracks/{index}/sends/{send}
+
+Update an existing send: `{ volume_db?, pan?, muted?, phase?, mono?, mode? }`
+(`mode`: 0 post-fader, 1 pre-fx, 2 pre-fader). Returns the updated send.
+
+### POST /state/tracks/{index}/automation
+
+Write envelope points. `{ envelope: "Volume", points: [ { time, value, shape?,
+tension? } ], clear_range?: [start, end] }`. `value` is the envelope's native
+value. The named envelope must already be active on the track (else 400).
+Returns `{ track, envelope, points_written }`.
+
+### GET /project · POST /project/notes
+
+`GET /project` → `{ dirty, length, notes }` (dirty = unsaved-changes flag, a
+prompt-save signal). `POST /project/notes { notes }` sets the project notes
+scratchpad (persisted in the `.rpp`).
+
+### Catalog additions
+
+- `GET /catalog?section=midi_editor` and `GET /catalog/search?q=...&section=midi_editor`
+  query the MIDI editor action section instead of the main section.
+- Every catalog row now includes `interactive` (bool): true if the action opens a
+  modal dialog (so a headless agent should avoid firing it).

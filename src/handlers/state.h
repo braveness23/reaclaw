@@ -22,7 +22,13 @@ void handle_state_get_fx(const httplib::Request& req, httplib::Response& res);
 void handle_state_set_fx(const httplib::Request& req, httplib::Response& res);
 void handle_state_delete_fx(const httplib::Request& req, httplib::Response& res);
 void handle_state_add_send(const httplib::Request& req, httplib::Response& res);
+void handle_state_set_send(const httplib::Request& req, httplib::Response& res);
 void handle_state_delete_send(const httplib::Request& req, httplib::Response& res);
 void handle_state_set_selection(const httplib::Request& req, httplib::Response& res);
+
+// Epic #16 — Tier-A control verbs.
+void handle_fx_get_preset(const httplib::Request& req, httplib::Response& res);
+void handle_fx_set_preset(const httplib::Request& req, httplib::Response& res);
+void handle_automation_write(const httplib::Request& req, httplib::Response& res);
 
 }  // namespace ReaClaw::Handlers

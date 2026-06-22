@@ -342,6 +342,24 @@ stages, smallest/lowest-risk first.
       catalog signature, cosine ranking; graceful keyword fallback. (Recipes
       surface is covered by the Skill.)
 
+### Epic #16 — Tier-A control verbs (v1.3.0) — **complete**
+Extends tiered coverage with the high-value SDK gaps from
+`ReaClaw_REAPER_API_ANALYSIS.md` (roadmap Epic 1). All verified live on REAPER
+7.74 (aarch64); 38/38 unit tests pass.
+- [x] **Undo grouping** — `with_undo()` wraps every structured mutation; lands as
+      one undoable step (no-ops create no point). `GET /undo`, `POST /undo`,
+      `POST /redo`. Verified: draining the undo stack rolls back a full session.
+- [x] **Markers & regions** — `GET`/`POST /state/markers`, `DELETE /state/markers/{id}`.
+- [x] **Tempo/time-sig map** — `GET`/`POST /state/tempo`; beat↔time via `GET /time`.
+- [x] **FX presets** — `GET`/`POST /state/tracks/{i}/fx/{slot}/preset` (name/navigate).
+- [x] **FX param metadata** — real-unit `raw`/`min`/`max`/`mid` in FX param reads.
+- [x] **Envelope automation write** — `POST /state/tracks/{i}/automation`.
+- [x] **Send extended props** — `muted`/`phase`/`mono`/`mode` (create + `POST .../sends/{send}` + reads).
+- [x] **Project extras** — `GET /project` (dirty/length/notes), `POST /project/notes`.
+- [x] **MIDI editor catalog** — `?section=midi_editor` (separate `actions_midi` table; 1411 live).
+- [x] **Catalog `interactive` flag** — modal-dialog detection (name heuristic + curated IDs).
+- [x] `GET /capabilities` + `ReaClaw_TECH_DECISIONS.md` §16 updated (graduation recorded).
+
 ### Stage 4 — Hear itself (Q1, Q3)
 - [ ] Audio analysis: loudness/true-peak/RMS/spectral/onsets/clip (built-in)
 - [ ] Consequence-aware hints inline on mutating responses (~10–20 rules)

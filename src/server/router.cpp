@@ -8,6 +8,7 @@
 #include "handlers/common.h"
 #include "handlers/execute.h"
 #include "handlers/history.h"
+#include "handlers/project.h"
 #include "handlers/scripts.h"
 #include "handlers/state.h"
 #include "reaper/executor.h"
@@ -101,6 +102,19 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  Handlers::handle_state_add_fx(req, res);
              }));
+    // FX preset sub-resource (registered before the bare fx/{slot} routes).
+    svr.Get(R"(/state/tracks/(\d+)/fx/(\d+)/preset)",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
+                Handlers::handle_fx_get_preset(req, res);
+            }));
+    svr.Post(R"(/state/tracks/(\d+)/fx/(\d+)/preset)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
+                 Handlers::handle_fx_set_preset(req, res);
+             }));
     svr.Get(R"(/state/tracks/(\d+)/fx/(\d+))",
             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
@@ -126,12 +140,25 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  Handlers::handle_state_add_send(req, res);
              }));
+    svr.Post(R"(/state/tracks/(\d+)/sends/(\d+))",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["send"] = req.matches[2];
+                 Handlers::handle_state_set_send(req, res);
+             }));
     svr.Delete(R"(/state/tracks/(\d+)/sends/(\d+))",
                auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                    const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                    const_cast<httplib::Request&>(req).path_params["send"] = req.matches[2];
                    Handlers::handle_state_delete_send(req, res);
                }));
+
+    // Envelope automation write.
+    svr.Post(R"(/state/tracks/(\d+)/automation)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 Handlers::handle_automation_write(req, res);
+             }));
 
     // Single-track update + delete.
     svr.Post(R"(/state/tracks/(\d+))",
@@ -147,6 +174,27 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
 
     // Selection write.
     svr.Post("/state/selection", auth_wrap(cfg, Handlers::handle_state_set_selection));
+
+    // Markers & regions.
+    svr.Get("/state/markers", auth_wrap(cfg, Handlers::handle_markers_get));
+    svr.Post("/state/markers", auth_wrap(cfg, Handlers::handle_markers_post));
+    svr.Delete(R"(/state/markers/(\d+))",
+               auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                   const_cast<httplib::Request&>(req).path_params["id"] = req.matches[1];
+                   Handlers::handle_markers_delete(req, res);
+               }));
+
+    // Tempo / time-signature map.
+    svr.Get("/state/tempo", auth_wrap(cfg, Handlers::handle_tempo_get));
+    svr.Post("/state/tempo", auth_wrap(cfg, Handlers::handle_tempo_post));
+
+    // --- Project (dirty/length/notes) + undo/redo + time conversion ---
+    svr.Get("/undo", auth_wrap(cfg, Handlers::handle_undo_state));
+    svr.Post("/undo", auth_wrap(cfg, Handlers::handle_undo));
+    svr.Post("/redo", auth_wrap(cfg, Handlers::handle_redo));
+    svr.Get("/project", auth_wrap(cfg, Handlers::handle_project_get));
+    svr.Post("/project/notes", auth_wrap(cfg, Handlers::handle_project_notes));
+    svr.Get("/time", auth_wrap(cfg, Handlers::handle_time_convert));
 
     // Capability manifest.
     svr.Get("/capabilities", auth_wrap(cfg, Handlers::handle_capabilities));

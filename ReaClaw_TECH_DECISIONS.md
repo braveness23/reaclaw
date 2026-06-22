@@ -246,9 +246,18 @@ Tiered coverage targets the common 20% with typed verbs while keeping the action
 and Lua layers for everything else. Settled with Dave on 2026-06-20 (resolves the
 open question in issue #7). See `ReaClaw_IDEAS.md` and the Phase 4 checklist.
 
-**Not in scope as verbs (reach via action or script):** media items/takes, MIDI
-events, markers/regions, tempo/time-signature map, envelope point writes, render/
-freeze, project open/save. These may graduate to verbs later if usage warrants.
+**Graduated to verbs (Epic #16, v1.3.0):** markers/regions, tempo/time-signature
+map (read + add) with beat↔time utilities, and envelope point writes now have
+structured endpoints — the API-surface analysis (`ReaClaw_REAPER_API_ANALYSIS.md`
+Part 4) and real usage showed these are session primitives reached for constantly,
+so the cost of a thin verb is justified. Epic #16 also added undo grouping (every
+mutation is now a single undoable step), FX presets + real-unit param metadata,
+send extended props (mute/phase/mono/mode), project extras (dirty/length/notes),
+and a MIDI-editor catalog section.
+
+**Still not in scope as verbs (reach via action or script):** media items/takes,
+MIDI events, render/freeze, project open/save. These may graduate later if usage
+warrants.
 
 ---
 

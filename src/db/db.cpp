@@ -27,6 +27,19 @@ CREATE TABLE IF NOT EXISTS actions (
 CREATE VIRTUAL TABLE IF NOT EXISTS actions_fts
     USING fts5(name, category, content=actions, content_rowid=id);
 
+-- MIDI editor section actions are kept in their own table because their command
+-- IDs share the numeric namespace of the main section (a single `id` primary key
+-- across both would collide). Queried via /catalog?section=midi_editor.
+CREATE TABLE IF NOT EXISTS actions_midi (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL,
+    category   TEXT NOT NULL DEFAULT 'General',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS actions_midi_fts
+    USING fts5(name, category, content=actions_midi, content_rowid=id);
+
 CREATE TABLE IF NOT EXISTS scripts (
     id              TEXT PRIMARY KEY,
     name            TEXT NOT NULL,
