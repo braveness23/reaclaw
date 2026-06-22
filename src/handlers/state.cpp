@@ -12,6 +12,7 @@
 // REAPER SDK — extern declarations (REAPERAPI_IMPLEMENT only in reaper/api.cpp)
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -59,6 +60,20 @@ void invalidate_state_cache() {
     s_state_cache.erase("tracks");
     s_state_cache.erase("state");
     s_state_cache.erase("items");
+}
+
+// Run a mutating body inside a REAPER undo block so the change lands as one
+// coherent, user-undoable step (Edit > Undo "<desc>"). Main-thread only — call
+// from inside an Executor::post() lambda. When the body reports a validation
+// error (it mutated nothing), the block is closed with extraflags 0 so REAPER
+// creates no undo point, keeping the history clean on no-ops.
+nlohmann::json with_undo(const char* desc, const std::function<nlohmann::json()>& body) {
+    Undo_BeginBlock2(nullptr);
+    nlohmann::json r = body();
+    const bool changed = !(r.contains("_not_found") || r.contains("_bad_request") ||
+                           r.contains("_error"));
+    Undo_EndBlock2(nullptr, desc, changed ? -1 : 0);
+    return r;
 }
 
 // Parse "#RRGGBB" into a REAPER native color with the custom-color flag set.
@@ -129,6 +144,30 @@ void apply_track_props(MediaTrack* track, const nlohmann::json& b) {
     }
 }
 
+// Apply any present send properties (category 0 = track sends) from a JSON
+// object: vol/pan plus the extended props (mute, phase, mono, send mode).
+// Main-thread only. Silently ignores absent or wrongly-typed fields.
+void apply_send_props(MediaTrack* src, int sidx, const nlohmann::json& b) {
+    if (b.contains("volume_db") && b["volume_db"].is_number()) {
+        double v = db_to_vol(b["volume_db"].get<double>());
+        SetTrackSendInfo_Value(src, 0, sidx, "D_VOL", v);
+    }
+    if (b.contains("pan") && b["pan"].is_number()) {
+        double p = std::max(-1.0, std::min(1.0, b["pan"].get<double>()));
+        SetTrackSendInfo_Value(src, 0, sidx, "D_PAN", p);
+    }
+    if (b.contains("muted") && b["muted"].is_boolean())
+        SetTrackSendInfo_Value(src, 0, sidx, "B_MUTE", b["muted"].get<bool>() ? 1.0 : 0.0);
+    if (b.contains("phase") && b["phase"].is_boolean())
+        SetTrackSendInfo_Value(src, 0, sidx, "B_PHASE", b["phase"].get<bool>() ? 1.0 : 0.0);
+    if (b.contains("mono") && b["mono"].is_boolean())
+        SetTrackSendInfo_Value(src, 0, sidx, "B_MONO", b["mono"].get<bool>() ? 1.0 : 0.0);
+    // Send mode: 0 = post-fader (default), 1 = pre-fx, 2 = pre-fader/post-fx.
+    if (b.contains("mode") && b["mode"].is_number_integer())
+        SetTrackSendInfo_Value(
+                src, 0, sidx, "I_SENDMODE", static_cast<double>(b["mode"].get<int>()));
+}
+
 // Resolve an FX param reference ({"index":N} or {"name":"Threshold"}) to a
 // 0-based param index, or -1 if not found. Main-thread only.
 int resolve_fx_param(MediaTrack* track, int fx, const nlohmann::json& p) {
@@ -162,7 +201,10 @@ void apply_fx_params(MediaTrack* track, int fx, const nlohmann::json& params) {
     }
 }
 
-// JSON snapshot of one FX slot's parameters (index, name, normalized + formatted).
+// JSON snapshot of one FX slot's parameters: index, name, normalized value,
+// formatted display string, and the real-unit range (min/max/mid + current raw
+// value from TrackFX_GetParamEx) so an agent can reason in real units instead
+// of guessing what a normalized 0..1 maps to.
 nlohmann::json fx_params_json(MediaTrack* track, int fx) {
     nlohmann::json arr = nlohmann::json::array();
     int n = TrackFX_GetNumParams(track, fx);
@@ -172,7 +214,16 @@ nlohmann::json fx_params_json(MediaTrack* track, int fx) {
         double norm = TrackFX_GetParamNormalized(track, fx, i);
         char fmt[256] = {};
         TrackFX_FormatParamValue(track, fx, i, norm, fmt, sizeof(fmt));
-        arr.push_back({{"index", i}, {"name", nm}, {"value", norm}, {"formatted", fmt}});
+        double pmin = 0.0, pmax = 1.0, pmid = 0.5;
+        double raw = TrackFX_GetParamEx(track, fx, i, &pmin, &pmax, &pmid);
+        arr.push_back({{"index", i},
+                       {"name", nm},
+                       {"value", norm},
+                       {"formatted", fmt},
+                       {"raw", raw},
+                       {"min", pmin},
+                       {"max", pmax},
+                       {"mid", pmid}});
     }
     return arr;
 }
@@ -242,6 +293,10 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
     for (int s = 0; s < nsends; s++) {
         double sv = GetTrackSendInfo_Value(track, 0, s, "D_VOL");
         double sp = GetTrackSendInfo_Value(track, 0, s, "D_PAN");
+        bool s_mute = GetTrackSendInfo_Value(track, 0, s, "B_MUTE") != 0.0;
+        bool s_phase = GetTrackSendInfo_Value(track, 0, s, "B_PHASE") != 0.0;
+        bool s_mono = GetTrackSendInfo_Value(track, 0, s, "B_MONO") != 0.0;
+        int s_mode = static_cast<int>(GetTrackSendInfo_Value(track, 0, s, "I_SENDMODE"));
         int dest_idx = -1;
         if (auto* dt = static_cast<MediaTrack*>(
                     GetSetTrackSendInfo(track, 0, s, "P_DESTTRACK", nullptr)))
@@ -249,7 +304,11 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
         sends.push_back({{"index", s},
                          {"dest_track", dest_idx},
                          {"volume_db", vol_to_db(sv)},
-                         {"pan", sp}});
+                         {"pan", sp},
+                         {"muted", s_mute},
+                         {"phase", s_phase},
+                         {"mono", s_mono},
+                         {"mode", s_mode}});
     }
 
     return {{"index", index},
@@ -372,15 +431,17 @@ void handle_state_set_track(const httplib::Request& req, httplib::Response& res)
 
     // All writes go through the command queue (main-thread safety)
     auto result = Executor::post([index, body]() -> nlohmann::json {
-        int n = CountTracks(nullptr);
-        if (index < 0 || index >= n)
-            return {{"_not_found", true}};
-        MediaTrack* track = GetTrack(nullptr, index);
-        if (!track)
-            return {{"_not_found", true}};
+        return with_undo("ReaClaw: update track", [&]() -> nlohmann::json {
+            int n = CountTracks(nullptr);
+            if (index < 0 || index >= n)
+                return {{"_not_found", true}};
+            MediaTrack* track = GetTrack(nullptr, index);
+            if (!track)
+                return {{"_not_found", true}};
 
-        apply_track_props(track, body);
-        return track_to_json(track, index);
+            apply_track_props(track, body);
+            return track_to_json(track, index);
+        });
     });
 
     if (result.contains("_timeout")) {
@@ -587,37 +648,39 @@ void handle_state_tracks_post(const httplib::Request& req, httplib::Response& re
     }
 
     auto result = Executor::post([body, has_create, has_update]() -> nlohmann::json {
-        nlohmann::json created = nlohmann::json::array();
-        nlohmann::json updated = nlohmann::json::array();
-        if (has_create) {
-            for (const auto& spec : body["create"]) {
-                if (!spec.is_object())
-                    continue;
-                int idx = CountTracks(nullptr);
-                InsertTrackAtIndex(idx, true);
-                MediaTrack* t = GetTrack(nullptr, idx);
-                if (t) {
-                    apply_track_props(t, spec);
-                    created.push_back(track_to_json(t, idx));
+        return with_undo("ReaClaw: edit tracks", [&]() -> nlohmann::json {
+            nlohmann::json created = nlohmann::json::array();
+            nlohmann::json updated = nlohmann::json::array();
+            if (has_create) {
+                for (const auto& spec : body["create"]) {
+                    if (!spec.is_object())
+                        continue;
+                    int idx = CountTracks(nullptr);
+                    InsertTrackAtIndex(idx, true);
+                    MediaTrack* t = GetTrack(nullptr, idx);
+                    if (t) {
+                        apply_track_props(t, spec);
+                        created.push_back(track_to_json(t, idx));
+                    }
                 }
             }
-        }
-        if (has_update) {
-            for (const auto& u : body["update"]) {
-                if (!u.is_object() || !u.contains("index") || !u["index"].is_number_integer())
-                    continue;
-                int i = u["index"].get<int>();
-                if (i < 0 || i >= CountTracks(nullptr))
-                    continue;
-                MediaTrack* t = GetTrack(nullptr, i);
-                if (t) {
-                    apply_track_props(t, u);
-                    updated.push_back(track_to_json(t, i));
+            if (has_update) {
+                for (const auto& u : body["update"]) {
+                    if (!u.is_object() || !u.contains("index") || !u["index"].is_number_integer())
+                        continue;
+                    int i = u["index"].get<int>();
+                    if (i < 0 || i >= CountTracks(nullptr))
+                        continue;
+                    MediaTrack* t = GetTrack(nullptr, i);
+                    if (t) {
+                        apply_track_props(t, u);
+                        updated.push_back(track_to_json(t, i));
+                    }
                 }
             }
-        }
-        TrackList_AdjustWindows(false);
-        return {{"created", created}, {"updated", updated}};
+            TrackList_AdjustWindows(false);
+            return {{"created", created}, {"updated", updated}};
+        });
     });
 
     if (executor_error(res, result))
@@ -634,14 +697,16 @@ void handle_state_delete_track(const httplib::Request& req, httplib::Response& r
     if (!path_int(req, res, "index", index))
         return;
     auto result = Executor::post([index]() -> nlohmann::json {
-        if (index < 0 || index >= CountTracks(nullptr))
-            return {{"_not_found", true}};
-        MediaTrack* t = GetTrack(nullptr, index);
-        if (!t)
-            return {{"_not_found", true}};
-        DeleteTrack(t);
-        TrackList_AdjustWindows(false);
-        return {{"deleted", index}};
+        return with_undo("ReaClaw: delete track", [&]() -> nlohmann::json {
+            if (index < 0 || index >= CountTracks(nullptr))
+                return {{"_not_found", true}};
+            MediaTrack* t = GetTrack(nullptr, index);
+            if (!t)
+                return {{"_not_found", true}};
+            DeleteTrack(t);
+            TrackList_AdjustWindows(false);
+            return {{"deleted", index}};
+        });
     });
     if (executor_error(res, result))
         return;
@@ -665,24 +730,26 @@ void handle_state_add_fx(const httplib::Request& req, httplib::Response& res) {
     }
     std::string fx_name = body["name"].get<std::string>();
     auto result = Executor::post([index, fx_name, body]() -> nlohmann::json {
-        if (index < 0 || index >= CountTracks(nullptr))
-            return {{"_not_found", true}};
-        MediaTrack* t = GetTrack(nullptr, index);
-        if (!t)
-            return {{"_not_found", true}};
-        int slot = TrackFX_AddByName(t, fx_name.c_str(), false, -1);
-        if (slot < 0)
-            return {{"_bad_request", true}, {"_message", "FX not found: " + fx_name}};
-        if (body.contains("enabled") && body["enabled"].is_boolean())
-            TrackFX_SetEnabled(t, slot, body["enabled"].get<bool>());
-        if (body.contains("params"))
-            apply_fx_params(t, slot, body["params"]);
-        char resolved[256] = {};
-        TrackFX_GetFXName(t, slot, resolved, sizeof(resolved));
-        return {{"track", index},
-                {"slot", slot},
-                {"name", resolved},
-                {"enabled", TrackFX_GetEnabled(t, slot)}};
+        return with_undo("ReaClaw: add FX", [&]() -> nlohmann::json {
+            if (index < 0 || index >= CountTracks(nullptr))
+                return {{"_not_found", true}};
+            MediaTrack* t = GetTrack(nullptr, index);
+            if (!t)
+                return {{"_not_found", true}};
+            int slot = TrackFX_AddByName(t, fx_name.c_str(), false, -1);
+            if (slot < 0)
+                return {{"_bad_request", true}, {"_message", "FX not found: " + fx_name}};
+            if (body.contains("enabled") && body["enabled"].is_boolean())
+                TrackFX_SetEnabled(t, slot, body["enabled"].get<bool>());
+            if (body.contains("params"))
+                apply_fx_params(t, slot, body["params"]);
+            char resolved[256] = {};
+            TrackFX_GetFXName(t, slot, resolved, sizeof(resolved));
+            return {{"track", index},
+                    {"slot", slot},
+                    {"name", resolved},
+                    {"enabled", TrackFX_GetEnabled(t, slot)}};
+        });
     });
     if (executor_error(res, result))
         return;
@@ -726,24 +793,26 @@ void handle_state_set_fx(const httplib::Request& req, httplib::Response& res) {
     if (!parse_body(req, res, body))
         return;
     auto result = Executor::post([index, slot, body]() -> nlohmann::json {
-        if (index < 0 || index >= CountTracks(nullptr))
-            return {{"_not_found", true}};
-        MediaTrack* t = GetTrack(nullptr, index);
-        if (!t)
-            return {{"_not_found", true}};
-        if (slot < 0 || slot >= TrackFX_GetCount(t))
-            return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
-        if (body.contains("enabled") && body["enabled"].is_boolean())
-            TrackFX_SetEnabled(t, slot, body["enabled"].get<bool>());
-        if (body.contains("params"))
-            apply_fx_params(t, slot, body["params"]);
-        char nm[256] = {};
-        TrackFX_GetFXName(t, slot, nm, sizeof(nm));
-        return {{"track", index},
-                {"slot", slot},
-                {"name", nm},
-                {"enabled", TrackFX_GetEnabled(t, slot)},
-                {"params", fx_params_json(t, slot)}};
+        return with_undo("ReaClaw: set FX", [&]() -> nlohmann::json {
+            if (index < 0 || index >= CountTracks(nullptr))
+                return {{"_not_found", true}};
+            MediaTrack* t = GetTrack(nullptr, index);
+            if (!t)
+                return {{"_not_found", true}};
+            if (slot < 0 || slot >= TrackFX_GetCount(t))
+                return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
+            if (body.contains("enabled") && body["enabled"].is_boolean())
+                TrackFX_SetEnabled(t, slot, body["enabled"].get<bool>());
+            if (body.contains("params"))
+                apply_fx_params(t, slot, body["params"]);
+            char nm[256] = {};
+            TrackFX_GetFXName(t, slot, nm, sizeof(nm));
+            return {{"track", index},
+                    {"slot", slot},
+                    {"name", nm},
+                    {"enabled", TrackFX_GetEnabled(t, slot)},
+                    {"params", fx_params_json(t, slot)}};
+        });
     });
     if (executor_error(res, result))
         return;
@@ -757,15 +826,17 @@ void handle_state_delete_fx(const httplib::Request& req, httplib::Response& res)
     if (!path_int(req, res, "index", index) || !path_int(req, res, "slot", slot))
         return;
     auto result = Executor::post([index, slot]() -> nlohmann::json {
-        if (index < 0 || index >= CountTracks(nullptr))
-            return {{"_not_found", true}};
-        MediaTrack* t = GetTrack(nullptr, index);
-        if (!t)
-            return {{"_not_found", true}};
-        if (slot < 0 || slot >= TrackFX_GetCount(t))
-            return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
-        bool ok = TrackFX_Delete(t, slot);
-        return {{"deleted", ok}, {"track", index}, {"slot", slot}};
+        return with_undo("ReaClaw: delete FX", [&]() -> nlohmann::json {
+            if (index < 0 || index >= CountTracks(nullptr))
+                return {{"_not_found", true}};
+            MediaTrack* t = GetTrack(nullptr, index);
+            if (!t)
+                return {{"_not_found", true}};
+            if (slot < 0 || slot >= TrackFX_GetCount(t))
+                return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
+            bool ok = TrackFX_Delete(t, slot);
+            return {{"deleted", ok}, {"track", index}, {"slot", slot}};
+        });
     });
     if (executor_error(res, result))
         return;
@@ -788,36 +859,66 @@ void handle_state_add_send(const httplib::Request& req, httplib::Response& res) 
     }
     int to_track = body["to_track"].get<int>();
     auto result = Executor::post([index, to_track, body]() -> nlohmann::json {
-        int n = CountTracks(nullptr);
-        if (index < 0 || index >= n || to_track < 0 || to_track >= n)
-            return {{"_not_found", true}};
-        MediaTrack* src = GetTrack(nullptr, index);
-        MediaTrack* dst = GetTrack(nullptr, to_track);
-        if (!src || !dst)
-            return {{"_not_found", true}};
-        int sidx = CreateTrackSend(src, dst);
-        if (sidx < 0)
-            return {{"_bad_request", true}, {"_message", "Failed to create send"}};
-        if (body.contains("volume_db") && body["volume_db"].is_number()) {
-            double v = db_to_vol(body["volume_db"].get<double>());
-            SetTrackSendInfo_Value(src, 0, sidx, "D_VOL", v);
-        }
-        if (body.contains("pan") && body["pan"].is_number()) {
-            double p = std::max(-1.0, std::min(1.0, body["pan"].get<double>()));
-            SetTrackSendInfo_Value(src, 0, sidx, "D_PAN", p);
-        }
-        double sv = GetTrackSendInfo_Value(src, 0, sidx, "D_VOL");
-        double sp = GetTrackSendInfo_Value(src, 0, sidx, "D_PAN");
-        return {{"track", index},
-                {"send_index", sidx},
-                {"dest_track", to_track},
-                {"volume_db", vol_to_db(sv)},
-                {"pan", sp}};
+        return with_undo("ReaClaw: add send", [&]() -> nlohmann::json {
+            int n = CountTracks(nullptr);
+            if (index < 0 || index >= n || to_track < 0 || to_track >= n)
+                return {{"_not_found", true}};
+            MediaTrack* src = GetTrack(nullptr, index);
+            MediaTrack* dst = GetTrack(nullptr, to_track);
+            if (!src || !dst)
+                return {{"_not_found", true}};
+            int sidx = CreateTrackSend(src, dst);
+            if (sidx < 0)
+                return {{"_bad_request", true}, {"_message", "Failed to create send"}};
+            apply_send_props(src, sidx, body);
+            double sv = GetTrackSendInfo_Value(src, 0, sidx, "D_VOL");
+            double sp = GetTrackSendInfo_Value(src, 0, sidx, "D_PAN");
+            return {{"track", index},
+                    {"send_index", sidx},
+                    {"dest_track", to_track},
+                    {"volume_db", vol_to_db(sv)},
+                    {"pan", sp}};
+        });
     });
     if (executor_error(res, result))
         return;
     invalidate_state_cache();
     Log::info("Track " + std::to_string(index) + " send -> " + std::to_string(to_track));
+    json_ok(res, result);
+}
+
+// POST /state/tracks/{index}/sends/{send} — update an existing send's
+// properties: { volume_db, pan, muted, phase, mono, mode }.
+void handle_state_set_send(const httplib::Request& req, httplib::Response& res) {
+    int index = 0, send = 0;
+    if (!path_int(req, res, "index", index) || !path_int(req, res, "send", send))
+        return;
+    nlohmann::json body;
+    if (!parse_body(req, res, body))
+        return;
+    auto result = Executor::post([index, send, body]() -> nlohmann::json {
+        return with_undo("ReaClaw: set send", [&]() -> nlohmann::json {
+            if (index < 0 || index >= CountTracks(nullptr))
+                return {{"_not_found", true}};
+            MediaTrack* t = GetTrack(nullptr, index);
+            if (!t)
+                return {{"_not_found", true}};
+            if (send < 0 || send >= GetTrackNumSends(t, 0))
+                return {{"_bad_request", true}, {"_message", "Send index out of range"}};
+            apply_send_props(t, send, body);
+            return {{"track", index},
+                    {"send_index", send},
+                    {"volume_db", vol_to_db(GetTrackSendInfo_Value(t, 0, send, "D_VOL"))},
+                    {"pan", GetTrackSendInfo_Value(t, 0, send, "D_PAN")},
+                    {"muted", GetTrackSendInfo_Value(t, 0, send, "B_MUTE") != 0.0},
+                    {"phase", GetTrackSendInfo_Value(t, 0, send, "B_PHASE") != 0.0},
+                    {"mono", GetTrackSendInfo_Value(t, 0, send, "B_MONO") != 0.0},
+                    {"mode", static_cast<int>(GetTrackSendInfo_Value(t, 0, send, "I_SENDMODE"))}};
+        });
+    });
+    if (executor_error(res, result))
+        return;
+    invalidate_state_cache();
     json_ok(res, result);
 }
 
@@ -827,15 +928,17 @@ void handle_state_delete_send(const httplib::Request& req, httplib::Response& re
     if (!path_int(req, res, "index", index) || !path_int(req, res, "send", send))
         return;
     auto result = Executor::post([index, send]() -> nlohmann::json {
-        if (index < 0 || index >= CountTracks(nullptr))
-            return {{"_not_found", true}};
-        MediaTrack* t = GetTrack(nullptr, index);
-        if (!t)
-            return {{"_not_found", true}};
-        if (send < 0 || send >= GetTrackNumSends(t, 0))
-            return {{"_bad_request", true}, {"_message", "Send index out of range"}};
-        bool ok = RemoveTrackSend(t, 0, send);
-        return {{"deleted", ok}, {"track", index}, {"send_index", send}};
+        return with_undo("ReaClaw: delete send", [&]() -> nlohmann::json {
+            if (index < 0 || index >= CountTracks(nullptr))
+                return {{"_not_found", true}};
+            MediaTrack* t = GetTrack(nullptr, index);
+            if (!t)
+                return {{"_not_found", true}};
+            if (send < 0 || send >= GetTrackNumSends(t, 0))
+                return {{"_bad_request", true}, {"_message", "Send index out of range"}};
+            bool ok = RemoveTrackSend(t, 0, send);
+            return {{"deleted", ok}, {"track", index}, {"send_index", send}};
+        });
     });
     if (executor_error(res, result))
         return;
@@ -884,6 +987,146 @@ void handle_state_set_selection(const httplib::Request& req, httplib::Response& 
     if (executor_error(res, result))
         return;
     invalidate_state_cache();
+    json_ok(res, result);
+}
+
+// GET /state/tracks/{index}/fx/{slot}/preset — current preset + count.
+void handle_fx_get_preset(const httplib::Request& req, httplib::Response& res) {
+    int index = 0, slot = 0;
+    if (!path_int(req, res, "index", index) || !path_int(req, res, "slot", slot))
+        return;
+    auto result = Executor::post([index, slot]() -> nlohmann::json {
+        if (index < 0 || index >= CountTracks(nullptr))
+            return {{"_not_found", true}};
+        MediaTrack* t = GetTrack(nullptr, index);
+        if (!t)
+            return {{"_not_found", true}};
+        if (slot < 0 || slot >= TrackFX_GetCount(t))
+            return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
+        char pname[512] = {};
+        TrackFX_GetPreset(t, slot, pname, sizeof(pname));
+        int total = 0;
+        int cur = TrackFX_GetPresetIndex(t, slot, &total);
+        return {{"track", index},
+                {"slot", slot},
+                {"preset", pname},
+                {"preset_index", cur},
+                {"preset_count", total}};
+    });
+    if (executor_error(res, result))
+        return;
+    json_ok(res, result);
+}
+
+// POST /state/tracks/{index}/fx/{slot}/preset — load a preset.
+// Body: { "name": "Bus Comp" }  OR  { "navigate": -1 | 1 }  (prev/next preset).
+void handle_fx_set_preset(const httplib::Request& req, httplib::Response& res) {
+    int index = 0, slot = 0;
+    if (!path_int(req, res, "index", index) || !path_int(req, res, "slot", slot))
+        return;
+    nlohmann::json body;
+    if (!parse_body(req, res, body))
+        return;
+    bool has_name = body.contains("name") && body["name"].is_string();
+    bool has_nav = body.contains("navigate") && body["navigate"].is_number_integer();
+    if (!has_name && !has_nav) {
+        json_error(res, 400, "Provide 'name' or 'navigate'", "BAD_REQUEST");
+        return;
+    }
+    auto result = Executor::post([index, slot, body, has_name, has_nav]() -> nlohmann::json {
+        return with_undo("ReaClaw: load FX preset", [&]() -> nlohmann::json {
+            if (index < 0 || index >= CountTracks(nullptr))
+                return {{"_not_found", true}};
+            MediaTrack* t = GetTrack(nullptr, index);
+            if (!t)
+                return {{"_not_found", true}};
+            if (slot < 0 || slot >= TrackFX_GetCount(t))
+                return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
+            bool ok = false;
+            if (has_name)
+                ok = TrackFX_SetPreset(t, slot, body["name"].get<std::string>().c_str());
+            else
+                ok = TrackFX_NavigatePresets(t, slot, body["navigate"].get<int>());
+            if (!ok)
+                return {{"_bad_request", true}, {"_message", "Preset not found / not changed"}};
+            char pname[512] = {};
+            TrackFX_GetPreset(t, slot, pname, sizeof(pname));
+            int total = 0;
+            int cur = TrackFX_GetPresetIndex(t, slot, &total);
+            return {{"track", index},
+                    {"slot", slot},
+                    {"preset", pname},
+                    {"preset_index", cur},
+                    {"preset_count", total}};
+        });
+    });
+    if (executor_error(res, result))
+        return;
+    invalidate_state_cache();
+    json_ok(res, result);
+}
+
+// POST /state/tracks/{index}/automation — write envelope points.
+// Body: { "envelope": "Volume", "points": [ {time, value, shape?, tension?} ],
+//         "clear_range": [start, end]? }
+// `value` is the envelope's native value (e.g. linear volume, pan -1..1). The
+// envelope is addressed by name (GetTrackEnvelopeByName); the FX/parameter
+// envelopes use names like "Volume", "Pan", "Mute".
+void handle_automation_write(const httplib::Request& req, httplib::Response& res) {
+    int index = 0;
+    if (!path_int(req, res, "index", index))
+        return;
+    nlohmann::json body;
+    if (!parse_body(req, res, body))
+        return;
+    if (!body.contains("envelope") || !body["envelope"].is_string()) {
+        json_error(res, 400, "Missing required field: envelope", "BAD_REQUEST");
+        return;
+    }
+    if (!body.contains("points") || !body["points"].is_array()) {
+        json_error(res, 400, "Missing required field: points (array)", "BAD_REQUEST");
+        return;
+    }
+    auto result = Executor::post([index, body]() -> nlohmann::json {
+        return with_undo("ReaClaw: write automation", [&]() -> nlohmann::json {
+            if (index < 0 || index >= CountTracks(nullptr))
+                return {{"_not_found", true}};
+            MediaTrack* t = GetTrack(nullptr, index);
+            if (!t)
+                return {{"_not_found", true}};
+            std::string env_name = body["envelope"].get<std::string>();
+            TrackEnvelope* env = GetTrackEnvelopeByName(t, env_name.c_str());
+            if (!env)
+                return {{"_bad_request", true},
+                        {"_message",
+                         "Envelope not found: " + env_name +
+                                 " (the parameter may need an active envelope first)"}};
+            if (body.contains("clear_range") && body["clear_range"].is_array() &&
+                body["clear_range"].size() == 2) {
+                double cs = body["clear_range"][0].get<double>();
+                double ce = body["clear_range"][1].get<double>();
+                DeleteEnvelopePointRange(env, cs, ce);
+            }
+            int written = 0;
+            for (const auto& p : body["points"]) {
+                if (!p.is_object() || !p.contains("time") || !p.contains("value"))
+                    continue;
+                double time = p["time"].get<double>();
+                double value = p["value"].get<double>();
+                int shape = p.value("shape", 0);
+                double tension = p.value("tension", 0.0);
+                bool noSort = true;  // sort once at the end for efficiency
+                if (InsertEnvelopePoint(env, time, value, shape, tension, false, &noSort))
+                    written++;
+            }
+            Envelope_SortPoints(env);
+            return {{"track", index}, {"envelope", env_name}, {"points_written", written}};
+        });
+    });
+    if (executor_error(res, result))
+        return;
+    invalidate_state_cache();
+    Log::info("Track " + std::to_string(index) + " automation write");
     json_ok(res, result);
 }
 

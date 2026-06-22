@@ -56,14 +56,45 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     similarity so natural-language queries map to actions; falls back to keyword
     search when embeddings are unavailable.
 
+- **Tier-A control verbs (Epic #16)** — the high-value structured verbs that previously
+  required parameterless actions or hand-written Lua:
+  - **Undo grouping** — every structured mutation now runs inside a REAPER undo block,
+    so each lands as a single, user-undoable step (no-ops create no undo point).
+    `GET /undo` (next undo/redo descriptions), `POST /undo`, `POST /redo`.
+  - **Markers & regions** — `GET`/`POST /state/markers`, `DELETE /state/markers/{id}`
+    (`?is_region=`); add by position with optional name/region-end/`#RRGGBB` color.
+  - **Tempo / time-signature map** — `GET`/`POST /state/tempo` (full map read; add a
+    tempo/time-sig marker). `GET /time?time=` / `?beats=[&measure=]` for beat↔seconds.
+  - **FX presets** — `GET`/`POST /state/tracks/{i}/fx/{slot}/preset` (load by `name`
+    or `navigate:-1|1`).
+  - **FX param metadata** — FX param reads now also carry real-unit `raw`/`min`/`max`/
+    `mid` (from `TrackFX_GetParamEx`), not just normalized 0..1.
+  - **Envelope automation write** — `POST /state/tracks/{i}/automation`
+    (`{envelope, points:[{time,value,shape,tension}], clear_range:[s,e]}`).
+  - **Send extended props** — `POST /state/tracks/{i}/sends/{send}` and the create
+    body now accept `muted`/`phase`/`mono`/`mode` (pre/post-fader); track `sends[]`
+    reads expose them too.
+  - **Project extras** — `GET /project` (dirty flag, length, notes), `POST /project/notes`.
+  - **MIDI editor catalog** — `GET /catalog[/search]?section=midi_editor` indexes the
+    MIDI editor action section (separate table to avoid main-section ID collisions).
+  - **Catalog `interactive` flag** — every catalog row now reports whether the action
+    opens a modal dialog (name heuristic + curated exceptions like `40696`), so agents
+    can avoid hanging headless.
+  - `GET /capabilities` updated to advertise all of the above.
+
 ### Changed
-- `GET /state/tracks` track objects now include a `sends` array.
+- `GET /state/tracks` track objects now include a `sends` array (with extended
+  `muted`/`phase`/`mono`/`mode` props per send).
+- Version bumped to **1.3.0**.
 
 ### Docs
 - Added `ReaClaw_IDEAS.md` — perception/learning/discovery idea queue and the
   direction decisions taken for the Phase 4 build-out.
+- Added `ReaClaw_ROADMAP.md` — consolidated forward plan (control + perception);
+  maps the open epics (#16–#20) to GitHub issues.
 - `ReaClaw_TECH_DECISIONS.md` §16 — API coverage is **tiered** (structured verbs +
-  action-runner + Lua escape hatch); resolves the open question in #7.
+  action-runner + Lua escape hatch); resolves the open question in #7. Updated to
+  record markers/regions, tempo map, and envelope writes graduating to verbs (#16).
 
 ---
 

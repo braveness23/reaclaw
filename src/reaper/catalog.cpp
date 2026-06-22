@@ -17,7 +17,10 @@ namespace {
 // Bump whenever build() changes how the catalog is populated, so existing
 // installs (whose catalog was built by an older version) rebuild on next load
 // even when the REAPER version is unchanged.
-constexpr int k_catalog_version = 3;
+constexpr int k_catalog_version = 4;
+
+// MIDI editor section unique ID (REAPER's keyboard-section identifier).
+constexpr int k_midi_editor_section = 32060;
 
 // Highest native main-section command ID to probe. REAPER's built-in action
 // IDs fit within a 16-bit range; scanning to this bound captures them all.
@@ -108,8 +111,43 @@ void build(DB& db, const std::string& reaper_version) {
         idx++;
     }
 
-    // Rebuild FTS5 content index
+    // MIDI editor section pass: index whatever the MIDI editor section exposes
+    // via live enumeration into the separate actions_midi table. Note: like the
+    // main section, REAPER's *native* MIDI actions are not SDK-enumerable, so a
+    // bundled native-MIDI ID->name table is a follow-up (mirrors the main-section
+    // native_actions.gen.h approach); this pass captures extension/script MIDI
+    // actions and any names the host does resolve.
+    db.execute("DELETE FROM actions_midi");
+    db.execute("DELETE FROM actions_midi_fts");
+    if (KbdSectionInfo* midi = SectionFromUniqueID(k_midi_editor_section)) {
+        if (kbd_getTextFromCmd) {
+            for (int cmd = 1; cmd <= k_max_native_cmd_id; cmd++) {
+                const char* name = kbd_getTextFromCmd(cmd, midi);
+                if (name && name[0] != '\0') {
+                    db.query(
+                            "INSERT OR REPLACE INTO actions_midi(id, name, category) "
+                            "VALUES(?1, ?2, ?3)",
+                            {std::to_string(cmd), std::string(name), extract_category(name)});
+                }
+            }
+        }
+        int midx = 0;
+        const char* mname = nullptr;
+        int mcmd = 0;
+        while ((mcmd = kbd_enumerateActions(midi, midx, &mname)) != 0) {
+            if (mname && mname[0] != '\0') {
+                db.query(
+                        "INSERT OR REPLACE INTO actions_midi(id, name, category) "
+                        "VALUES(?1, ?2, ?3)",
+                        {std::to_string(mcmd), std::string(mname), extract_category(mname)});
+            }
+            midx++;
+        }
+    }
+
+    // Rebuild FTS5 content indexes
     db.execute("INSERT INTO actions_fts(actions_fts) VALUES('rebuild')");
+    db.execute("INSERT INTO actions_midi_fts(actions_midi_fts) VALUES('rebuild')");
 
     db.execute("COMMIT");
 
