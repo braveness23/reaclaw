@@ -303,4 +303,101 @@ void handle_time_convert(const httplib::Request& req, httplib::Response& res) {
     json_error(res, 400, "Provide ?time= or ?beats=", "BAD_REQUEST");
 }
 
+// GET /project/extstate?section=S[&key=K]
+//   With section+key: the stored value (or null if unset).
+//   With section only: all key/value pairs stored under that section.
+// Per-project ext state lives inside the .rpp, so it survives close/reopen
+// (unlike the SQLite scratchpad, which is global to the ReaClaw install).
+void handle_extstate_get(const httplib::Request& req, httplib::Response& res) {
+    auto sit = req.params.find("section");
+    if (sit == req.params.end() || sit->second.empty()) {
+        json_error(res, 400, "Missing required query param: section", "BAD_REQUEST");
+        return;
+    }
+    std::string section = sit->second;
+    auto kit = req.params.find("key");
+    bool has_key = kit != req.params.end();
+    std::string key = has_key ? kit->second : "";
+
+    auto result = Executor::post([section, key, has_key]() -> nlohmann::json {
+        if (has_key) {
+            std::vector<char> buf(1 << 16, 0);
+            int got = GetProjExtState(nullptr,
+                                      section.c_str(),
+                                      key.c_str(),
+                                      buf.data(),
+                                      static_cast<int>(buf.size()));
+            return {{"section", section},
+                    {"key", key},
+                    {"value",
+                     got > 0 ? nlohmann::json(std::string(buf.data())) : nlohmann::json(nullptr)}};
+        }
+        nlohmann::json values = nlohmann::json::object();
+        for (int idx = 0;; idx++) {
+            std::vector<char> kbuf(4096, 0), vbuf(1 << 16, 0);
+            if (!EnumProjExtState(nullptr,
+                                  section.c_str(),
+                                  idx,
+                                  kbuf.data(),
+                                  static_cast<int>(kbuf.size()),
+                                  vbuf.data(),
+                                  static_cast<int>(vbuf.size())))
+                break;
+            values[std::string(kbuf.data())] = std::string(vbuf.data());
+        }
+        return {{"section", section}, {"values", values}};
+    });
+    if (exec_error(res, result))
+        return;
+    json_ok(res, result);
+}
+
+// POST /project/extstate — store a value. Body: { section, key, value }.
+void handle_extstate_post(const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(req.body);
+    } catch (...) {
+        json_error(res, 400, "Invalid JSON body", "BAD_REQUEST");
+        return;
+    }
+    if (!body.contains("section") || !body["section"].is_string() || !body.contains("key") ||
+        !body["key"].is_string() || !body.contains("value") || !body["value"].is_string()) {
+        json_error(res, 400, "Required string fields: section, key, value", "BAD_REQUEST");
+        return;
+    }
+    std::string section = body["section"].get<std::string>();
+    std::string key = body["key"].get<std::string>();
+    std::string value = body["value"].get<std::string>();
+    auto result = Executor::post([section, key, value]() -> nlohmann::json {
+        SetProjExtState(nullptr, section.c_str(), key.c_str(), value.c_str());
+        MarkProjectDirty(nullptr);
+        return {{"ok", true}, {"section", section}, {"key", key}};
+    });
+    if (exec_error(res, result))
+        return;
+    json_ok(res, result);
+}
+
+// DELETE /project/extstate?section=S&key=K — remove one stored value (storing an
+// empty value deletes the key in REAPER's project ext state).
+void handle_extstate_delete(const httplib::Request& req, httplib::Response& res) {
+    auto sit = req.params.find("section");
+    auto kit = req.params.find("key");
+    if (sit == req.params.end() || sit->second.empty() || kit == req.params.end() ||
+        kit->second.empty()) {
+        json_error(res, 400, "Required query params: section, key", "BAD_REQUEST");
+        return;
+    }
+    std::string section = sit->second, key = kit->second;
+    auto result = Executor::post([section, key]() -> nlohmann::json {
+        SetProjExtState(nullptr, section.c_str(), key.c_str(), "");
+        MarkProjectDirty(nullptr);
+        return {{"deleted", true}, {"section", section}, {"key", key}};
+    });
+    if (exec_error(res, result))
+        return;
+    json_ok(res, result);
+}
+
 }  // namespace ReaClaw::Handlers

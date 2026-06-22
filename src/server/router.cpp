@@ -3,11 +3,13 @@
 #include "app.h"
 #include "auth/auth.h"
 #include "config/config.h"
+#include "handlers/analysis.h"
 #include "handlers/capabilities.h"
 #include "handlers/catalog.h"
 #include "handlers/common.h"
 #include "handlers/execute.h"
 #include "handlers/history.h"
+#include "handlers/items.h"
 #include "handlers/project.h"
 #include "handlers/scripts.h"
 #include "handlers/state.h"
@@ -86,7 +88,6 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
 
     // --- State ---
     svr.Get("/state/tracks", auth_wrap(cfg, Handlers::handle_state_tracks));
-    svr.Get("/state/items", auth_wrap(cfg, Handlers::handle_state_items));
     svr.Get("/state/selection", auth_wrap(cfg, Handlers::handle_state_selection));
     svr.Get("/state/automation", auth_wrap(cfg, Handlers::handle_state_automation));
     svr.Get("/state", auth_wrap(cfg, Handlers::handle_state));
@@ -114,6 +115,14 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
                  Handlers::handle_fx_set_preset(req, res);
+             }));
+    // FX copy/move to another track (extra path segment; registered before the
+    // bare fx/{slot} routes for clarity).
+    svr.Post(R"(/state/tracks/(\d+)/fx/(\d+)/copy)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
+                 Handlers::handle_fx_copy(req, res);
              }));
     svr.Get(R"(/state/tracks/(\d+)/fx/(\d+))",
             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
@@ -175,6 +184,40 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     // Selection write.
     svr.Post("/state/selection", auth_wrap(cfg, Handlers::handle_state_set_selection));
 
+    // --- Media items (Epic #17 Tier-B content manipulation) ---
+    // Split sub-resource registered before the bare item-index routes.
+    svr.Post(R"(/state/items/(\d+)/split)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 Handlers::handle_item_split(req, res);
+             }));
+    svr.Get(R"(/state/items/(\d+))",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                Handlers::handle_item_get(req, res);
+            }));
+    svr.Post(R"(/state/items/(\d+))",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 Handlers::handle_item_update(req, res);
+             }));
+    svr.Delete(R"(/state/items/(\d+))",
+               auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                   const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                   Handlers::handle_item_delete(req, res);
+               }));
+    svr.Get("/state/items", auth_wrap(cfg, Handlers::handle_items_get));
+    svr.Post("/state/items", auth_wrap(cfg, Handlers::handle_items_post));
+
+    // --- Audio perception (Epic #18) ---
+    svr.Get("/state/meters", auth_wrap(cfg, Handlers::handle_meters));
+    svr.Get(R"(/analysis/item/(\d+))",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                Handlers::handle_analysis_item(req, res);
+            }));
+    svr.Get("/analysis/file", auth_wrap(cfg, Handlers::handle_analysis_file));
+
     // Markers & regions.
     svr.Get("/state/markers", auth_wrap(cfg, Handlers::handle_markers_get));
     svr.Post("/state/markers", auth_wrap(cfg, Handlers::handle_markers_post));
@@ -194,6 +237,9 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     svr.Post("/redo", auth_wrap(cfg, Handlers::handle_redo));
     svr.Get("/project", auth_wrap(cfg, Handlers::handle_project_get));
     svr.Post("/project/notes", auth_wrap(cfg, Handlers::handle_project_notes));
+    svr.Get("/project/extstate", auth_wrap(cfg, Handlers::handle_extstate_get));
+    svr.Post("/project/extstate", auth_wrap(cfg, Handlers::handle_extstate_post));
+    svr.Delete("/project/extstate", auth_wrap(cfg, Handlers::handle_extstate_delete));
     svr.Get("/time", auth_wrap(cfg, Handlers::handle_time_convert));
 
     // Capability manifest.

@@ -35,16 +35,42 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                                       "pan",
                                       "muted",
                                       "soloed",
-                                      "armed"})}}},
+                                      "armed",
+                                      "phase",
+                                      "n_channels",
+                                      "pan_mode",
+                                      "dual_pan_l",
+                                      "dual_pan_r",
+                                      "rec_input",
+                                      "midi_hw_out",
+                                      "main_send"})}}},
+            {"items",
+             {{"read", "GET /state/items  |  GET /state/items/{index}"},
+              {"create",
+               "POST /state/items {create:[{track,position,length?,file?}]}  "
+               "(file loads an audio/MIDI source; length defaults to the source length)"},
+              {"update",
+               "POST /state/items/{index}  or batch POST /state/items {update:[{index,...}]}; "
+               "fields: position,length,track(move),selected,muted,volume_db,fade_in,fade_out,"
+               "take:{name,volume_db,pan,pitch,playrate,preserve_pitch}"},
+              {"split", "POST /state/items/{index}/split {position}"},
+              {"delete", "DELETE /state/items/{index}"},
+              {"source",
+               "reads expose source{file,type,length,sample_rate,num_channels} for the active "
+               "take"}}},
             {"fx",
              {{"add", "POST /state/tracks/{index}/fx {name,enabled,params}"},
               {"read", "GET /state/tracks/{index}/fx/{slot}"},
-              {"set", "POST /state/tracks/{index}/fx/{slot} {enabled,params:[{index|name,value}]}"},
+              {"set",
+               "POST /state/tracks/{index}/fx/{slot} "
+               "{enabled,offline,params:[{index|name,value}]}"},
               {"delete", "DELETE /state/tracks/{index}/fx/{slot}"},
+              {"copy",
+               "POST /state/tracks/{index}/fx/{slot}/copy {to_track,to_slot:-1,move:false}"},
               {"preset", "GET/POST /state/tracks/{index}/fx/{slot}/preset {name|navigate:-1|1}"},
               {"params",
                "normalized 0..1 by param index or name; reads also expose real-unit "
-               "min/max/mid/raw"}}},
+               "min/max/mid/raw and offline state"}}},
             {"routing",
              {{"add_send", "POST /state/tracks/{index}/sends {to_track,volume_db,pan}"},
               {"set_send",
@@ -65,10 +91,29 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
              {{"read", "GET /state/tempo"},
               {"add", "POST /state/tempo {time,bpm,timesig_num,timesig_denom,linear}"}}},
             {"time", {{"convert", "GET /time?time=SEC  or  GET /time?beats=B[&measure=M]"}}},
-            {"selection", {{"set", "POST /state/selection {tracks:[i,...]|\"all\"|\"none\"}"}}},
+            {"selection",
+             {{"set",
+               "POST /state/selection {tracks:[i,...]|\"all\"|\"none\", "
+               "items:[j,...]|\"all\"|\"none\"}"}}},
+            {"perception",
+             {{"analyze_item", "GET /analysis/item/{index}?measures=loudness,spectral&start=&end="},
+              {"analyze_file", "GET /analysis/file?path=ABS&measures=&start=&end="},
+              {"measures",
+               "loudness: lufs_i/rms_i/peak_db/true_peak_db (exact offline analysis) + "
+               "clipping; spectral: low/mid/high band energy + centroid_hz (estimated DSP)"},
+              {"meters", "GET /state/meters — live per-track + master peak/peak-hold (dBFS)"},
+              {"tagging",
+               "every measure carries method (offline_analysis|estimated_dsp|introspection|"
+               "derived) + confidence so the agent knows how much to trust it"},
+              {"hints",
+               "mutating responses to track/FX/send/item edits carry a hints[] array of "
+               "consequence-aware warnings ({code,severity,message})"}}},
             {"project",
              {{"read", "GET /project  (dirty, length, notes)"},
-              {"set_notes", "POST /project/notes {notes}"}}},
+              {"set_notes", "POST /project/notes {notes}"},
+              {"ext_state",
+               "GET/POST/DELETE /project/extstate {section,key,value} — persistent per-project "
+               "scratchpad stored in the .rpp (survives close/reopen)"}}},
             {"undo",
              {{"state", "GET /undo  (can_undo, can_redo descriptions)"},
               {"undo", "POST /undo"},
@@ -84,6 +129,7 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                                     "GET /state/automation",
                                     "GET /state/markers",
                                     "GET /state/tempo",
+                                    "GET /state/meters",
                                     "GET /project"})},
             {"actions",
              {{"run", "POST /execute/action {id}"},
@@ -95,11 +141,10 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
 
     // Things that have no direct verb yet — reach them via an action ID or a
     // generated Lua script. Kept honest so the agent doesn't probe blindly.
-    nlohmann::json via_script_or_action = nlohmann::json::array(
-            {"media items / takes (create, move, trim, fades)",
-             "MIDI notes/events",
-             "rendering / freezing",
-             "project open / save"});
+    nlohmann::json via_script_or_action = nlohmann::json::array({"take FX chains (TakeFX_*)",
+                                                                 "MIDI notes/events",
+                                                                 "rendering / freezing",
+                                                                 "project open / save"});
 
     json_ok(res,
             {{"coverage_model",

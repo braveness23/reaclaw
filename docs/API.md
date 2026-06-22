@@ -25,7 +25,7 @@ All responses include:
 Strict-Transport-Security: max-age=31536000
 ```
 
-`GET /state`, `GET /state/tracks`, and `GET /state/items` responses are cached for 1 second. A `POST /state/tracks/{index}` write immediately invalidates the cache.
+`GET /state` and `GET /state/tracks` responses are cached for 1 second. A `POST /state/tracks/{index}` write immediately invalidates the cache. `GET /state/items` is not cached — it reads through the main thread, so item edits are always reflected.
 
 ---
 
@@ -203,8 +203,11 @@ Remove a send by its index.
 
 ### POST /state/selection
 
-Set the track selection. `{ "tracks": [i, ...] }`, or `"all"` / `"none"`.
-Returns `{ "selected_tracks": [...] }`.
+Set the track and/or item selection. Each of `tracks` and `items` accepts an
+index array, or the string `"all"` / `"none"`:
+`{ "tracks": [i, ...] | "all" | "none", "items": [j, ...] | "all" | "none" }`.
+Returns `{ "selected_tracks": [...], "selected_items": [...] }` (only the keys
+you set). See also Epic #17 below for item selection.
 
 ### GET /capabilities
 
@@ -213,7 +216,12 @@ or a generated Lua script — reflects the tiered coverage model.
 
 ### GET /state/items
 
-Media items: position, length, track index, take name.
+Media items, enriched (Epic #17): `index`, `position`, `length`, `track_index`,
+`selected`, `muted`, `volume_db`, `fade_in`, `fade_out`, plus a `take` object
+(`name`, `volume_db`, `polarity_flipped`, `pan`, `pitch`, `playrate`,
+`preserve_pitch`) and a `source` object (`file`, `type`, `length`,
+`length_is_beats`, `sample_rate`, `num_channels`). `take` and `source` are
+`null` for an empty item. See Epic #17 below for item create/update/split/delete.
 
 ### GET /state/selection
 
@@ -483,3 +491,158 @@ scratchpad (persisted in the `.rpp`).
   query the MIDI editor action section instead of the main section.
 - Every catalog row now includes `interactive` (bool): true if the action opens a
   modal dialog (so a headless agent should avoid firing it).
+
+---
+
+## Phase 4 — Tier-B content manipulation (v1.4.0, #17)
+
+Media items were read-only before this epic. These verbs add the write surface
+for the objects *inside* a track. All mutations are wrapped in undo blocks (one
+undoable step each). Items are addressed by **project-wide index** (the order
+`GET /state/items` returns); a structural change (create/split/delete) can shift
+those indices, so re-read after one.
+
+### GET /state/items/{index}
+
+A single media item, same shape as one element of `GET /state/items`. 404 if the
+index is out of range.
+
+### POST /state/items
+
+Create and/or batch-update items.
+
+```json
+{
+  "create": [ { "track": 0, "position": 1.0, "length": 2.0, "file": "/path/a.wav" } ],
+  "update": [ { "index": 0, "position": 0.5, "muted": true,
+                "take": { "name": "lead", "pan": -0.3, "pitch": 2, "playrate": 1.0 } } ]
+}
+```
+
+- **create**: `track` (required), `position` (default 0), `length` (default the
+  source length when `file` is given, else 1.0s), `file` (loads an audio/MIDI
+  source as the item's active take). Also honors the update fields below.
+- **update**: addresses an existing item by `index`; writable fields are
+  `position`, `length`, `track` (moves the item to that track), `selected`,
+  `muted`, `volume_db`, `fade_in`, `fade_out`, and a `take` object
+  (`name`, `volume_db`, `pan`, `pitch` in semitones, `playrate`,
+  `preserve_pitch`). Take fields are ignored for an empty item (no take).
+
+Returns `{ created: [item...], updated: [item...] }`.
+
+### POST /state/items/{index}
+
+Update one item — same fields as a single `update` element above. Returns the
+updated item.
+
+### POST /state/items/{index}/split
+
+Split an item at `{ "position": SECONDS }` (absolute timeline position, must be
+inside the item, else 400). Returns `{ left: item, right: item }`.
+
+### DELETE /state/items/{index}
+
+Remove an item from its track. Returns `{ deleted, index }`.
+
+### Track extras (in GET/POST /state/tracks)
+
+Track reads and writes gain: `phase` (bool), `n_channels` (int, 2–128 even),
+`pan_mode` (0=classic, 3=balance, 5=stereo, 6=dual), `dual_pan_l`/`dual_pan_r`
+(−1..1, used when `pan_mode`=6), `rec_input` (int, <0 = none), `midi_hw_out`
+(int, <0 = disabled), `main_send` (bool — sends audio to parent).
+
+### FX additions
+
+- FX reads (`GET /state/tracks/{index}/fx/{slot}` and the `fx[]` in track reads)
+  include `offline` (bool). `POST .../fx/{slot}` and `POST .../fx` accept
+  `offline` to take an FX online/offline.
+- **POST /state/tracks/{index}/fx/{slot}/copy** — copy or move this FX to another
+  track. `{ "to_track": j, "to_slot": -1, "move": false }` (`to_slot` −1 appends).
+  Returns `{ from_track, from_slot, to_track, moved, dest_fx_count }`.
+
+### Project ext state — `/project/extstate`
+
+Per-project persistent scratchpad stored inside the `.rpp` (survives
+close/reopen, unlike the global SQLite store).
+
+- **GET /project/extstate?section=S&key=K** → `{ section, key, value }` (value
+  `null` if unset). With only `section`: `{ section, values: { key: value, ... } }`.
+- **POST /project/extstate** `{ section, key, value }` (all strings) → stores it.
+- **DELETE /project/extstate?section=S&key=K** → removes that key.
+
+> Note: REAPER stores ext-state keys case-insensitively and reports them
+> upper-cased in the enumerated `values` map; look-ups by `key` are
+> case-insensitive.
+
+---
+
+## Phase 4 — Audio perception (v1.5.0, #18)
+
+"The agent hears itself." Built-in, always-available analysis plus consequence
+hints. Every measure carries a **`method`** and **`confidence`** so the agent
+knows how much to trust it:
+
+| method | meaning | confidence |
+|--------|---------|-----------|
+| `offline_analysis` | REAPER's exact offline decode (loudness/peak via `CalculateNormalization`) | 1.0 |
+| `derived` | computed from an exact measure (clipping from true-peak) | 1.0 |
+| `introspection` | REAPER's own live meters | 1.0 |
+| `estimated_dsp` | ReaClaw's own DSP over decoded samples (spectral FFT) | 0.6 |
+
+### GET /analysis/item/{index}
+
+Analyse a media item's active take source. Query: `measures=` (comma list of
+`loudness` / `spectral`, default both), `start=` / `end=` (source-relative
+seconds; default whole source). 400 if the item is empty or a MIDI take (no
+audio source). Runs on the main thread with a 30 s budget — for very long
+sources, pass a `start`/`end` window (else a `408` is possible).
+
+```json
+{
+  "item_index": 1,
+  "source": { "file": "...", "type": "WAVE", "length": 1.5, "sample_rate": 44100, "num_channels": 1 },
+  "window": { "start": 0.0, "end": null },
+  "loudness": { "lufs_i": -22.3, "rms_i": -21.7, "peak_db": -18.1, "true_peak_db": -18.1,
+                "method": "offline_analysis", "confidence": 1.0 },
+  "clipping": { "digital": false, "inter_sample": false, "true_peak_db": -18.1,
+                "method": "derived", "confidence": 1.0 },
+  "spectral": { "low": 0.00001, "mid": 0.9999, "high": 1e-8, "centroid_hz": 440.0,
+                "dominant_band": "mid", "frames_analyzed": 17,
+                "bands_hz": { "low": "<250", "mid": "250-4000", "high": ">4000" },
+                "method": "estimated_dsp", "confidence": 0.6 }
+}
+```
+
+- **loudness** — `lufs_i` (integrated LUFS), `rms_i`, `peak_db`, `true_peak_db`
+  (all dBFS/LUFS; `-150` = silence).
+- **clipping** — `digital` (sample peak ≥ 0 dBFS), `inter_sample` (true-peak > 0 dBTP).
+- **spectral** — fractional energy in three bands (sum ≈ 1) + spectral
+  `centroid_hz`; a rough digest, not a calibrated analyzer.
+
+### GET /analysis/file?path=…
+
+Same payload for an arbitrary audio file (e.g. a freshly rendered stem/mix).
+`path` must be an absolute path REAPER can decode; 404 if it can't be opened.
+
+### GET /state/meters
+
+Live per-track and master peak metering — `peak_db` and `peak_hold_db` as
+`[L, R]` arrays in dBFS, plus `audio_running`. These are REAPER's own meters
+(`method: introspection`) and are only meaningful while audio is running
+(play/record); `-150` = no signal.
+
+### Consequence-aware hints
+
+Mutating responses for **track update**, **add FX**, **add send**, and **item
+create/update** now carry a `hints` array — the *consequence of that specific
+edit* against the current session:
+
+```json
+"hints": [ { "code": "muted_track", "severity": "warn",
+             "message": "This track is on track 0, which is muted — you won't hear it." } ]
+```
+
+Invariants (hand-authored set): `muted_track`, `solo_elsewhere`,
+`near_silent_fader`, `routes_nowhere`, `phase_inverted`, `recarm_no_input`,
+`fx_offline`, `fx_bypassed`, `send_dest_routes_nowhere`, `send_dest_muted`,
+`empty_item`, `midi_no_instrument`. Empty array when nothing trips.

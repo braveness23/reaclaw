@@ -255,9 +255,63 @@ mutation is now a single undoable step), FX presets + real-unit param metadata,
 send extended props (mute/phase/mono/mode), project extras (dirty/length/notes),
 and a MIDI-editor catalog section.
 
-**Still not in scope as verbs (reach via action or script):** media items/takes,
-MIDI events, render/freeze, project open/save. These may graduate later if usage
-warrants.
+**Graduated to verbs (Epic #17, v1.4.0):** media items/takes/sources. Items moved
+from read-only to full CRUD (create/move/split/trim/delete, position/length/fade/
+vol/mute writes), with take properties (vol/pan/pitch/playrate/preserve-pitch) and
+source metadata (file/type/length/sample-rate/channels) on reads. Also graduated:
+track extras (phase, channel count, pan mode + dual-pan, rec input, MIDI hw out,
+parent send), FX copy-to-track and online/offline, item selection write, and a
+persistent per-project ext-state scratchpad (`/project/extstate`). Justified the
+same way as Epic #16 — these are the objects *inside* a track that a real arranging
+session manipulates constantly, so a thin typed verb beats coercing them out of Lua.
+
+**Tier-C deferred within Epic #17 (still reach via action or script):** take FX
+chains (`TakeFX_*`), MIDI note/event CRUD (Lua already covers it well), and
+multi-project support. Lower frequency / higher complexity; the Lua escape hatch
+is the right layer for now.
+
+**Still not in scope as verbs (reach via action or script):** MIDI events,
+render/freeze, project open/save. These may graduate later if usage warrants.
+
+---
+
+## 17. Audio Perception: built-in, exact-where-possible, tagged (Epic #18)
+
+**Decision:** ReaClaw analyses audio **in-process**, built-in and always
+available (no external tool), and **tags every measure** with a `method` and
+`confidence` so the agent trusts each number appropriately:
+
+- **Loudness / level — exact.** LUFS-I, RMS-I, peak, and true-peak come from
+  REAPER's own offline analyser (`CalculateNormalization`, full decode). Tagged
+  `offline_analysis`, confidence 1.0. Clipping is `derived` from true-peak.
+- **Spectral balance — estimated.** A rough low/mid/high band-energy digest +
+  spectral centroid, computed by decoding samples (`PCM_source::GetSamples`)
+  through a small in-tree FFT. Tagged `estimated_dsp`, confidence 0.6 — a digest,
+  not a calibrated analyzer.
+- **Metering — introspection.** `/state/meters` reads REAPER's live meters
+  (`Track_GetPeakInfo`/`Track_GetPeakHoldDB`); only meaningful while audio runs.
+
+**Consequence vs. observation (from IDEAS).** Analysis endpoints are *independent
+observations* the agent asks for. **Hints** are the *consequence of a specific
+edit* and ride inline on that edit's mutating response (`hints[]`) — a small
+hand-authored invariant set, distinct from (though sharing a channel with) the
+future learned suggestions of Epic #5.
+
+**Rationale:** "Most REAPER bridges are blind command pipes." The cheap, exact
+loudness path already existed in the SDK, so it would be perverse to estimate it;
+spectral has no built-in primitive, so a tagged estimate is the honest answer.
+Token economy (IDEAS): prefer a number/digest over an image, targeted over total,
+heavier feedback opt-in (`measures=` filter, `start`/`end` windowing).
+
+**Open questions (carried, deliberately unresolved):**
+- **DSP locus.** Analysis runs on the main thread (SDK safety) inside a 30 s
+  budget; a long source can freeze the UI briefly or `408`. A dedicated
+  out-of-process analyzer would fix both at a footprint/complexity cost — revisit
+  if long-render analysis becomes common.
+- **Onset / density** detection is deferred (transient analysis is higher
+  complexity and outside #18's acceptance criteria).
+- **Musical attributes** (key/tempo/pitch) stay gated behind the optional
+  external tool of Epic #4, per the 2026-06-20 "advanced optional" decision.
 
 ---
 

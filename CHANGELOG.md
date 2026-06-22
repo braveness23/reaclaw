@@ -9,6 +9,79 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-22
+
+Epic #18 — Audio perception ("the agent hears itself"). The headline
+differentiator: the agent can now **measure its own output** and is told the
+**consequence of its own edits**. Built-in, always-available, no external tool.
+Every measure is tagged with a `method` + `confidence` so the agent trusts each
+number correctly. Verified live on REAPER 7.74 (aarch64): 12/12 checks, incl. a
+440 Hz sine resolving to a 439.997 Hz spectral centroid.
+
+### Added
+- **Loudness analysis** — `GET /analysis/item/{index}` and
+  `GET /analysis/file?path=` return exact offline LUFS-I / RMS-I / peak /
+  true-peak (via REAPER's `CalculateNormalization` full-decode) plus derived
+  clipping (digital + inter-sample). `?measures=` filter and `start`/`end`
+  windowing. (#18)
+- **Spectral balance** — a rough low/mid/high band-energy digest + spectral
+  centroid, computed by decoding samples (`PCM_source::GetSamples`) through a
+  small in-tree FFT. Tagged `estimated_dsp`, confidence 0.6. (#18)
+- **Live metering** — `GET /state/meters`: per-track + master `peak_db` /
+  `peak_hold_db` (dBFS) from REAPER's own meters, plus `audio_running`. (#18)
+- **Consequence-aware hints (Q3)** — mutating responses for track update, add
+  FX, add send, and item create/update carry a `hints[]` array of hand-authored
+  invariants surfaced inline (`muted_track`, `solo_elsewhere`,
+  `near_silent_fader`, `routes_nowhere`, `recarm_no_input`, `fx_offline`,
+  `fx_bypassed`, `send_dest_routes_nowhere`, `send_dest_muted`, `empty_item`,
+  `midi_no_instrument`, `phase_inverted`). (#18)
+- All analysis output tagged `method` (`offline_analysis` / `estimated_dsp` /
+  `introspection` / `derived`) + `confidence`. `/capabilities` gains a
+  `perception` section; `docs/API.md` and TECH_DECISIONS §17 updated.
+
+### Deferred (within #18)
+- Onset/density detection (transient analysis) — not in the epic's acceptance
+  criteria; the Lua escape hatch + the loudness/spectral surface cover the
+  near-term need. DSP locus (in-process vs. dedicated analyzer) recorded as an
+  open question in TECH_DECISIONS §17.
+
+## [1.4.0] - 2026-06-22
+
+Epic #17 — Tier-B content manipulation. Media items, takes, and sources were
+read-only before this release; this adds the write surface for the objects
+*inside* a track, plus deeper track/FX properties and a per-project scratchpad.
+All mutations are wrapped in undo blocks (one undoable step each). Verified live
+on REAPER 7.74 (aarch64).
+
+### Added
+- **Media item CRUD** — `POST /state/items` (create/batch-update),
+  `POST /state/items/{index}` (update), `POST /state/items/{index}/split`,
+  `DELETE /state/items/{index}`, and `GET /state/items/{index}`. Create accepts a
+  `file` to load an audio/MIDI source (length defaults to the source length);
+  update can move an item to another track. (#17)
+- **Enriched item reads** — `GET /state/items` now returns `selected`, `muted`,
+  `volume_db`, `fade_in`, `fade_out`, a `take` object (name, volume, pan, pitch,
+  playrate, preserve-pitch, polarity) and a `source` object (file, type, length,
+  sample rate, channel count). `take`/`source` are `null` for empty items. (#17)
+- **Take properties** — read/write take vol/pan/pitch/playrate/preserve-pitch/name
+  via the item `take` object. (#17)
+- **Track extras** — `phase`, `n_channels`, `pan_mode`, `dual_pan_l`/`dual_pan_r`,
+  `rec_input`, `midi_hw_out`, `main_send` added to `GET`/`POST /state/tracks`. (#17)
+- **FX copy** — `POST /state/tracks/{index}/fx/{slot}/copy {to_track,to_slot,move}`
+  duplicates (or moves) a configured FX to another track without Lua. (#17)
+- **FX online/offline** — FX reads expose `offline`; `POST .../fx[/{slot}]` accepts
+  `offline`. (#17)
+- **Item selection write** — `POST /state/selection` now also accepts
+  `items: [j,...] | "all" | "none"` (returns `selected_items`). (#17)
+- **Project ext state** — `GET/POST/DELETE /project/extstate {section,key,value}`,
+  a persistent per-project scratchpad stored in the `.rpp`. (#17)
+- `GET /capabilities` updated with the items/take/source surface, track extras,
+  FX copy/offline, item selection, and project ext state.
+
+### Changed
+- `GET /state/items` moved to `src/handlers/items.cpp` and is no longer cached — it
+  reads through the main thread so item edits are always reflected immediately.
+
 ## [1.3.0] - 2026-06-21
 
 ### Added
