@@ -7,6 +7,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
 ## [1.6.0] - 2026-06-23
 
 Epic #19 — Visual perception & musical probes. The perception loop now produces
