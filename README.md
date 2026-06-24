@@ -1,250 +1,274 @@
-# ReaClaw
+# 🦅 ReaClaw
 
 [![CI](https://github.com/braveness23/reaclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/braveness23/reaclaw/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/braveness23/reaclaw)](https://github.com/braveness23/reaclaw/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#installation)
 
-**ReaClaw** is a native C++ REAPER extension that embeds an HTTPS server directly inside REAPER. It exposes a REST API that lets any HTTP-capable AI agent operate REAPER fully — browsing the action catalog, executing actions, querying project state, registering custom Lua ReaScripts, and running multi-step sequences with per-step feedback.
+**Give your AI agent a real seat at the mixing desk.**
 
-Because ReaClaw is a native extension (not an external process), it has direct access to every REAPER API function with no bridge scripts, no scraping, and no limitations.
+ReaClaw is a native C++ REAPER extension that embeds an HTTPS server *inside* REAPER and
+exposes a clean REST/JSON API. Point any HTTP-capable AI agent at it — Claude, a local
+LLM, a shell script — and it can build sessions, wire up routing, tweak FX, write
+automation… and then **listen to the result and tell you what it just did to your mix.**
 
----
+No bridge scripts. No GUI scraping. No external process. The extension runs in REAPER's
+own process, so it has direct, first-class access to every single REAPER API call.
 
-## Quick Summary
-
-- **Native C++ extension** — Runs inside REAPER's process; full SDK access
-- **Embedded HTTPS server** — Self-signed or CA-signed certificates; API key auth
-- **Full action catalog** — Enumerate all 65K+ actions; search by name, category, tag
-- **Action execution** — Single actions and multi-step sequences with per-step feedback
-- **Script registration** — Agent generates Lua; ReaClaw validates syntax and registers natively via `AddRemoveReaScript`
-- **State queries** — Tracks, BPM, transport, FX chains, automation, selection
-- **Audit trail** — SQLite persistence for all executions and registered scripts
-- **Cross-platform** — Windows, macOS, Linux; one codebase
-
----
-
-## Architecture
-
-```
-AI Agent (Claude, Sparky, curl, etc.)
-  │
-  │  HTTPS (REST/JSON)
-  ▼
-┌─────────────────────────────────────────────────────────────┐
-│  reaper_reaclaw  (.dll / .dylib / .so)                      │
-│                                                             │
-│  ┌─────────────────┐   ┌──────────────────────────────┐    │
-│  │  HTTPS Server   │   │  Command Queue               │    │
-│  │  (cpp-httplib)  │──▶│  (web thread → main thread)  │    │
-│  └─────────────────┘   └──────────────┬───────────────┘    │
-│                                        │                    │
-│  ┌─────────────────────────────────────▼───────────────┐   │
-│  │  REAPER SDK  (full API access via GetFunc)          │   │
-│  │  Action catalog · Execution · State · Scripts       │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌──────────────────────┐  ┌──────────────────────────┐    │
-│  │  SQLite              │  │  Config                  │    │
-│  │  (scripts, history,  │  │  (reaclaw/config.json)   │    │
-│  │   action catalog)    │  │                          │    │
-│  └──────────────────────┘  └──────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
-  │
-  │  In-process REAPER API calls
-  ▼
-REAPER
-  ├─ Action System (65K+ commands)
-  ├─ ReaScript Runtime (Lua)
-  └─ Project State (tracks, items, automation)
-```
-
----
-
-## How It Works
-
-ReaClaw is a standard REAPER extension loaded at startup from the `UserPlugins` directory. On load it:
-
-1. Reads config from `{REAPER_RESOURCE_PATH}/reaclaw/config.json`
-2. Opens the SQLite database and runs schema migrations
-3. Spawns a background HTTPS server thread
-4. Registers a main-thread timer callback for safe REAPER API execution
-5. Indexes the full action catalog into SQLite
-6. Begins accepting API requests
-
-The agent is responsible for generating scripts using its own LLM capabilities. ReaClaw's job is to validate syntax and register them with REAPER — not to call an LLM itself.
-
----
-
-## Installation
-
-1. Build ReaClaw for your platform (see [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions)
-2. Copy the built file to REAPER's `UserPlugins` directory:
-   - **Windows:** `%APPDATA%\REAPER\UserPlugins\`
-   - **macOS:** `~/Library/Application Support/REAPER/UserPlugins/`
-   - **Linux:** `~/.config/REAPER/UserPlugins/`
-3. Copy `config.example.json` to `{REAPER_RESOURCE_PATH}/reaclaw/config.json` and set your API key
-4. Restart REAPER
-5. Verify: `curl -sk -H "Authorization: Bearer sk_your_key" https://localhost:9091/health`
-
----
-
-## API Endpoints
-
-### System
-- `GET /health` — Server status, version, catalog size
-
-### Catalog
-- `GET /catalog` — Full action catalog (paginated)
-- `GET /catalog/search?q=query` — Search by name, category, tag
-- `GET /catalog/{id}` — Look up a single action by numeric ID
-- `GET /catalog/categories` — Category list with counts
-
-### State
-- `GET /state` — Project overview (BPM, cursor, transport)
-- `GET /state/tracks` — All tracks with properties and FX chains
-- `POST /state/tracks/{index}` — Set track properties (mute, arm, volume, pan) directly by index
-- `GET /state/items` — Media items in project
-- `GET /state/selection` — Current selection context
-- `GET /state/automation` — Automation envelopes for selected track
-
-### Execution
-- `POST /execute/action` — Execute a single action by ID
-- `POST /execute/sequence` — Multi-step sequence with per-step state feedback
-
-### Scripts
-- `POST /scripts/register` — Validate and register agent-generated Lua as a custom action
-- `GET /scripts/cache` — List all registered scripts
-- `GET /scripts/{id}` — Get script source and metadata
-- `DELETE /scripts/{id}` — Unregister and remove a script
-
-### History
-- `GET /history` — Execution audit log
-
----
-
-## Tech Stack
-
-| Component | Choice | Reason |
-|---|---|---|
-| Language | C++ (C++17) | Required for REAPER native extension |
-| Build | CMake | Cross-platform; industry standard |
-| HTTP/HTTPS | cpp-httplib | Header-only; OpenSSL TLS; cross-platform |
-| TLS | OpenSSL | Self-signed + CA certs |
-| Database | SQLite (amalgamation) | Embedded; no external deps |
-| JSON | nlohmann/json | Header-only; standard |
-| REAPER SDK | justinfrankel/reaper-sdk | Official SDK |
-
----
-
-## Configuration
-
-Config at `{REAPER_RESOURCE_PATH}/reaclaw/config.json`. See `config.example.json`. Minimal working config:
-
-```json
-{
-  "server": { "port": 9091 },
-  "tls": { "enabled": true, "generate_if_missing": true },
-  "auth": { "type": "api_key", "key": "sk_change_me" }
-}
-```
-
----
-
-## Directory Structure
-
-```
-reaclaw/
-├── README.md
-├── ReaClaw_Design.md
-├── ReaClaw_TECH_DECISIONS.md
-├── ReaClaw_IMPLEMENTATION_CHECKLIST.md
-├── config.example.json
-├── CMakeLists.txt
-├── src/
-│   ├── main.cpp                      (ReaperPluginEntry, init/teardown)
-│   ├── server/
-│   │   ├── server.cpp / .h           (httplib setup, TLS, thread lifecycle)
-│   │   └── router.cpp / .h           (endpoint registration)
-│   ├── handlers/
-│   │   ├── catalog.cpp / .h          (GET /catalog, /catalog/search)
-│   │   ├── state.cpp / .h            (GET /state/*)
-│   │   ├── execute.cpp / .h          (POST /execute/*)
-│   │   ├── scripts.cpp / .h          (POST/GET/DELETE /scripts/*)
-│   │   └── history.cpp / .h          (GET /history)
-│   ├── reaper/
-│   │   ├── api.cpp / .h              (REAPER API wrappers + GetFunc bindings)
-│   │   ├── catalog.cpp / .h          (action enumeration, indexing)
-│   │   ├── executor.cpp / .h         (action execution, command queue)
-│   │   └── scripts.cpp / .h          (ReaScript registration via AddRemoveReaScript)
-│   ├── db/
-│   │   └── db.cpp / .h               (SQLite connection, schema, migrations)
-│   ├── auth/
-│   │   └── auth.cpp / .h             (API key middleware)
-│   ├── config/
-│   │   └── config.cpp / .h           (JSON config loading)
-│   └── util/
-│       ├── tls.cpp / .h              (self-signed cert generation)
-│       └── logging.cpp / .h
-├── vendor/
-│   ├── httplib.h
-│   ├── json.hpp
-│   ├── sqlite3.c / sqlite3.h
-│   └── reaper-sdk/
-├── certs/                            (.gitignored)
-├── tests/
-└── docs/
-    ├── API.md
-    └── EXAMPLES.md
-```
-
----
-
-## Implementation Phases
-
-| Phase | Scope | Deliverable |
-|---|---|---|
-| 0 | Extension scaffold, catalog, state, action execution, HTTPS + auth | v0.1.0 |
-| 1 | Script registration, syntax validation, multi-step sequences, history | v0.2.0 |
-| 2 | MCP wrapper, performance, security hardening | v1.0.0 |
-
----
-
-## Integration Examples
-
-### With Claude (tool use)
-```json
-{
-  "tool": "http_request",
-  "method": "POST",
-  "url": "https://localhost:9091/execute/action",
-  "headers": { "Authorization": "Bearer sk_your_key" },
-  "body": { "id": 40285, "feedback": true }
-}
-```
-
-### Agent generates and registers a script
-```
-Agent generates Lua script for parallel compression
-  → POST /scripts/register { "name": "parallel_comp", "script": "local tr = ..." }
-  → Returns: { "action_id": "_parallel_comp_a1b2c3" }
-  → POST /execute/action { "id": "_parallel_comp_a1b2c3" }
-```
-
-### With Sparky/OpenClaw (Phase 2 MCP)
-```
-Sparky: "Set up drum recording"
-  → reaclawExecuteSequence([mute_all, arm_drums, route_sidechain, record])
-  → Returns: { "status": "success", "steps_completed": 4 }
-```
-
-### With curl
 ```bash
 curl -sk -H "Authorization: Bearer sk_your_key" \
-  "https://localhost:9091/catalog/search?q=mute" | jq .
+  https://localhost:9091/state | jq '.bpm, .tracks | length'
 ```
+
+---
+
+## 👂 The headline trick: the agent can hear itself
+
+Most "AI controls a DAW" tools are flying blind — they fire commands and hope. ReaClaw
+closes the loop. After an edit, the agent can **measure its own output** and even get a
+**picture of the audio**, returned as a labelled PNG *alongside* a machine-readable digest
+(the agent reads the numbers; the picture is for you).
+
+These are real renders straight out of `GET /analysis/.../visualize` — no Photoshop, no
+matplotlib, a dependency-free PNG encoder built into the extension:
+
+| Waveform | Spectrum (EQ curve) | Loudness contour |
+|:---:|:---:|:---:|
+| ![waveform](docs/img/viz-waveform.png) | ![spectrum](docs/img/viz-spectrum.png) | ![loudness](docs/img/viz-loudness.png) |
+| peak / RMS / clip + envelope | 32 log-spaced bands + centroid | RMS over time, dB scale |
+
+And the numbers behind them are *exact*, not guessed — loudness is computed by REAPER's
+own offline full-decode (`CalculateNormalization`):
+
+```jsonc
+GET /analysis/item/0
+{
+  "loudness": {
+    "lufs_i": -14.2, "rms_i": -16.8, "peak_db": -1.0, "true_peak_db": -0.7,
+    "clipping": { "digital": false, "inter_sample": false },
+    "method": "offline_analysis", "confidence": 1.0
+  },
+  "spectral": {
+    "low": 0.21, "mid": 0.55, "high": 0.24, "centroid_hz": 2173.4,
+    "method": "estimated_dsp", "confidence": 0.6
+  }
+}
+```
+
+Every number is tagged with a **`method`** (`offline_analysis` · `estimated_dsp` ·
+`introspection` · `derived`) and a **`confidence`**, so the agent knows exactly how much
+to trust each measurement.
+
+---
+
+## 🪝 It tells the agent what it just did
+
+Blind automation is dangerous: an agent can happily arm a track that has no input, or send
+audio into a muted bus, and never know. So **every mutating response carries a `hints[]`
+array** — hand-authored, consequence-aware warnings surfaced inline:
+
+```jsonc
+POST /state/tracks/3   { "armed": true }
+{
+  "ok": true,
+  "hints": [
+    { "code": "recarm_no_input", "severity": "warn",
+      "message": "Track armed for recording but has no record input assigned." },
+    { "code": "solo_elsewhere", "severity": "info",
+      "message": "Another track is soloed — this track will be silent on playback." }
+  ]
+}
+```
+
+`muted_track` · `solo_elsewhere` · `near_silent_fader` · `routes_nowhere` ·
+`recarm_no_input` · `fx_offline` · `fx_bypassed` · `send_dest_muted` · `empty_item` ·
+`midi_no_instrument` · `phase_inverted` … the agent finds out *before* you do.
+
+---
+
+## ⚡ What it can do
+
+ReaClaw uses a **tiered coverage model**: typed structured verbs for everything you reach
+for daily, a one-call action runner for REAPER's 65K-action catalog, and a Lua escape
+hatch for the long tail. Ask `GET /capabilities` and the API tells you, honestly, what's a
+first-class verb vs. what needs an action or a script.
+
+| Area | You can… |
+|---|---|
+| 🎚️ **Tracks** | create / update / delete; name, color, folders, vol/pan/mute/solo/arm, phase, channels, pan mode, rec input, MIDI hw out, main send |
+| 🎬 **Items & takes** | create (load audio/MIDI files), update, split, delete; take vol/pan/pitch/playrate/preserve-pitch; read source file/type/SR/channels |
+| 🎛️ **FX** | add by name, get/set params (normalized *or* real units), bypass, **online/offline**, **copy/move between tracks**, load/step presets |
+| 🔀 **Routing** | sends with vol/pan/mute/phase/mono and pre/post-fader mode |
+| 📈 **Automation** | write envelope points (time, value, shape, tension), clear ranges |
+| 🚩 **Markers & regions** | read / add / delete, with names and colors |
+| 🥁 **Tempo & time** | full tempo/time-sig map read + write; beats↔seconds conversion |
+| 🎯 **Selection** | select tracks *and* items (`[i,...]` / `"all"` / `"none"`) |
+| 📝 **Project** | dirty flag, length, notes, and a persistent per-project ext-state scratchpad saved in the `.rpp` |
+| ↩️ **Undo** | every structured edit lands as one clean, user-undoable step; `/undo` + `/redo` |
+| 👂 **Perception** | loudness, spectral balance, live meters, hints, PNG visualizations (above), key/pitch/tempo probes, and named-surface screenshots |
+| 🔭 **Catalog & scripts** | search 65K+ actions, run single actions or multi-step sequences, register validated Lua as native actions |
+
+---
+
+## 🚀 Quick start
+
+```bash
+# 1. Build it (see CONTRIBUTING.md) and drop the result in REAPER's UserPlugins:
+#    Windows:  %APPDATA%\REAPER\UserPlugins\
+#    macOS:    ~/Library/Application Support/REAPER/UserPlugins/
+#    Linux:    ~/.config/REAPER/UserPlugins/
+
+# 2. Minimal config at {REAPER_RESOURCE_PATH}/reaclaw/config.json
+cat > config.json <<'JSON'
+{
+  "server": { "port": 9091 },
+  "tls":    { "enabled": true, "generate_if_missing": true },
+  "auth":   { "type": "api_key", "key": "sk_change_me" }
+}
+JSON
+
+# 3. Restart REAPER, then say hello:
+curl -sk -H "Authorization: Bearer sk_change_me" https://localhost:9091/health
+```
+
+Prefer to drive it without writing requests by hand? There's a [**Python MCP
+server**](docs/MCP.md) (FastMCP, 18 typed tools) and an [**agent
+Skill**](skill/reaclaw/SKILL.md) that loads ReaClaw know-how straight into an LLM's
+context.
+
+---
+
+## 🛠️ Try it in 30 seconds
+
+**Build a track and ask how it sounds:**
+```bash
+# Create a track, drop an audio file on it
+curl -sk -X POST -H "Authorization: Bearer sk_change_me" \
+  https://localhost:9091/state/tracks -d '{"create":[{"name":"Lead Vox","color":"#33cc88"}]}'
+
+curl -sk -X POST -H "Authorization: Bearer sk_change_me" \
+  https://localhost:9091/state/items \
+  -d '{"create":[{"track":0,"position":0,"file":"/audio/vox.wav"}]}'
+
+# Now let the agent listen to it
+curl -sk -H "Authorization: Bearer sk_change_me" \
+  "https://localhost:9091/analysis/item/0?measures=loudness,spectral" | jq
+```
+
+**Render a picture of it for a human to glance at:**
+```bash
+curl -sk -H "Authorization: Bearer sk_change_me" \
+  "https://localhost:9091/analysis/item/0/visualize?type=spectrum&width=640&height=200" \
+  | jq -r '.image.base64' | base64 -d > spectrum.png
+```
+
+**Run a whole setup as one atomic, undoable sequence:**
+```bash
+curl -sk -X POST -H "Authorization: Bearer sk_change_me" \
+  https://localhost:9091/execute/sequence \
+  -d '{"steps":[{"id":40297},{"id":40289},{"id":1013}],"stop_on_failure":true}'
+```
+
+**When there's no verb for it, the agent writes Lua and ReaClaw registers it natively:**
+```bash
+curl -sk -X POST -H "Authorization: Bearer sk_change_me" \
+  https://localhost:9091/scripts/register \
+  -d '{"name":"parallel_comp","script":"local tr = ..."}'
+# → { "action_id": "_parallel_comp_a1b2c3" }  ← now a real, runnable REAPER action
+```
+
+---
+
+## 🧩 How it fits together
+
+```
+   AI Agent (Claude · local LLM · curl · MCP client)
+        │
+        │  HTTPS  (REST / JSON, API-key auth)
+        ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │  reaper_reaclaw   (.dll / .dylib / .so)                      │
+ │                                                              │
+ │   HTTPS server ─────▶ command queue ─────▶ REAPER main thread│
+ │   (cpp-httplib)       (web → main,         (every SDK call,  │
+ │                        thread-safe)         in-process)      │
+ │                                                              │
+ │   SQLite  (catalog · scripts · history)                      │
+ │   DSP     (in-tree FFT, loudness, PNG encoder — no deps)     │
+ └─────────────────────────────────────────────────────────────┘
+        │  in-process REAPER API calls
+        ▼
+   REAPER  ── 65K-action system · ReaScript (Lua) · full project state
+```
+
+The web thread never touches REAPER directly — requests are marshalled onto REAPER's main
+thread through a command queue, so the API is safe under REAPER's threading rules. The
+agent brings the brains (it generates the Lua); ReaClaw validates the syntax and registers
+it. **There is no LLM inside the extension** — by design.
+
+---
+
+## 📚 Docs
+
+| Doc | What's in it |
+|---|---|
+| [docs/API.md](docs/API.md) | Full endpoint reference |
+| [docs/EXAMPLES.md](docs/EXAMPLES.md) | Copy-paste curl recipes |
+| [docs/MCP.md](docs/MCP.md) | Python MCP server + OpenClaw/agent integration |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build per platform, config reference, security checklist, headless Linux testing |
+| [SECURITY.md](SECURITY.md) | Security model, scope, and deployment guidance |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Build instructions and dev setup |
+| [ReaClaw_ROADMAP.md](ReaClaw_ROADMAP.md) | Where it's heading next |
+
+---
+
+## 🔐 Security model, briefly
+
+ReaClaw is a **single-user power tool**, and its security model says so plainly:
+
+- **API-key or no auth** — no mTLS, no OAuth (overkill for a loopback dev tool).
+- **No rate limiting** — network isolation is the right defense layer; keep it bound to
+  loopback or a trusted LAN.
+- **TLS on by default** — self-signed certs auto-generated; bring your own CA cert if you
+  like.
+- **The agent is trusted** — Lua is validated for *syntax*, not policed for behavior.
+
+Binding to `0.0.0.0` is allowed but it's *your* choice — read [SECURITY.md](SECURITY.md)
+before you expose it beyond localhost.
+
+---
+
+## 🧱 Tech stack
+
+| Component | Choice | Why |
+|---|---|---|
+| Language | C++17 | Required for a native REAPER extension |
+| Build | CMake | Cross-platform, one codebase |
+| HTTP/TLS | cpp-httplib + OpenSSL | Header-only; self-signed + CA certs |
+| Database | SQLite (amalgamation) | Embedded; zero external deps |
+| JSON | nlohmann/json | Header-only standard |
+| DSP / imaging | In-tree FFT + PNG encoder | No NumPy, no libpng — it all ships in the `.so` |
+| SDK | justinfrankel/reaper-sdk | The official REAPER SDK |
+
+---
+
+## 📦 Releases & status
+
+Latest release: **v1.5.0** — Tier-A control verbs, Tier-B content manipulation, and the
+audio-perception epic ("the agent hears itself"). Audio **visualization** lands next.
+See the [CHANGELOG](CHANGELOG.md) for the full story.
+
+| Phase | Scope | Tag |
+|---|---|---|
+| 0 | Scaffold · catalog · state · action execution · HTTPS + auth | v0.1.0 |
+| 1 | Script registration · syntax validation · sequences · history | v0.2.0 |
+| 2 | Performance · security hardening · MCP wrapper | v1.0.0 |
+| 3 | Tier-A/B structured verbs · content manipulation | v1.5.0 |
+| 4 | Perception — loudness, spectral, meters, hints, visualization | v1.5.0 → next |
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for full text.
+MIT — see [LICENSE](LICENSE). Built for [REAPER](https://www.reaper.fm/) by
+[braveness23](https://github.com/braveness23). 🦅

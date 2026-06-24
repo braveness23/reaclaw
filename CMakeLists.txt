@@ -54,6 +54,9 @@ add_library(reaper_reaclaw SHARED
     src/handlers/state.cpp
     src/handlers/items.cpp
     src/handlers/analysis.cpp
+    src/handlers/visualize.cpp
+    src/handlers/screenshot.cpp
+    src/handlers/probe.cpp
     src/handlers/hints.cpp
     src/handlers/project.cpp
     src/handlers/execute.cpp
@@ -68,6 +71,7 @@ add_library(reaper_reaclaw SHARED
     src/config/config.cpp
     src/util/tls.cpp
     src/util/logging.cpp
+    src/util/image.cpp
     src/panel/menu.cpp
     src/panel/dialogs.cpp
     src/panel/swell_stub.cpp

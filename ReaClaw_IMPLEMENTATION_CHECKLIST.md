@@ -401,9 +401,37 @@ method+confidence. New `src/handlers/analysis.cpp` (loudness/spectral/meters) an
 - [ ] Onset / density detection — deferred within the epic (not in acceptance
       criteria; transient analysis is higher-complexity). See TECH_DECISIONS §17.
 
-### Stage 5 — Pictures + advanced listening (Q4, Q5, Q7)
-- [ ] Audio visualization; targeted screenshots (on demand); key/tempo via
-      optional external tool
+### Stage 5 / Epic #19 — Pictures + advanced listening (Q4, Q5, Q7)
+**Q4 audio visualization — done (Unreleased).** New `src/handlers/visualize.cpp`
+plus dependency-free `src/util/image.{h,cpp}` (PNG encoder + RGB canvas) and a
+shared header-only FFT `src/util/dsp.h` (factored out of `analysis.cpp`).
+- [x] Pictures of audio — `GET /analysis/item/{i}/visualize` &
+      `/analysis/file/visualize` with `type=spectrum|waveform|loudness`,
+      `width`/`height`/`start`/`end`, `image=png|none`.
+- [x] **Machine-readable digest** alongside every image (bands/envelope/contour),
+      tagged `method`+`confidence`.
+- [x] Labelled charts: spectrum = log-freq EQ **curve** (Hz/dB axes), waveform/
+      loudness with seconds + dB axes, via a built-in 5×7 bitmap font on the canvas.
+- [x] Unit tests: PNG round-trip, base64, font/line drawing, FFT vs naive DFT
+      (12 new; 50/50).
+- [x] Verified live on REAPER 7.74 (aarch64): 440 Hz sine → spectrum peak in the
+      440 Hz log-band (dominant=mid, mid≈1.0), waveform peak −18.1/RMS −21.1 dB
+      (sine −3 dB law holds); pink-noise demo renders flat EQ curve + arch loudness
+      contour + enveloped waveform with correct axis labels; error paths 400/404.
+- [x] **Q5 screenshot ergonomics** — built-in `GET /screenshot` with named surface
+      targets (`arrange`/`reaper`, `mixer`, `fxchain`, `midi`, `routing`, `master`,
+      `transport`, `explorer`), `window=`/`region=`, `width=` downscale, and
+      screen-clamped capture rects. Verified live: framed `arrange` capture +
+      graceful 404 for an unopened surface + 400 for an unknown target.
+- [x] **Q7 musical probes** — `GET /analysis/item/{i}/probe` & `/analysis/file/probe`
+      return pitch + key (built-in `estimated_dsp`) and tempo (exact `introspection`
+      project tempo + optional external `bpm-tag`, graceful when absent), tagged by
+      truth source. Pure math in header-only `util/music.h` (7 unit tests; 57/57).
+      Verified live on REAPER 7.74: 440 Hz→A4 (0.95), 261.6 Hz→C4. Probe modelled as
+      a flavour of the analysis surface, not a separate registry (TECH_DECISIONS §17).
+- [ ] **A/B diff** against an earlier snapshot — deferred to the shared
+      snapshot/state-diff layer (cross-cutting; also used by Epic #20). This is the
+      one remaining #19 sliver; it lands with that shared layer, not inside #19.
 
 ### Stage 6 — Learns over time (Q8)
 - [ ] Mine correction logs → learned suggestions (local-first, opt-in)

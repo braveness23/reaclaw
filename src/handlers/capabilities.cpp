@@ -102,6 +102,20 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                "loudness: lufs_i/rms_i/peak_db/true_peak_db (exact offline analysis) + "
                "clipping; spectral: low/mid/high band energy + centroid_hz (estimated DSP)"},
               {"meters", "GET /state/meters — live per-track + master peak/peak-hold (dBFS)"},
+              {"visualize",
+               "GET /analysis/item/{index}/visualize and /analysis/file/visualize"
+               "?type=spectrum|waveform|loudness&width=&height=&image=png|none — "
+               "returns a machine-readable digest + base64 PNG"},
+              {"probe",
+               "GET /analysis/item/{index}/probe and /analysis/file/probe"
+               "?probes=key,pitch,tempo — musical-attribute probes. pitch/key are "
+               "built-in DSP (estimated); tempo is exact project introspection plus an "
+               "optional external detector (graceful when absent)"},
+              {"screenshot",
+               "GET /screenshot?target=screen|arrange|mixer|fxchain|midi|routing|master|"
+               "transport|explorer & window=<title> & region=x,y,w,h & width= — on-demand "
+               "PNG capture of a named surface (Linux/X11; needs ffmpeg, xdotool for "
+               "framing). Fallback for GUI-only state; prefer structured /state reads"},
               {"tagging",
                "every measure carries method (offline_analysis|estimated_dsp|introspection|"
                "derived) + confidence so the agent knows how much to trust it"},

@@ -10,9 +10,12 @@
 #include "handlers/execute.h"
 #include "handlers/history.h"
 #include "handlers/items.h"
+#include "handlers/probe.h"
 #include "handlers/project.h"
+#include "handlers/screenshot.h"
 #include "handlers/scripts.h"
 #include "handlers/state.h"
+#include "handlers/visualize.h"
 #include "reaper/executor.h"
 #include "server/server.h"
 #include "util/logging.h"
@@ -218,6 +221,25 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
             }));
     svr.Get("/analysis/file", auth_wrap(cfg, Handlers::handle_analysis_file));
 
+    // --- Audio visualization (Epic #19 / Q4) — image + machine-readable digest ---
+    svr.Get(R"(/analysis/item/(\d+)/visualize)",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                Handlers::handle_visualize_item(req, res);
+            }));
+    svr.Get("/analysis/file/visualize", auth_wrap(cfg, Handlers::handle_visualize_file));
+
+    // --- Musical-attribute probes (Epic #19 / Q7) — key / pitch / tempo ---
+    svr.Get(R"(/analysis/item/(\d+)/probe)",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                Handlers::handle_probe_item(req, res);
+            }));
+    svr.Get("/analysis/file/probe", auth_wrap(cfg, Handlers::handle_probe_file));
+
+    // --- On-demand screenshot (Epic #19 / Q5) — fallback for GUI-only state ---
+    svr.Get("/screenshot", auth_wrap(cfg, Handlers::handle_screenshot));
+
     // Markers & regions.
     svr.Get("/state/markers", auth_wrap(cfg, Handlers::handle_markers_get));
     svr.Post("/state/markers", auth_wrap(cfg, Handlers::handle_markers_post));
@@ -266,9 +288,13 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     // --- History ---
     svr.Get("/history", auth_wrap(cfg, Handlers::handle_history));
 
-    // --- Catch-all: 404 ---
+    // --- Catch-all: 404 for unmatched routes ---
+    // httplib runs this for any response with status >= 400. Only supply the
+    // generic body when a handler hasn't already set one, so handler-authored
+    // 404 messages (e.g. "Item index out of range", "No visible window…") are
+    // preserved instead of being flattened to "Not found".
     svr.set_error_handler([](const httplib::Request&, httplib::Response& res) {
-        if (res.status == 404) {
+        if (res.status == 404 && res.body.empty()) {
             res.set_content(R"({"error":"Not found","code":"NOT_FOUND","context":{}})",
                             "application/json");
         }

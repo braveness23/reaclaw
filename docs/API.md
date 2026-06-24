@@ -646,3 +646,152 @@ Invariants (hand-authored set): `muted_track`, `solo_elsewhere`,
 `near_silent_fader`, `routes_nowhere`, `phase_inverted`, `recarm_no_input`,
 `fx_offline`, `fx_bypassed`, `send_dest_routes_nowhere`, `send_dest_muted`,
 `empty_item`, `midi_no_instrument`. Empty array when nothing trips.
+
+---
+
+## Phase 4 — Audio visualization (#19, Q4)
+
+Pictures of audio for when a curve reads faster than numbers. Each request
+returns a machine-readable **`digest`** *and* (by default) a base64 PNG, so the
+agent reads numbers rather than OCR-ing pixels. Built on the same offline decode
++ FFT as the analysis endpoints; tagged `method`/`confidence` like everything in
+the perception layer.
+
+### GET /analysis/item/{index}/visualize
+
+Render a picture of a media item's active take source.
+
+Query params:
+- `type` — `spectrum` (default), `waveform`, or `loudness`.
+- `start=` / `end=` — source-relative seconds (default whole source).
+- `width=` (160–1024, default 640), `height=` (80–512, default 200).
+- `image=none` — return the digest only, no PNG (cheaper). Default `png`.
+
+The PNG is a dark-themed chart with labelled axes: spectrum is a log-frequency
+**EQ curve** (Hz ticks at 100/1k/10k, dB scale), waveform/loudness carry a time
+axis (seconds), and the level plots a dB scale (0/−12/−24/−48).
+
+Long windows are capped at 120 s of decoded audio; `window.truncated` flags it.
+
+```json
+{
+  "item_index": 1,
+  "type": "spectrum",
+  "source": { "file": "...", "type": "WAVE", "length": 4.0, "sample_rate": 44100, "num_channels": 1 },
+  "window": { "start": 0.0, "end": 4.0, "analyzed_seconds": 4.0, "truncated": false },
+  "digest": {
+    "bands": [ { "hz_lo": 20.0, "hz_hi": 24.5, "db": -72.1 }, "… 32 log-spaced bands …" ],
+    "peak_band_hz": 440.0, "centroid_hz": 441.3,
+    "low": 0.01, "mid": 0.98, "high": 0.01, "dominant_band": "mid",
+    "reference": "db relative to loudest band (curve shape)",
+    "method": "estimated_dsp", "confidence": 0.6
+  },
+  "image": { "format": "png", "width": 480, "height": 160, "base64": "iVBORw0KGgo…" }
+}
+```
+
+Digest by `type`:
+- **spectrum** — 32 log-spaced `bands` (`hz_lo`/`hz_hi`/`db`, dB relative to the
+  loudest band), `peak_band_hz`, `centroid_hz`, `low`/`mid`/`high` energy split,
+  `dominant_band`. `estimated_dsp`, confidence 0.6.
+- **waveform** — `peak_db`, `rms_db`, `clipping`, and a 32-point `envelope_db`
+  peak envelope across the window. `estimated_dsp`, confidence 0.9.
+- **loudness** — a `rms_contour_db` array (≤48 points) over time plus
+  `min_db`/`max_db`/`mean_db`. `estimated_dsp`, confidence 0.85.
+
+The PNG (teal signal on a labelled grid) is one the agent can `Read` directly.
+A/B diff against an earlier snapshot is deferred to the shared snapshot layer.
+
+### GET /analysis/file/visualize?path=…
+
+Same payload and params for an arbitrary audio file (e.g. a rendered stem/mix).
+`path` must be an absolute path REAPER can decode; 404 if it can't be opened.
+
+---
+
+## Phase 4 — Musical-attribute probes (#19, Q7)
+
+A *probe* is the measure-counterpart of an action: it reads the material and
+returns data instead of changing the project. Each result is tagged with its
+**truth source** — exact `introspection` (the project already knows it, no
+render) vs. `estimated_dsp` (decoded + analysed, carries `confidence`). Advanced
+detection may use an **optional external tool**; when it is absent the probe
+degrades gracefully (`available:false`) rather than failing.
+
+> Probes are exposed as a flavour of the analysis surface (a `/probe`
+> sub-resource), not a separate registry — see TECH_DECISIONS §17.
+
+### GET /analysis/item/{index}/probe
+
+Query: `probes=` (comma list of `pitch` / `key` / `tempo`, default all),
+`start=` / `end=` (source-relative seconds). 404 if the item index is out of
+range; 400 if the take has no audio source.
+
+```json
+{
+  "item_index": 0,
+  "source": { "file": "…", "type": "WAVE", "length": 4.0, "sample_rate": 44100, "num_channels": 1 },
+  "pitch": { "note": "A4", "name": "A", "octave": 4, "frequency_hz": 440.3, "cents": 1.3,
+             "midi": 69, "method": "estimated_dsp", "confidence": 0.95 },
+  "key":   { "key": "A minor", "tonic": "A", "mode": "minor", "correlation": 0.68,
+             "chroma": [ "… 12 pitch-class energies …" ],
+             "method": "estimated_dsp", "confidence": 0.31 },
+  "tempo": {
+    "project":  { "bpm": 120.0, "timesig_num": 4, "timesig_denom": 4,
+                  "method": "introspection", "confidence": 1.0,
+                  "note": "the project tempo at this item's position — exact, not detected from audio" },
+    "detected": { "available": false, "method": "estimated_dsp",
+                  "note": "tempo-from-audio needs an optional external analyser (e.g. bpm-tools' `bpm-tag`) on PATH; not found." }
+  }
+}
+```
+
+- **pitch** — dominant fundamental → nearest equal-tempered note (`A4`) + signed
+  `cents`. Built-in DSP (FFT peak, parabolic-interpolated), `estimated_dsp`.
+- **key** — Krumhansl–Schmuckler correlation over a 12-bin chromagram → `tonic` +
+  `mode`; `confidence` is the margin over the runner-up key. Built-in DSP.
+- **tempo** — `project` is exact (`introspection`, the project tempo at the item's
+  position); `detected` is the optional from-audio estimate via an external tool
+  (`bpm-tag`), reported `available:false` when the tool isn't installed.
+
+### GET /analysis/file/probe?path=…
+
+Same for an arbitrary file. A loose file has no project timebase, so only the
+`tempo.detected` (external) source applies — there is no exact `project` tempo.
+
+---
+
+## Phase 4 — On-demand screenshot (#19, Q5)
+
+Structure-first is the default (use the `/state` reads); a screenshot is the
+**fallback for GUI-only state** — custom plugin GUIs, metering displays — that
+structured data can't express. Linux/X11 only; needs `ffmpeg` (x11grab) and, for
+window framing, `xdotool`.
+
+### GET /screenshot
+
+Capture precedence: `region` > `window` > named `target`.
+
+- `target=` — a **named surface**: `screen` (whole display, default),
+  `arrange`/`reaper`, `mixer`, `fxchain`, `midi`, `routing`, `master`,
+  `transport`, `explorer`. Each (except `screen`) auto-frames that REAPER window.
+- `window=<title>` — frame the largest window whose title matches the substring.
+- `region=x,y,w,h` — capture an explicit rectangle.
+- `width=` — downscale the result to this width (keeps aspect) to bound token cost.
+
+Capture rectangles are clamped to the screen, so a maximized window's geometry
+won't make x11grab fail.
+
+```json
+{
+  "framed": "arrange",
+  "display": ":0.0",
+  "region": { "x": 0, "y": 91, "w": 1920, "h": 989 },
+  "image": { "format": "png", "width": 600, "height": 309, "base64": "iVBORw0KGgo…" },
+  "note": "structure-first: prefer /state reads; use a screenshot only for GUI-only state"
+}
+```
+
+Errors: `400` unknown target / malformed region; `404` the named surface isn't
+open (`"No visible window matching '…'"`); `501` no `DISPLAY`, or `ffmpeg`/
+`xdotool` missing; `503` the grab failed.
