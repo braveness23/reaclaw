@@ -18,12 +18,36 @@ it and you tag the merge commit. Do **not** bump after opening the PR — that's
 what forced a cherry-pick onto main last time. If work is already merged to main
 without a bump, see "Recovery" below.
 
-## Versioning
+## Versioning & cadence
 
-Each feature epic is a **minor** bump (v1.3 → v1.4 → v1.5 → v1.6, one epic each).
-Bug-fix-only releases are **patch**. If the user names a version, use it; else
-default to `--minor` and say so. `REACLAW_VERSION` derives from the CMakeLists
-version, so CMakeLists is the only source of truth.
+ReaClaw is past 1.0, so the REST API is a **contract** agents and the MCP server
+consume. `REACLAW_VERSION` derives from the CMakeLists version — that's the only
+source of truth.
+
+**Choosing the bump** — keep `CHANGELOG [Unreleased]` honest on every PR, then the
+bump picks itself:
+
+| Bump | When | Examples |
+|------|------|----------|
+| **patch** `1.6.x` | behavior fix, **no API surface change**, fully backward-compatible | wrong dB readback, a hint misfiring, a crash on an empty item, a perf fix, a fix that rebuilds the binary |
+| **minor** `1.x.0` | new, **additive** surface — old calls still work | a new endpoint/verb/field/measure; one cohesive feature (can be smaller than a whole epic) |
+| **major** `2.0.0` | **breaking** the contract | removing/renaming an endpoint, changing a response shape agents rely on, changing auth/bind/config defaults |
+
+Rule of thumb: anything breaking in `[Unreleased]` → **major**; else any new feature
+→ **minor**; else (only fixes) → **patch**. If the user names a version, use it.
+
+**Cadence — release when there's something worth installing; don't batch.** A
+release is a tag → ~6 min automated build+publish, so sitting on a fix costs more
+than it saves.
+- **Patches: cut eagerly** — a real fix to an already-*released* version lands on
+  main → tag a patch that day. (A fix to a feature still sitting in `[Unreleased]`
+  isn't a patch; it folds into that pending minor.)
+- **Minors: per cohesive feature**, which may be *smaller than a full epic* — ship
+  an independently-useful sub-feature rather than waiting to bundle a big one.
+- **Majors: rare, deliberate, batched.**
+
+**One bar that does not relax for patches:** if a patch changes behavior, it still
+gets the live-REAPER verification. "Patch" means small scope, not "skip the check."
 
 ## Steps
 
