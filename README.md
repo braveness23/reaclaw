@@ -254,9 +254,10 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.5.0** — Tier-A control verbs, Tier-B content manipulation, and the
-audio-perception epic ("the agent hears itself"). Audio **visualization** lands next.
-See the [CHANGELOG](CHANGELOG.md) for the full story.
+Latest release: **v1.6.0** — Tier-A control verbs, Tier-B content manipulation, the
+audio-perception epic ("the agent hears itself"), and now **visual perception**: audio
+visualization, named-surface screenshots, and key/pitch/tempo probes. See the
+[CHANGELOG](CHANGELOG.md) for the full story.
 
 | Phase | Scope | Tag |
 |---|---|---|
@@ -264,7 +265,7 @@ See the [CHANGELOG](CHANGELOG.md) for the full story.
 | 1 | Script registration · syntax validation · sequences · history | v0.2.0 |
 | 2 | Performance · security hardening · MCP wrapper | v1.0.0 |
 | 3 | Tier-A/B structured verbs · content manipulation | v1.5.0 |
-| 4 | Perception — loudness, spectral, meters, hints, visualization | v1.5.0 → next |
+| 4 | Perception — loudness, spectral, meters, hints, visualization, probes | v1.6.0 |
 
 ---
 
