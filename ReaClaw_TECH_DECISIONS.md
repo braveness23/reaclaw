@@ -310,8 +310,29 @@ heavier feedback opt-in (`measures=` filter, `start`/`end` windowing).
   if long-render analysis becomes common.
 - **Onset / density** detection is deferred (transient analysis is higher
   complexity and outside #18's acceptance criteria).
-- **Musical attributes** (key/tempo/pitch) stay gated behind the optional
-  external tool of Epic #4, per the 2026-06-20 "advanced optional" decision.
+
+**Visual perception & probes (Epic #19) — graduations:**
+- **Pitch & key are built-in, not gated.** The 2026-06-20 "advanced optional"
+  decision assumed musical attributes needed an external tool. In practice pitch
+  (FFT dominant-fundamental) and key (chromagram + Krumhansl–Schmuckler) fall out
+  of the *same decode + FFT* the spectral digest already uses, so they ship
+  built-in as `estimated_dsp`. The optional external tool stays the path for
+  detection that genuinely needs more — **tempo-from-audio** (`bpm-tools`'
+  `bpm-tag`), which is `available:false` when absent. Tempo also has an exact
+  `introspection` source: the project tempo at the item's position.
+  - *Pitch caveat:* a harmonic product spectrum was tried first but collapses on
+    pure tones (no 2f/3f energy → a subharmonic whose 3rd harmonic hits the peak
+    wins). Reverted to plain peak-picking + a guarded sub-octave correction.
+- **A probe is a flavour of the analysis surface, not a registry.** The open
+  question ("first-class probe vs. action machinery") is resolved pragmatically:
+  probes are a `/analysis/.../probe` sub-resource returning tagged data. A
+  registerable, user-authored probe *library* (the "compounding" aspiration) is
+  deferred until there's demand — building the registry now would be speculative.
+- **A/B visual diff is deferred to the shared snapshot/state-diff layer.** Both
+  Epic #19's A/B diff and Epic #20's correction-mining need session snapshots over
+  time; that layer is built once and shared (ROADMAP §4), so the diff lands with
+  it rather than inside #19. #19 ships visualization, screenshot ergonomics, and
+  probes; the diff is the one carried sliver.
 
 ---
 

@@ -9,6 +9,51 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Audio visualization (Epic #19 / Q4)** — `GET /analysis/item/{index}/visualize`
+  and `GET /analysis/file/visualize` render a picture of an audio source as a
+  base64 **PNG** *alongside* a machine-readable **digest** (the agent reads
+  numbers, doesn't OCR pixels). Three `type`s: `spectrum` (32 log-spaced bands +
+  centroid + low/mid/high), `waveform` (peak/RMS/clip + 32-pt envelope), and
+  `loudness` (RMS contour over time). `width`/`height`/`start`/`end` params;
+  `image=none` for digest-only. Long windows cap at 120 s decoded
+  (`window.truncated`). Tagged `method`+`confidence` like the rest of perception.
+  A/B snapshot diff deferred to the shared snapshot layer. (#19)
+- Visualizations are **labelled charts**: spectrum renders as a log-frequency
+  **EQ curve** (Hz ticks + dB scale), waveform/loudness carry a seconds axis, and
+  the level plots a dB scale — via a small built-in 5×7 bitmap font on the canvas.
+  Default size 640×200. (#19)
+- Self-contained, dependency-free **PNG encoder + 8-bit RGB canvas** (`util/image`,
+  incl. bitmap-font text + thick lines) and a shared header-only **FFT**
+  (`util/dsp`, factored out of `analysis.cpp`). Unit-tested (12 new tests: PNG
+  round-trip, base64 vectors, font/line drawing, FFT vs naive DFT; 50/50).
+- **Musical-attribute probes (Epic #19 / Q7)** —
+  `GET /analysis/item/{index}/probe` and `GET /analysis/file/probe` return
+  **pitch**, **key**, and **tempo**, each tagged with its truth source. Pitch
+  (dominant fundamental → note + cents) and key (chromagram + Krumhansl–Schmuckler
+  correlation) are built-in `estimated_dsp`; tempo is exact `introspection` (the
+  project tempo at the item's position) plus an optional external detector
+  (`bpm-tools`' `bpm-tag`) for tempo-from-audio that **degrades gracefully**
+  (`available:false`) when the tool is absent. `?probes=` filter; `start`/`end`
+  windowing. Pure note/key math lives in header-only `util/music.h` (7 new unit
+  tests; A440→A4, C-major profile→C major, etc.). Verified live on REAPER 7.74
+  (aarch64): 440 Hz sine → A4 (conf 0.95), 261.6 Hz → C4. (#19)
+- **Named screenshot surfaces (Epic #19 / Q5)** — `GET /screenshot` now accepts a
+  named `target` (`arrange`/`reaper`, `mixer`, `fxchain`, `midi`, `routing`,
+  `master`, `transport`, `explorer`) that auto-frames that REAPER surface, in
+  addition to `screen`, `window=<title>`, and `region=x,y,w,h`. `width=` downscales
+  to bound token cost. Capture rectangles are **clamped to the screen** so a
+  maximized window's geometry no longer makes x11grab fail. (#19)
+- **404 messages preserved** — the catch-all error handler now only supplies the
+  generic "Not found" body for genuinely unmatched routes, so handler-authored 404
+  messages ("Item index out of range", "No visible window matching '…'") survive
+  instead of being flattened.
+
+### Deferred (within #19)
+- **A/B visual diff** against an earlier snapshot — depends on the cross-cutting
+  snapshot / state-diff layer (also needed by Epic #20). Built once, shared; not
+  bundled into #19. See `ReaClaw_ROADMAP.md` §4 and TECH_DECISIONS §17.
+
 ## [1.5.0] - 2026-06-22
 
 Epic #18 — Audio perception ("the agent hears itself"). The headline

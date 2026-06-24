@@ -211,6 +211,164 @@ curl -sk -X POST "$BASE/state/tracks/2" \
 
 ---
 
+## Content: Items, Takes & Sources
+
+### Drop an audio file onto a track as a new item
+
+```bash
+curl -sk -X POST "$BASE/state/items" \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{ "create": [ { "track": 0, "position": 0, "file": "/audio/vox.wav" } ] }'
+# length defaults to the source length; pass "length" to trim
+```
+
+### Split an item at a position, then nudge the take
+
+```bash
+curl -sk -X POST "$BASE/state/items/0/split" -H "$AUTH" -d '{ "position": 2.5 }'
+
+curl -sk -X POST "$BASE/state/items/0" \
+  -H "$AUTH" \
+  -d '{ "take": { "volume_db": -3.0, "pitch": -2, "preserve_pitch": true } }'
+```
+
+### Read an item with its take + source metadata
+
+```bash
+curl -sk "$BASE/state/items/0" -H "$AUTH"
+# → { ..., "take": { "name": ..., "pan": 0 },
+#         "source": { "file": ..., "type": "WAVE", "sample_rate": 48000, "num_channels": 2 } }
+```
+
+---
+
+## FX: Add, Tune, Copy, Preset
+
+### Add ReaEQ to track 0 and set a band
+
+```bash
+curl -sk -X POST "$BASE/state/tracks/0/fx" \
+  -H "$AUTH" \
+  -d '{ "name": "ReaEQ", "params": [ { "name": "Gain", "value": 0.6 } ] }'
+```
+
+### Copy a dialed-in FX to another track
+
+```bash
+curl -sk -X POST "$BASE/state/tracks/0/fx/0/copy" \
+  -H "$AUTH" \
+  -d '{ "to_track": 3, "to_slot": -1, "move": false }'
+```
+
+### Step through FX presets / take an FX offline
+
+```bash
+curl -sk -X POST "$BASE/state/tracks/0/fx/0/preset" -H "$AUTH" -d '{ "navigate": 1 }'
+curl -sk -X POST "$BASE/state/tracks/0/fx/0"        -H "$AUTH" -d '{ "offline": true }'
+```
+
+---
+
+## 👂 Perception: Let the Agent Hear Itself
+
+### Measure the loudness & spectral balance of an item
+
+```bash
+curl -sk "$BASE/analysis/item/0?measures=loudness,spectral" -H "$AUTH"
+```
+
+```json
+{
+  "loudness": {
+    "lufs_i": -14.2, "rms_i": -16.8, "peak_db": -1.0, "true_peak_db": -0.7,
+    "clipping": { "digital": false, "inter_sample": false },
+    "method": "offline_analysis", "confidence": 1.0
+  },
+  "spectral": {
+    "low": 0.21, "mid": 0.55, "high": 0.24, "centroid_hz": 2173.4,
+    "method": "estimated_dsp", "confidence": 0.6
+  }
+}
+```
+
+### Analyze an arbitrary file (not yet in the project)
+
+```bash
+curl -sk "$BASE/analysis/file?path=/audio/master.wav&measures=loudness" -H "$AUTH"
+```
+
+### Read live meters (per-track + master peak / peak-hold)
+
+```bash
+curl -sk "$BASE/state/meters" -H "$AUTH"
+# → { "audio_running": true, "master": { "peak_db": -3.2, "peak_hold_db": -1.1 }, "tracks": [...] }
+```
+
+### Render a labelled PNG and save it
+
+```bash
+curl -sk "$BASE/analysis/item/0/visualize?type=waveform&width=640&height=200" -H "$AUTH" \
+  | jq -r '.image.base64' | base64 -d > waveform.png
+# types: spectrum | waveform | loudness   ·   image=none for digest-only
+```
+
+### Probe the musical attributes (key / pitch / tempo)
+
+```bash
+curl -sk "$BASE/analysis/item/0/probe" -H "$AUTH" \
+  | jq '{pitch: .pitch.note, key: .key.key, tempo: .tempo.project.bpm}'
+# → { "pitch": "A4", "key": "A minor", "tempo": 120 }
+```
+
+Pitch and key are built-in DSP (`estimated_dsp`); tempo is exact project
+introspection plus an optional external detector that degrades gracefully when
+absent. Filter with `?probes=pitch` / `key` / `tempo`.
+
+### Screenshot a named REAPER surface (GUI-only fallback)
+
+```bash
+# Frame the mixer (or arrange / fxchain / midi / routing / master / transport),
+# downscaled to bound token cost:
+curl -sk "$BASE/screenshot?target=mixer&width=800" -H "$AUTH" \
+  | jq -r '.image.base64' | base64 -d > mixer.png
+# Structure-first stays the default — reach for this only for GUI-only state.
+```
+
+---
+
+## 🪝 Consequence Hints (free, on every mutation)
+
+Mutating responses carry a `hints[]` array — no extra call needed:
+
+```bash
+curl -sk -X POST "$BASE/state/tracks/3" -H "$AUTH" -d '{ "armed": true }'
+```
+
+```json
+{
+  "ok": true,
+  "hints": [
+    { "code": "recarm_no_input", "severity": "warn",
+      "message": "Track armed for recording but has no record input assigned." }
+  ]
+}
+```
+
+---
+
+## Project Scratchpad (ext-state, survives close/reopen)
+
+```bash
+# Stash agent context inside the .rpp itself
+curl -sk -X POST "$BASE/project/extstate" -H "$AUTH" \
+  -d '{ "section": "reaclaw", "key": "mix_intent", "value": "warm, vocal-forward" }'
+
+curl -sk "$BASE/project/extstate?section=reaclaw&key=mix_intent" -H "$AUTH"
+```
+
+---
+
 ## Catalog Search
 
 ### Find mute actions

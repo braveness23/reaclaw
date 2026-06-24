@@ -23,6 +23,7 @@ set(REACLAW_TESTABLE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/config/config.cpp
     ${CMAKE_SOURCE_DIR}/src/db/db.cpp
     ${CMAKE_SOURCE_DIR}/src/auth/auth.cpp
+    ${CMAKE_SOURCE_DIR}/src/util/image.cpp
 )
 
 # ---------------------------------------------------------------------------
@@ -33,6 +34,9 @@ add_executable(reaclaw_tests
     test_db.cpp
     test_auth.cpp
     test_logging.cpp
+    test_image.cpp
+    test_dsp.cpp
+    test_music.cpp
     ${REACLAW_TESTABLE_SOURCES}
 )
 
