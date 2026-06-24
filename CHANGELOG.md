@@ -7,7 +7,14 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [1.6.0] - 2026-06-23
+
+Epic #19 — Visual perception & musical probes. The perception loop now produces
+**pictures** (audio visualization) and reads **musical attributes** (key / pitch /
+tempo), on top of Epic #18's audio analysis. On-demand screenshots gain named
+surface targets. All built-in and dependency-free; every measure tagged
+`method`+`confidence`. Verified live on REAPER 7.74 (aarch64): 440 Hz → A4,
+261.6 Hz → C4, framed `arrange` capture, graceful external-tool absence.
 
 ### Added
 - **Audio visualization (Epic #19 / Q4)** — `GET /analysis/item/{index}/visualize`
