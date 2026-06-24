@@ -37,6 +37,7 @@ add_executable(reaclaw_tests
     test_image.cpp
     test_dsp.cpp
     test_music.cpp
+    test_jsondiff.cpp
     ${REACLAW_TESTABLE_SOURCES}
 )
 

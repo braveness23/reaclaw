@@ -336,6 +336,42 @@ heavier feedback opt-in (`measures=` filter, `start`/`end` windowing).
 
 ---
 
+## 18. Learned Suggestions & the Snapshot Layer (Epic #20)
+
+**Decision:** ReaClaw learns from its own use — locally, opt-in, never phoning
+home — and the learning is built on a **shared snapshot / state-diff layer** that
+also retro-unlocks the #19 A/B diff.
+
+- **Snapshot / state-diff layer (the cross-cutting prep).** A canonical,
+  diff-stable JSON slice of project state is captured on the main thread, stored
+  in `state_snapshots`, and diffed by a pure header-only recursive differ
+  (`util/jsondiff.h`) into `[{path, op, from, to}]`. Built once, shared by #20's
+  correction mining and #19's A/B visual diff. The snapshot is a *focused* slice
+  (not the full `/state` payload) so diffs stay legible and stable across reads.
+- **Learning model — pairwise association, not ML.** Each structured edit is an
+  event; transitions (antecedent → consequent) by the same agent within a window
+  accumulate counts; `confidence = P(consequent | antecedent)`, gated by
+  `min_support` + `min_confidence`. This is a transparent, inspectable
+  association-rule layer — no model files, no opaque weights. Heavier mining
+  (multi-step, value-aware "corrected *to* Y") is deferred until the simple layer
+  proves its worth; the acceptance criteria only need pairwise.
+- **Local-first & opt-in are non-negotiable (from IDEAS Q8).** Off by default
+  (`learning.enabled=false`); while off, `note()` is a no-op and nothing is
+  recorded. All state is in the same local SQLite DB — there is **no network
+  egress anywhere in the extension** (settled in §11: no LLM client, no outbound
+  calls), so "nothing leaves the machine" is structural, not a promise.
+- **Shared channel, distinct source.** Learned suggestions ride the same
+  suggestion idea as #18's hints but are tagged `method:"learned"` (vs. the
+  hand-authored invariants), so an agent can weight them differently. They are
+  **advisory, never automatic** — ReaClaw suggests, the agent decides.
+
+**Open / deferred:** value-aware corrections and multi-step workflow mining;
+richer edit coverage (every mutating verb emits an event — currently the
+high-traffic track/FX/send/item set); surfacing learned suggestions inline on
+mutations (today they are a pull via `/suggestions`).
+
+---
+
 ## Summary
 
 | Concern | Decision |

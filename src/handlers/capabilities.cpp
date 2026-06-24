@@ -122,6 +122,22 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"hints",
                "mutating responses to track/FX/send/item edits carry a hints[] array of "
                "consequence-aware warnings ({code,severity,message})"}}},
+            {"snapshot",
+             {{"capture", "POST /snapshot {label?} — store a canonical project-state snapshot"},
+              {"list", "GET /snapshot"},
+              {"get", "GET /snapshot/{id}"},
+              {"diff",
+               "GET /snapshot/diff?from=<id>&to=<id|current> — flat list of {path,op,from,to} "
+               "changes (to defaults to a live capture). Backs the #19 A/B diff too"},
+              {"delete", "DELETE /snapshot/{id}"}}},
+            {"learning",
+             {{"suggestions",
+               "GET /suggestions?after=&agent=&limit= — learned 'after X, agents usually do Y' "
+               "suggestions tagged method:learned + confidence"},
+              {"stats", "GET /learn/stats — events/patterns accumulated locally"},
+              {"note",
+               "local-first and OPT-IN: off unless learning.enabled=true; mines only this "
+               "machine's edit history, never phones home"}}},
             {"project",
              {{"read", "GET /project  (dirty, length, notes)"},
               {"set_notes", "POST /project/notes {notes}"},

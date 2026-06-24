@@ -433,8 +433,25 @@ shared header-only FFT `src/util/dsp.h` (factored out of `analysis.cpp`).
       snapshot/state-diff layer (cross-cutting; also used by Epic #20). This is the
       one remaining #19 sliver; it lands with that shared layer, not inside #19.
 
-### Stage 6 — Learns over time (Q8)
-- [ ] Mine correction logs → learned suggestions (local-first, opt-in)
+### Stage 6 / Epic #20 — Learns over time (Q8)
+**Snapshot / state-diff layer (cross-cutting prep).** New `src/handlers/snapshot.{h,cpp}`
++ header-only `src/util/jsondiff.h` (pure recursive diff, unit-tested).
+- [x] Capture a canonical, diff-stable project-state snapshot; store in
+      `state_snapshots`. `POST /snapshot`, `GET /snapshot[/{id}]`, `DELETE`.
+- [x] `GET /snapshot/diff?from=<id>&to=<id|current>` → flat `[{path,op,from,to}]`.
+      Backs the deferred #19 A/B visual diff too.
+
+**Learned suggestions (the moat).** New `src/handlers/learning.{h,cpp}` + `learn_events`
+/ `learn_pairs` tables + `learning` config block.
+- [x] Log structured edits as events (track create/update fields, FX add, send
+      add, item create); mine antecedent→consequent transitions within a window.
+- [x] `GET /suggestions` surfaces "after X, agents usually do Y" tagged
+      `method:learned` + confidence (= P(consequent|antecedent), gated by
+      min_support/min_confidence). `GET /learn/stats` for observability.
+- [x] **Local-first and opt-in** — `learning.enabled` off by default; nothing
+      recorded while disabled; all state local SQLite, no network egress ever.
+- [ ] Heavier mining (multi-step sequences, value-aware "corrected to Y") —
+      deferred; the pairwise association layer covers the acceptance criteria.
 
 ---
 

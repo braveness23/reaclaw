@@ -9,6 +9,28 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Snapshot / state-diff layer (Epic #20 prep)** — capture a canonical,
+  diffable project-state snapshot, store it, and diff two snapshots (or a
+  snapshot vs. live). `POST /snapshot {label?}`, `GET /snapshot`,
+  `GET /snapshot/{id}`, `DELETE /snapshot/{id}`, and `GET /snapshot/diff?from=<id>
+  &to=<id|current>` → a flat `[{path, op, from?, to?}]` change list. This is the
+  shared cross-cutting layer the roadmap called for: it backs both the deferred
+  #19 A/B visual diff and #20's correction mining. Pure recursive diff in
+  header-only `util/jsondiff.h` (unit-tested). (#20)
+- **Learned suggestions — the compounding moat (Epic #20 / Q8)** — local, opt-in
+  mining of the agent's own edit history into *"after X, agents usually do Y"*
+  associations, surfaced as suggestions tagged `method:"learned"` + `confidence`.
+  `GET /suggestions?after=&agent=&limit=` and `GET /learn/stats`. Structured
+  edits (track create/update fields, FX add, send add, item create) are recorded
+  as events; antecedent→consequent transitions within a window accumulate in
+  `learn_pairs`; confidence = P(consequent | antecedent). Distinct from the
+  hand-authored hints of #18 though it shares the suggestion channel. (#20)
+- **Local-first and opt-in.** Learning is **off by default** (`learning.enabled`);
+  while disabled, nothing is recorded. All state lives in the local SQLite DB —
+  there is no network egress, ever. New config block `learning`
+  (`enabled`/`window_seconds`/`min_support`/`min_confidence`).
+
 ## [1.6.0] - 2026-06-23
 
 Epic #19 — Visual perception & musical probes. The perception loop now produces

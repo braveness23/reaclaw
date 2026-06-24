@@ -50,8 +50,13 @@ What remains is everything below.
 | 1 | Tier-A control verbs ✅ *done (v1.3.0)* | Control | API_ANALYSIS Tier A | [#16](https://github.com/braveness23/reaclaw/issues/16) |
 | 2 | Tier-B/C content manipulation ✅ *Tier-B done (v1.4.0); Tier-C deferred* | Control | API_ANALYSIS Tiers B/C | [#17](https://github.com/braveness23/reaclaw/issues/17) |
 | 3 | Audio perception ("hears itself") ✅ *done (v1.5.0); onset/density deferred* | Perception | IDEAS Q1, Q3 | [#18](https://github.com/braveness23/reaclaw/issues/18) |
-| 4 | Visual perception & musical probes | Perception | IDEAS Q4, Q5, Q7 | [#19](https://github.com/braveness23/reaclaw/issues/19) |
-| 5 | Learned suggestions (the moat) | Learning | IDEAS Q8 | [#20](https://github.com/braveness23/reaclaw/issues/20) |
+| 4 | Visual perception & musical probes ✅ *done (v1.6.0); A/B diff lands with the snapshot layer* | Perception | IDEAS Q4, Q5, Q7 | [#19](https://github.com/braveness23/reaclaw/issues/19) |
+| 5 | Learned suggestions (the moat) ✅ *done; pairwise layer + snapshot/diff. Heavier mining deferred* | Learning | IDEAS Q8 | [#20](https://github.com/braveness23/reaclaw/issues/20) |
+
+**All five roadmap epics are now complete.** The shared **snapshot / state-diff
+layer** built as #20's prep also retro-unlocks the one #19 sliver (A/B visual
+diff). Forward work now lives in `ReaClaw_IDEAS.md` plus one-off requests (e.g.
+track icons #29, external-change detection #31).
 
 **Tier D** (API_ANALYSIS) is intentionally *not* an epic — real-time PCM/waveform access,
 hardware metering, GUI window control, and audio-device config are not meaningfully
