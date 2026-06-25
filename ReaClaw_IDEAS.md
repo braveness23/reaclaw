@@ -152,6 +152,70 @@ for "after X, agents usually do Y," then surface those as suggestions tagged as
 **local-first and opt-in** — no phoning home. This is the long-term moat;
 distinct from Q3 even if it shares the same suggestion channel.
 
+### Q9 — Programmatic audio production (the headless render engine) — a NEW third half
+
+Not perception, not control — **production**. Treat REAPER, driven through the
+API and rendered **offline**, as a deterministic audio backend: a *composition
+spec → mastered audio file* function, faster than real time, with no audio device
+and no GUI playback. The agent emits MIDI + FX chains + automation + routing as
+API calls, hits render, and gets back audio — using REAPER's whole ecosystem
+(ReaEQ/ReaComp/ReaFIR, time-stretch, every render format) as library functions it
+never had to write.
+
+The durable insight (Dave, 2026-06-24): *audio doesn't make sound-pressure waves
+until a listener plays it* — every upstream step (compose, edit, mix, master,
+render) is pure data at compute speed. The realtime path (null sink + screen
+capture) is only for when a human must see/hear it live, or for a **video**; it's
+incidental to production.
+
+Unlocks a pipeline class rather than a feature: podcast edit & master; scoring an
+AI-generated video to its length/cues; generative music (pop songs, orchestras);
+and **batch/parametric** renders impossible in real time (100 variations of
+key/tempo/mix/seed in parallel).
+
+**Proven 2026-06-24:** a 7-track composition built entirely via the API rendered
+offline to a 24-bit/44.1k WAV in 0.36 s for 8 s of audio (~20×+ real time) on the
+headless Pi rig — already works through the Lua escape hatch
+(`GetSetProjectInfo_String` RENDER_* + action 41824). The scope of making it
+first-class (a `/render` verb that hides the `RENDER_FORMAT` blob, project
+save/load, async render jobs, CI) is **Epic 6** in `ReaClaw_ROADMAP.md` →
+[#32](https://github.com/braveness23/reaclaw/issues/32), children #33–#36.
+
+> Unlike Q1–Q8 (perception/learning), Q9 is the *production* half. It leans on the
+> existing control verbs (tracks, MIDI, FX, automation, routing) as its
+> composition primitives and on Q7's "exact vs. estimated, needs-a-bounce"
+> distinction (a render IS the bounce).
+
+### Q10 — A/B comparison (the "taste" loop)
+
+The agent shouldn't have to commit a move blind. Let it hold two versions of a
+thing side by side — a *before* and an *after*, two takes, two FX settings, two
+mixes — and compare them on the same footing, then pick (or let Dave pick).
+
+The durable insight (Dave, 2026-06-24): the agent can already **act**, **see**,
+and **hear**, but it lacks **taste** — and taste is fundamentally *comparative*.
+A/B is the smallest primitive that turns "I made a change" into "I made a change
+and it's *better*." It's the substrate for a maker/critic split (one pass makes a
+move, a second pass judges it cold) and for learning *Dave's* preferences over
+time, not generic "good" ones.
+
+Deliberately unscoped — what "A" and "B" even are, and what we compare on, is the
+design conversation, not decided here. Candidate axes to discuss later:
+
+- **What's being compared:** two snapshots in time, two takes/comps, two FX or
+  param settings, two render outputs, two whole mixes.
+- **How it's compared:** numeric deltas (LUFS / true-peak / spectral tilt /
+  stereo width / crest factor), a visual diff (leans on Q4's A/B image diff), a
+  blind listen-and-call, or a preference captured from Dave's reaction.
+- **What's remembered:** a single comparison is throwaway; the *accumulation* of
+  "Dave preferred B because it was darker" is what compounds into taste (ties to
+  Q8 learned suggestions).
+
+> **Cross-link:** builds directly on the **snapshot layer** (below) and **Q4**'s
+> A/B visual diff; the *measure* side reuses **Q1** audio analysis and **Q7**
+> probes; the *learning* side feeds **Q8**. Q10 is the framing that ties these
+> into a single "prefer, don't just produce" capability.
+
 ---
 
 ## Cross-cutting concepts to keep in mind
@@ -180,6 +244,8 @@ defer to the (more grounded) issues.
 | Q6 discover-before-generate | **Largely done/owned** — #4 (closed), #10, #9 |
 | Q7 musical probes | **New** |
 | Q8 learned suggestions | **New** |
+| Q9 programmatic production / render engine | **New** — a third half; → Epic 6 ([#32](https://github.com/braveness23/reaclaw/issues/32)), children #33–#36 |
+| Q10 A/B comparison ("taste" loop) | **New** — builds on the snapshot layer + Q4; feeds Q8 |
 
 Gating dependency: **#7's coverage-philosophy decision** (action-runner vs
 structured REST data model) shapes how Q2 lands and how Q7's "project"
