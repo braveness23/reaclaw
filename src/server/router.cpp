@@ -93,6 +93,9 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     svr.Get("/catalog", auth_wrap(cfg, Handlers::handle_catalog_list));
 
     // --- State ---
+    // Track icon discovery — registered before the parameterised track routes so
+    // the literal path "track-icons" is never mistaken for a track index.
+    svr.Get("/state/track-icons", auth_wrap(cfg, Handlers::handle_state_track_icons));
     svr.Get("/state/tracks", auth_wrap(cfg, Handlers::handle_state_tracks));
     svr.Get("/state/selection", auth_wrap(cfg, Handlers::handle_state_selection));
     svr.Get("/state/automation", auth_wrap(cfg, Handlers::handle_state_automation));

@@ -455,6 +455,23 @@ shared header-only FFT `src/util/dsp.h` (factored out of `analysis.cpp`).
 
 ---
 
+## Issue #29 — Track icons — **complete**
+
+Adds `P_ICON` read/write to the track layer and a discovery endpoint.
+
+- [x] **Read** — `icon` field in `GET /state/tracks` (`P_ICON` value; `null` when unset)
+- [x] **Write** — `icon` accepted by `POST /state/tracks/{index}`, `POST /state/tracks`
+      (create + batch update). Relative name → `Data/track_icons`; absolute path used as-is;
+      `null`/`""` clears. Pass-through to `P_ICON` via `GetSetMediaTrackInfo_String`.
+- [x] **Discovery** — `GET /state/track-icons` lists `.png/.jpg/.jpeg/.bmp` files in
+      `{ResourcePath}/Data/track_icons`, sorted alphabetically.
+- [x] **Capabilities** — `icon` added to `writable_fields`; discovery endpoint noted.
+- [x] **Hint / validation** — if a relative name doesn't resolve under `Data/track_icons`,
+      an `icon_not_found` warn hint is appended to `hints[]` on the mutating response.
+- [x] **Docs** — `docs/API.md`, `docs/EXAMPLES.md`, `CHANGELOG.md` updated.
+
+---
+
 ## Epic #32 — Programmatic production: headless offline render engine (Q9) — **in progress**
 
 A new third half (production) beside control + perception. See

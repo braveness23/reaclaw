@@ -12,12 +12,16 @@
 #include <json.hpp>
 
 // REAPER SDK — extern declarations (REAPERAPI_IMPLEMENT only in reaper/api.cpp)
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <functional>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include <reaper_plugin_functions.h>
 
@@ -178,6 +182,17 @@ void apply_track_props(MediaTrack* track, const nlohmann::json& b) {
     if (b.contains("main_send") && b["main_send"].is_boolean()) {
         bool ms = b["main_send"].get<bool>();
         GetSetMediaTrackInfo(track, "B_MAINSEND", &ms);
+    }
+    // P_ICON — track icon: relative name (resolved against Data/track_icons),
+    // absolute path, or null/"" to clear. Pass-through to REAPER.
+    if (b.contains("icon")) {
+        if (b["icon"].is_null()) {
+            char empty[] = "";
+            GetSetMediaTrackInfo_String(track, "P_ICON", empty, true);
+        } else if (b["icon"].is_string()) {
+            std::string ico = b["icon"].get<std::string>();
+            GetSetMediaTrackInfo_String(track, "P_ICON", const_cast<char*>(ico.c_str()), true);
+        }
     }
 }
 
@@ -349,6 +364,14 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
     if (auto* ms = static_cast<bool*>(GetSetMediaTrackInfo(track, "B_MAINSEND", nullptr)))
         main_send = *ms;
 
+    // P_ICON — track icon (relative name or absolute path; null when unset).
+    nlohmann::json icon = nullptr;
+    {
+        char icon_buf[4096] = {};
+        if (GetSetMediaTrackInfo_String(track, "P_ICON", icon_buf, false) && icon_buf[0])
+            icon = icon_buf;
+    }
+
     int send_count = GetTrackNumSends(track, 1);
 
     // Outgoing sends (category 0) with destination + level, so routing is
@@ -386,6 +409,7 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
             {"pan", pan},
             {"folder_depth", folder_depth},
             {"color", color},
+            {"icon", icon},
             {"phase", phase},
             {"n_channels", n_channels},
             {"pan_mode", pan_mode},
@@ -397,6 +421,37 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
             {"fx", fx_arr},
             {"send_count", send_count},
             {"sends", sends}};
+}
+
+// Returns true if the icon value will resolve to a real file. An absolute path
+// is checked directly; a relative name is looked up under
+// {ResourcePath}/Data/track_icons/. Empty / null always returns true (no warn).
+// Must be called from a thread that can safely call GetResourcePath (main thread
+// or any thread — GetResourcePath is threadsafe in REAPER).
+bool icon_resolves(const std::string& ico) {
+    if (ico.empty()) return true;
+    namespace fs = std::filesystem;
+    fs::path p(ico);
+    if (p.is_absolute()) return fs::exists(p);
+    const char* rp = GetResourcePath ? GetResourcePath() : nullptr;
+    if (!rp) return true;
+    return fs::exists(fs::path(rp) / "Data" / "track_icons" / ico);
+}
+
+// If `spec` contains an `icon` field that doesn't resolve to a file, push an
+// icon_not_found hint onto `track_result["hints"]`. No-op otherwise.
+void maybe_add_icon_hint(nlohmann::json& track_result, const nlohmann::json& spec) {
+    if (!spec.contains("icon") || !spec["icon"].is_string()) return;
+    std::string ico = spec["icon"].get<std::string>();
+    if (ico.empty() || icon_resolves(ico)) return;
+    auto& hints = track_result["hints"];
+    if (!hints.is_array()) hints = nlohmann::json::array();
+    hints.push_back(
+            {{"code", "icon_not_found"},
+             {"severity", "warn"},
+             {"message",
+              "Icon '" + ico + "' was not found under Data/track_icons; REAPER may "
+              "display a broken icon. Use GET /state/track-icons to see available names."}});
 }
 
 nlohmann::json read_project_state() {
@@ -515,6 +570,7 @@ void handle_state_set_track(const httplib::Request& req, httplib::Response& res)
             apply_track_props(track, body);
             auto j = track_to_json(track, index);
             j["hints"] = Hints::for_track(track, index);
+            maybe_add_icon_hint(j, body);
             return j;
         });
     });
@@ -695,7 +751,9 @@ void handle_state_tracks_post(const httplib::Request& req, httplib::Response& re
                     MediaTrack* t = GetTrack(nullptr, idx);
                     if (t) {
                         apply_track_props(t, spec);
-                        created.push_back(track_to_json(t, idx));
+                        auto tj = track_to_json(t, idx);
+                        maybe_add_icon_hint(tj, spec);
+                        created.push_back(tj);
                     }
                 }
             }
@@ -709,7 +767,9 @@ void handle_state_tracks_post(const httplib::Request& req, httplib::Response& re
                     MediaTrack* t = GetTrack(nullptr, i);
                     if (t) {
                         apply_track_props(t, u);
-                        updated.push_back(track_to_json(t, i));
+                        auto tj = track_to_json(t, i);
+                        maybe_add_icon_hint(tj, u);
+                        updated.push_back(tj);
                     }
                 }
             }
@@ -1261,6 +1321,52 @@ void handle_automation_write(const httplib::Request& req, httplib::Response& res
     invalidate_state_cache();
     Log::info("Track " + std::to_string(index) + " automation write");
     json_ok(res, result);
+}
+
+// GET /state/track-icons
+// Lists available track icon filenames by scanning {ResourcePath}/Data/track_icons.
+// Returns names that can be passed as the `icon` field on track create/update.
+// Absolute paths are always accepted by REAPER but won't appear here.
+void handle_state_track_icons(const httplib::Request& req, httplib::Response& res) {
+    (void)req;
+    namespace fs = std::filesystem;
+
+    const char* rp = GetResourcePath ? GetResourcePath() : nullptr;
+    if (!rp) {
+        json_error(res, 500, "REAPER resource path unavailable", "INTERNAL_ERROR");
+        return;
+    }
+
+    fs::path icons_dir = fs::path(rp) / "Data" / "track_icons";
+
+    std::vector<std::string> names;
+    std::unordered_set<std::string> seen;
+
+    if (fs::exists(icons_dir) && fs::is_directory(icons_dir)) {
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(icons_dir, ec)) {
+            if (ec || !entry.is_regular_file())
+                continue;
+            std::string name = entry.path().filename().string();
+            // Only image formats REAPER accepts for P_ICON.
+            std::string ext = entry.path().extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(),
+                           [](unsigned char c) { return std::tolower(c); });
+            if (ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".bmp")
+                continue;
+            if (seen.insert(name).second)
+                names.push_back(name);
+        }
+    }
+
+    std::sort(names.begin(), names.end());
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& n : names)
+        arr.push_back(n);
+
+    json_ok(res, {{"icons", arr},
+                  {"count", static_cast<int>(arr.size())},
+                  {"search_path", icons_dir.string()}});
 }
 
 }  // namespace ReaClaw::Handlers

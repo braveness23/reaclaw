@@ -33,4 +33,7 @@ void handle_automation_write(const httplib::Request& req, httplib::Response& res
 // Epic #17 — Tier-B content manipulation.
 void handle_fx_copy(const httplib::Request& req, httplib::Response& res);
 
+// Issue #29 — Track icons.
+void handle_state_track_icons(const httplib::Request& req, httplib::Response& res);
+
 }  // namespace ReaClaw::Handlers

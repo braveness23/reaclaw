@@ -451,3 +451,59 @@ curl -sk "$BASE/learn/stats" -H "$AUTH" | jq
 ```
 
 Nothing is recorded while disabled, and nothing ever leaves the machine.
+
+---
+
+## Track Icons (#29)
+
+### Discover available icons, then assign one
+
+```bash
+# See what icons are installed
+curl -sk "$BASE/state/track-icons" -H "$AUTH" | jq '.icons[:10]'
+# → ["ac_guitar.png", "amp.png", "bass.png", "drums.png", "kick.png", ...]
+
+# Assign a factory icon by relative name
+curl -sk -X POST "$BASE/state/tracks/0" -H "$AUTH" \
+  -d '{"icon": "bass.png"}'
+# → { "index": 0, "name": "Bass", "icon": "bass.png", ... }
+
+# Read it back in a tracks listing
+curl -sk "$BASE/state/tracks" -H "$AUTH" | jq '.[0].icon'
+# → "bass.png"
+
+# Clear the icon
+curl -sk -X POST "$BASE/state/tracks/0" -H "$AUTH" \
+  -d '{"icon": null}'
+# → { "index": 0, "icon": null, ... }
+```
+
+### Use an absolute path for a custom PNG
+
+```bash
+curl -sk -X POST "$BASE/state/tracks/2" -H "$AUTH" \
+  -d '{"icon": "/home/user/icons/my_custom_synth.png"}'
+```
+
+### Create tracks with icons in one batch call
+
+```bash
+curl -sk -X POST "$BASE/state/tracks" -H "$AUTH" -d '{
+  "create": [
+    { "name": "Drums",   "color": "#CC3333", "folder_depth": 1, "icon": "drums.png" },
+    { "name": "Kick",    "volume_db": -3.0,                     "icon": "kick.png"  },
+    { "name": "Snare",   "volume_db": -3.0,                     "icon": "snare.png" },
+    { "name": "/Drums",  "folder_depth": -1 }
+  ]
+}' | jq '.created[].icon'
+# → "drums.png"  "kick.png"  "snare.png"  null
+```
+
+### icon_not_found hint when the name doesn't resolve
+
+```bash
+curl -sk -X POST "$BASE/state/tracks/0" -H "$AUTH" \
+  -d '{"icon": "typo_icon.png"}' | jq '.hints'
+# → [{ "code": "icon_not_found", "severity": "warn",
+#      "message": "Icon 'typo_icon.png' was not found under Data/track_icons; ..." }]
+```
