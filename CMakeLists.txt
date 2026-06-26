@@ -61,6 +61,7 @@ add_library(reaper_reaclaw SHARED
     src/handlers/learning.cpp
     src/handlers/hints.cpp
     src/handlers/project.cpp
+    src/handlers/render.cpp
     src/handlers/execute.cpp
     src/handlers/scripts.cpp
     src/handlers/history.cpp

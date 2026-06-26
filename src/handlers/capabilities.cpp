@@ -138,6 +138,17 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"note",
                "local-first and OPT-IN: off unless learning.enabled=true; mines only this "
                "machine's edit history, never phones home"}}},
+            {"render",
+             {{"render",
+               "POST /render {output, format?, bit_depth?, srate?, channels?, bounds?, "
+               "start?, end?, mp3_bitrate?, flac_compression?} — offline render to file. "
+               "Formats: wav (default), flac, mp3, ogg. Bounds: project (default), "
+               "time_selection, all_regions, custom (requires start+end). "
+               "Returns output_path, render_seconds, project_length, offline_ratio. "
+               "Timeout: 300 s (covers projects up to ~100 min at 20× offline speed)."},
+              {"note",
+               "Render settings are saved and restored after each call so agent renders "
+               "do not permanently change the project's render configuration."}}},
             {"project",
              {{"read", "GET /project  (dirty, length, notes)"},
               {"set_notes", "POST /project/notes {notes}"},
@@ -173,8 +184,8 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
     // generated Lua script. Kept honest so the agent doesn't probe blindly.
     nlohmann::json via_script_or_action = nlohmann::json::array({"take FX chains (TakeFX_*)",
                                                                  "MIDI notes/events",
-                                                                 "rendering / freezing",
-                                                                 "project open / save"});
+                                                                 "freezing tracks",
+                                                                 "project open / save / new"});
 
     json_ok(res,
             {{"coverage_model",

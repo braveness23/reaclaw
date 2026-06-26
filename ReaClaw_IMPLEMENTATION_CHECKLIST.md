@@ -455,7 +455,7 @@ shared header-only FFT `src/util/dsp.h` (factored out of `analysis.cpp`).
 
 ---
 
-## Epic #32 — Programmatic production: headless offline render engine (Q9) — **planned**
+## Epic #32 — Programmatic production: headless offline render engine (Q9) — **in progress**
 
 A new third half (production) beside control + perception. See
 `ReaClaw_ROADMAP.md` → Epic 6 and `ReaClaw_TECH_DECISIONS.md` §19. **Offline-first,
@@ -465,10 +465,10 @@ audio device — today via Lua `GetSetProjectInfo_String` RENDER_* + action 4182
 The epic makes it first-class.
 
 **`/render` endpoint ([#33](https://github.com/braveness23/reaclaw/issues/33)).**
-- [ ] `POST /render` → offline render to file; params `{format, srate, bit_depth,
+- [x] `POST /render` → offline render to file; params `{format, srate, bit_depth,
       channels, bounds, output, normalize?}`. Build/cache valid `RENDER_FORMAT`
       blobs per format so callers never see the base64.
-- [ ] Bounds: project / time selection / regions / custom range. Response reports
+- [x] Bounds: project / time selection / regions / custom range. Response reports
       output path + render seconds + offline-vs-realtime ratio.
 - [ ] Stem + region rendering; batch/parametric presets (within the epic).
 

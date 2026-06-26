@@ -9,6 +9,17 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **First-class offline render engine (Epic #32 / issue #33)** — `POST /render` triggers a
+  synchronous offline render to a file from the agent, supporting WAV, FLAC, MP3, and OGG
+  formats with configurable bit depth, sample rate, channel count, and render bounds
+  (`project`, `time_selection`, `all_regions`, `custom`). RENDER_FORMAT blobs are built
+  internally per format; callers never see the base64. Response includes `output_path`,
+  `render_seconds`, `project_length`, and `offline_ratio` (speed multiple, e.g. 20×).
+  Render settings are saved and restored after each call so agent renders do not
+  permanently change the project's render configuration. Timeout: 300 s (covers ~100 min
+  of project at 20× real-time). Closes #33.
+
 ## [1.7.0] - 2026-06-25
 
 ### Added

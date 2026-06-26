@@ -882,3 +882,71 @@ window_seconds, min_support, min_confidence }`.
 ```json
 "learning": { "enabled": false, "window_seconds": 180, "min_support": 3, "min_confidence": 0.3 }
 ```
+
+---
+
+## Phase 5 — Offline render engine (#32 / #33)
+
+### POST /render
+
+Trigger an offline render to a file. Render runs on the main thread synchronously
+(timeout 300 s, enough for ~100 min of project at 20× real-time). Render settings
+are saved and restored after each call so the project's configured render
+configuration is never permanently changed by an agent render.
+
+**Request body** (all fields optional except `output`):
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `output` | string | **required** | Full path for the rendered file (directory must exist) |
+| `format` | string | `"wav"` | `"wav"` \| `"flac"` \| `"mp3"` \| `"ogg"` |
+| `bit_depth` | int | `24` | `16`, `24`, or `32` — WAV and FLAC only |
+| `srate` | int | `44100` | Sample rate in Hz (8000–192000) |
+| `channels` | int | `2` | Number of output channels (1–64) |
+| `bounds` | string | `"project"` | `"project"` \| `"time_selection"` \| `"all_regions"` \| `"custom"` |
+| `start` | float | `0.0` | Render start in seconds — required when `bounds="custom"` |
+| `end` | float | `0.0` | Render end in seconds — required when `bounds="custom"`, must be > `start` |
+| `mp3_bitrate` | int | `192` | CBR bitrate in kbps — MP3 only |
+| `flac_compression` | int | `5` | Compression level 1–8 — FLAC only |
+
+```json
+{
+  "output": "/tmp/mix.wav",
+  "format": "wav",
+  "bit_depth": 24,
+  "srate": 44100,
+  "channels": 2,
+  "bounds": "project"
+}
+```
+
+**Response:**
+
+```json
+{
+  "output_path": "/tmp/mix.wav",
+  "format": "wav",
+  "srate": 44100,
+  "channels": 2,
+  "render_seconds": 0.36,
+  "project_length": 8.0,
+  "offline_ratio": 22.2,
+  "rendered_at": "2026-06-26T10:00:00Z",
+  "warnings": []
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `output_path` | Full path of the rendered file |
+| `render_seconds` | Wall-clock time the render took |
+| `project_length` | Project length at render time (seconds) |
+| `offline_ratio` | `project_length / render_seconds` — speed multiple (e.g. 22× real-time) |
+| `rendered_at` | ISO-8601 UTC timestamp |
+| `warnings` | Non-fatal notices (e.g. unsupported fields, bit-depth clamping) |
+
+**Notes:**
+- FLAC does not support 32-bit float; `bit_depth=32` is automatically clamped to 24 with a warning.
+- `bounds="custom"` temporarily sets the project time selection to `[start, end]` and renders with `RENDER_BOUNDSFLAG=1` (time selection), then restores the original time selection.
+- The `normalize` field is accepted but not yet implemented (warning emitted).
+- Errors: `400` for bad/missing parameters, `408` for render timeout, `500` for REAPER API failure.
