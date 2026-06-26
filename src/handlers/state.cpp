@@ -429,29 +429,36 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
 // Must be called from a thread that can safely call GetResourcePath (main thread
 // or any thread — GetResourcePath is threadsafe in REAPER).
 bool icon_resolves(const std::string& ico) {
-    if (ico.empty()) return true;
+    if (ico.empty())
+        return true;
     namespace fs = std::filesystem;
     fs::path p(ico);
-    if (p.is_absolute()) return fs::exists(p);
+    if (p.is_absolute())
+        return fs::exists(p);
     const char* rp = GetResourcePath ? GetResourcePath() : nullptr;
-    if (!rp) return true;
+    if (!rp)
+        return true;
     return fs::exists(fs::path(rp) / "Data" / "track_icons" / ico);
 }
 
 // If `spec` contains an `icon` field that doesn't resolve to a file, push an
 // icon_not_found hint onto `track_result["hints"]`. No-op otherwise.
 void maybe_add_icon_hint(nlohmann::json& track_result, const nlohmann::json& spec) {
-    if (!spec.contains("icon") || !spec["icon"].is_string()) return;
+    if (!spec.contains("icon") || !spec["icon"].is_string())
+        return;
     std::string ico = spec["icon"].get<std::string>();
-    if (ico.empty() || icon_resolves(ico)) return;
+    if (ico.empty() || icon_resolves(ico))
+        return;
     auto& hints = track_result["hints"];
-    if (!hints.is_array()) hints = nlohmann::json::array();
-    hints.push_back(
-            {{"code", "icon_not_found"},
-             {"severity", "warn"},
-             {"message",
-              "Icon '" + ico + "' was not found under Data/track_icons; REAPER may "
-              "display a broken icon. Use GET /state/track-icons to see available names."}});
+    if (!hints.is_array())
+        hints = nlohmann::json::array();
+    hints.push_back({{"code", "icon_not_found"},
+                     {"severity", "warn"},
+                     {"message",
+                      "Icon '" + ico +
+                              "' was not found under Data/track_icons; REAPER may "
+                              "display a broken icon. Use GET /state/track-icons to see available "
+                              "names."}});
 }
 
 nlohmann::json read_project_state() {
@@ -1350,8 +1357,9 @@ void handle_state_track_icons(const httplib::Request& req, httplib::Response& re
             std::string name = entry.path().filename().string();
             // Only image formats REAPER accepts for P_ICON.
             std::string ext = entry.path().extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(),
-                           [](unsigned char c) { return std::tolower(c); });
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+                return std::tolower(c);
+            });
             if (ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".bmp")
                 continue;
             if (seen.insert(name).second)
@@ -1364,9 +1372,10 @@ void handle_state_track_icons(const httplib::Request& req, httplib::Response& re
     for (const auto& n : names)
         arr.push_back(n);
 
-    json_ok(res, {{"icons", arr},
-                  {"count", static_cast<int>(arr.size())},
-                  {"search_path", icons_dir.string()}});
+    json_ok(res,
+            {{"icons", arr},
+             {"count", static_cast<int>(arr.size())},
+             {"search_path", icons_dir.string()}});
 }
 
 }  // namespace ReaClaw::Handlers
