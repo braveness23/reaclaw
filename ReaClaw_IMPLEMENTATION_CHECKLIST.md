@@ -455,6 +455,42 @@ shared header-only FFT `src/util/dsp.h` (factored out of `analysis.cpp`).
 
 ---
 
+## Epic #32 — Programmatic production: headless offline render engine (Q9) — **planned**
+
+A new third half (production) beside control + perception. See
+`ReaClaw_ROADMAP.md` → Epic 6 and `ReaClaw_TECH_DECISIONS.md` §19. **Offline-first,
+local-first.** Proof of concept proven 2026-06-24 (`demos/`): a 7-track API-built
+groove rendered offline to a 24-bit WAV in 0.36 s for 8 s of audio (~20×+), no
+audio device — today via Lua `GetSetProjectInfo_String` RENDER_* + action 41824.
+The epic makes it first-class.
+
+**`/render` endpoint ([#33](https://github.com/braveness23/reaclaw/issues/33)).**
+- [ ] `POST /render` → offline render to file; params `{format, srate, bit_depth,
+      channels, bounds, output, normalize?}`. Build/cache valid `RENDER_FORMAT`
+      blobs per format so callers never see the base64.
+- [ ] Bounds: project / time selection / regions / custom range. Response reports
+      output path + render seconds + offline-vs-realtime ratio.
+- [ ] Stem + region rendering; batch/parametric presets (within the epic).
+
+**Project save / load / open ([#34](https://github.com/braveness23/reaclaw/issues/34)).**
+- [ ] `POST /project/save {path}`, `POST /project/open {path}`, `POST /project/new`
+      (the last replaces the `demos/lib.py` Lua DeleteTrack loop). Mind multi-
+      project / Tier-C (§16): decide replace vs. tab for `open`.
+
+**Async render-job model ([#35](https://github.com/braveness23/reaclaw/issues/35)).**
+- [ ] Long renders return `{job_id, status}`; `GET /render/jobs/{id}` polls
+      status/progress/output; list + cancel. Must not starve the main-thread
+      command queue (§8). Owns the "long-render UX" open question.
+
+**CI / pipeline integration ([#36](https://github.com/braveness23/reaclaw/issues/36)).**
+- [ ] E2E smoke test: build a tiny composition → offline render → assert valid +
+      non-silent (`master.peak_db > -150`, ffprobe duration, volumedetect). Fast,
+      no realtime, no display — productionizes `demos/`.
+- [ ] (stretch) release-triggered showcase render / trailer as a build artifact on
+      the self-hosted aarch64 runner (`arc-runner-reaclaw`).
+
+---
+
 ## Ongoing (All Phases)
 
 - [x] Keep unit and integration tests passing before each commit — 38/38 unit tests pass; verified live against REAPER 7.74 (aarch64)

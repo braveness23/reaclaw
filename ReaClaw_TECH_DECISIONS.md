@@ -372,6 +372,43 @@ mutations (today they are a pull via `/suggestions`).
 
 ---
 
+## 19. Programmatic Production: Offline-First Render Engine (Epic #32)
+
+**Decision (direction; PoC proven 2026-06-24, not yet built as first-class verbs):**
+ReaClaw is, beside control and perception, a **headless audio-production backend** —
+a `composition spec → mastered file` function — and that production path is
+**offline-first**.
+
+- **Offline, not realtime.** Render is decoupled from the audio clock and runs
+  faster than real time. A 7-track API-built composition rendered offline to a
+  24-bit/44.1k WAV in 0.36 s for 8 s of audio (~20×+) on the headless Pi rig. The
+  headless host needs **no GPU and no audio hardware** — audio device = *Dummy*;
+  REAPER only needs an X server (e.g. Xvfb) to host the GUI process. The realtime
+  path (PulseAudio null sink + `x11grab`) exists **only** for producing a *video* /
+  for live human observation, and is incidental to production. (See `demos/`.)
+- **Already works via the escape hatch; the epic makes it first-class.** Today
+  rendering is driven by Lua (`GetSetProjectInfo_String` RENDER_* + action
+  `41824`). The fiddly part is `RENDER_FORMAT` — REAPER encodes the codec as a
+  base64 blob. A first-class `/render` verb MUST hide that behind named params
+  (`{format, srate, bit_depth, channels, bounds, output, normalize?}`); callers
+  never construct the blob. This is consistent with §16 (tiered coverage:
+  structured verbs over the escape hatch for common operations).
+- **Same trust + locality model.** Render/save/open inherit the existing stance —
+  the agent is trusted (§10, no approval gate), and there is **no network egress**
+  (§11), so a production pipeline stays local by construction. Output paths are
+  caller-specified files on the local box; uploading anywhere is an explicit,
+  separate step (e.g. the `gdrive` skill), never implicit in a render.
+- **Long renders are jobs, not blocking calls.** A long project or a batch can
+  exceed an HTTP timeout and would otherwise hold REAPER's main-thread command
+  queue (§8); the render-job model (#35) returns a handle + pollable status. This
+  is the settled answer to the long-standing "long-render UX" open question.
+
+**Open / deferred:** the concrete `/render`, project save/load/open, and async-job
+API contracts are designed when Epic #32 is picked up (children #33–#36); multi-
+project handling for `/project/open` touches the deferred Tier-C area (§16).
+
+---
+
 ## Summary
 
 | Concern | Decision |
@@ -392,3 +429,4 @@ mutations (today they are a pull via `/suggestions`).
 | Config | JSON at GetResourcePath()/reaclaw/config.json |
 | Plugin name | reaper_reaclaw.{dll,dylib,so} |
 | API coverage | Tiered: structured verbs + action-runner + Lua escape hatch |
+| Production/render | Offline-first headless render engine (Epic #32); `/render` hides RENDER_FORMAT; long renders are jobs; local-first |

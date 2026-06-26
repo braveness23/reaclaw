@@ -404,3 +404,50 @@ curl -sk "$BASE/history?limit=10" -H "$AUTH"
 ```bash
 curl -sk "$BASE/history?agent_id=sparky" -H "$AUTH"
 ```
+
+---
+
+## Snapshots & State Diff (#20)
+
+### Capture a baseline, make changes, see exactly what moved
+
+```bash
+# Baseline before an edit pass
+ID=$(curl -sk -X POST "$BASE/snapshot" -H "$AUTH" -d '{"label":"before"}' | jq .id)
+
+# ... make some edits (mute a track, add FX, etc.) ...
+curl -sk -X POST "$BASE/state/tracks/0" -H "$AUTH" -d '{"muted":true}' >/dev/null
+
+# What changed since the baseline (to defaults to a live capture)
+curl -sk "$BASE/snapshot/diff?from=$ID" -H "$AUTH" | jq '.changes'
+# → [ { "path": "tracks/0/muted", "op": "changed", "from": false, "to": true } ]
+```
+
+List, fetch, or delete stored snapshots:
+```bash
+curl -sk "$BASE/snapshot"        -H "$AUTH"   # list
+curl -sk "$BASE/snapshot/$ID"    -H "$AUTH"   # full stored state
+curl -sk -X DELETE "$BASE/snapshot/$ID" -H "$AUTH"
+```
+
+---
+
+## Learned Suggestions (#20 — local-first, opt-in)
+
+Off by default. Enable in `config.json` (`"learning": { "enabled": true }`) and
+restart REAPER. Then ReaClaw mines your own edit history locally:
+
+```bash
+# After enough edits, ask what usually follows a given action:
+curl -sk "$BASE/suggestions?after=track.create" -H "$AUTH" | jq '.suggestions'
+# → [ { "after":"track.create", "suggest":"track.set:color",
+#       "support":7, "confidence":0.64, "method":"learned" } ]
+
+# Or omit ?after to use the calling agent's most recent edit (X-Agent-Id header).
+curl -sk "$BASE/suggestions" -H "$AUTH" -H "X-Agent-Id: sparky" | jq
+
+# What's been learned locally:
+curl -sk "$BASE/learn/stats" -H "$AUTH" | jq
+```
+
+Nothing is recorded while disabled, and nothing ever leaves the machine.
