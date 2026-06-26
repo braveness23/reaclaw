@@ -13,6 +13,7 @@
 #include "handlers/learning.h"
 #include "handlers/probe.h"
 #include "handlers/project.h"
+#include "handlers/render.h"
 #include "handlers/screenshot.h"
 #include "handlers/scripts.h"
 #include "handlers/snapshot.h"
@@ -287,6 +288,9 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
 
     // Capability manifest.
     svr.Get("/capabilities", auth_wrap(cfg, Handlers::handle_capabilities));
+
+    // --- Render (Epic #32 / issue #33) ---
+    svr.Post("/render", auth_wrap(cfg, Handlers::handle_render));
 
     // --- Execute ---
     svr.Post("/execute/action", auth_wrap(cfg, Handlers::handle_execute_action));
