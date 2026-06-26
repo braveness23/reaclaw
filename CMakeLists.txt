@@ -57,6 +57,8 @@ add_library(reaper_reaclaw SHARED
     src/handlers/visualize.cpp
     src/handlers/screenshot.cpp
     src/handlers/probe.cpp
+    src/handlers/snapshot.cpp
+    src/handlers/learning.cpp
     src/handlers/hints.cpp
     src/handlers/project.cpp
     src/handlers/execute.cpp

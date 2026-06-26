@@ -2,6 +2,7 @@
 
 #include "handlers/common.h"
 #include "handlers/hints.h"
+#include "handlers/learning.h"
 #include "reaper/executor.h"
 #include "util/logging.h"
 
@@ -293,6 +294,11 @@ void handle_items_post(const httplib::Request& req, httplib::Response& res) {
     });
     if (exec_error(res, result))
         return;
+    if (Learning::enabled()) {
+        std::string ag = agent_id(req);
+        for (size_t i = 0; i < result["created"].size(); i++)
+            Learning::note(ag, "item.create");
+    }
     Log::info("Items: created " + std::to_string(result["created"].size()) + ", updated " +
               std::to_string(result["updated"].size()));
     json_ok(res, result);

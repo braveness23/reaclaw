@@ -433,8 +433,61 @@ shared header-only FFT `src/util/dsp.h` (factored out of `analysis.cpp`).
       snapshot/state-diff layer (cross-cutting; also used by Epic #20). This is the
       one remaining #19 sliver; it lands with that shared layer, not inside #19.
 
-### Stage 6 — Learns over time (Q8)
-- [ ] Mine correction logs → learned suggestions (local-first, opt-in)
+### Stage 6 / Epic #20 — Learns over time (Q8)
+**Snapshot / state-diff layer (cross-cutting prep).** New `src/handlers/snapshot.{h,cpp}`
++ header-only `src/util/jsondiff.h` (pure recursive diff, unit-tested).
+- [x] Capture a canonical, diff-stable project-state snapshot; store in
+      `state_snapshots`. `POST /snapshot`, `GET /snapshot[/{id}]`, `DELETE`.
+- [x] `GET /snapshot/diff?from=<id>&to=<id|current>` → flat `[{path,op,from,to}]`.
+      Backs the deferred #19 A/B visual diff too.
+
+**Learned suggestions (the moat).** New `src/handlers/learning.{h,cpp}` + `learn_events`
+/ `learn_pairs` tables + `learning` config block.
+- [x] Log structured edits as events (track create/update fields, FX add, send
+      add, item create); mine antecedent→consequent transitions within a window.
+- [x] `GET /suggestions` surfaces "after X, agents usually do Y" tagged
+      `method:learned` + confidence (= P(consequent|antecedent), gated by
+      min_support/min_confidence). `GET /learn/stats` for observability.
+- [x] **Local-first and opt-in** — `learning.enabled` off by default; nothing
+      recorded while disabled; all state local SQLite, no network egress ever.
+- [ ] Heavier mining (multi-step sequences, value-aware "corrected to Y") —
+      deferred; the pairwise association layer covers the acceptance criteria.
+
+---
+
+## Epic #32 — Programmatic production: headless offline render engine (Q9) — **planned**
+
+A new third half (production) beside control + perception. See
+`ReaClaw_ROADMAP.md` → Epic 6 and `ReaClaw_TECH_DECISIONS.md` §19. **Offline-first,
+local-first.** Proof of concept proven 2026-06-24 (`demos/`): a 7-track API-built
+groove rendered offline to a 24-bit WAV in 0.36 s for 8 s of audio (~20×+), no
+audio device — today via Lua `GetSetProjectInfo_String` RENDER_* + action 41824.
+The epic makes it first-class.
+
+**`/render` endpoint ([#33](https://github.com/braveness23/reaclaw/issues/33)).**
+- [ ] `POST /render` → offline render to file; params `{format, srate, bit_depth,
+      channels, bounds, output, normalize?}`. Build/cache valid `RENDER_FORMAT`
+      blobs per format so callers never see the base64.
+- [ ] Bounds: project / time selection / regions / custom range. Response reports
+      output path + render seconds + offline-vs-realtime ratio.
+- [ ] Stem + region rendering; batch/parametric presets (within the epic).
+
+**Project save / load / open ([#34](https://github.com/braveness23/reaclaw/issues/34)).**
+- [ ] `POST /project/save {path}`, `POST /project/open {path}`, `POST /project/new`
+      (the last replaces the `demos/lib.py` Lua DeleteTrack loop). Mind multi-
+      project / Tier-C (§16): decide replace vs. tab for `open`.
+
+**Async render-job model ([#35](https://github.com/braveness23/reaclaw/issues/35)).**
+- [ ] Long renders return `{job_id, status}`; `GET /render/jobs/{id}` polls
+      status/progress/output; list + cancel. Must not starve the main-thread
+      command queue (§8). Owns the "long-render UX" open question.
+
+**CI / pipeline integration ([#36](https://github.com/braveness23/reaclaw/issues/36)).**
+- [ ] E2E smoke test: build a tiny composition → offline render → assert valid +
+      non-silent (`master.peak_db > -150`, ffprobe duration, volumedetect). Fast,
+      no realtime, no display — productionizes `demos/`.
+- [ ] (stretch) release-triggered showcase render / trailer as a build artifact on
+      the self-hosted aarch64 runner (`arc-runner-reaclaw`).
 
 ---
 

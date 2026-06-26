@@ -3,6 +3,7 @@
 #include "app.h"
 #include "handlers/common.h"
 #include "handlers/hints.h"
+#include "handlers/learning.h"
 #include "reaper/executor.h"
 #include "util/logging.h"
 
@@ -538,6 +539,8 @@ void handle_state_set_track(const httplib::Request& req, httplib::Response& res)
         s_state_cache.erase("state");
     }
 
+    if (Learning::enabled())
+        Learning::note_track_fields(agent_id(req), body);
     Log::info("Track " + std::to_string(index) + " updated");
     json_ok(res, result);
 }
@@ -718,6 +721,19 @@ void handle_state_tracks_post(const httplib::Request& req, httplib::Response& re
     if (executor_error(res, result))
         return;
     invalidate_state_cache();
+    if (Learning::enabled()) {
+        std::string ag = agent_id(req);
+        if (has_create)
+            for (const auto& spec : body["create"])
+                if (spec.is_object()) {
+                    Learning::note(ag, "track.create");
+                    Learning::note_track_fields(ag, spec);
+                }
+        if (has_update)
+            for (const auto& u : body["update"])
+                if (u.is_object())
+                    Learning::note_track_fields(ag, u);
+    }
     Log::info("Tracks: created " + std::to_string(result["created"].size()) + ", updated " +
               std::to_string(result["updated"].size()));
     json_ok(res, result);
@@ -790,6 +806,8 @@ void handle_state_add_fx(const httplib::Request& req, httplib::Response& res) {
     if (executor_error(res, result))
         return;
     invalidate_state_cache();
+    if (Learning::enabled())
+        Learning::note(agent_id(req), "fx.add");
     Log::info("Track " + std::to_string(index) + " add FX: " + fx_name);
     json_ok(res, result);
 }
@@ -968,6 +986,8 @@ void handle_state_add_send(const httplib::Request& req, httplib::Response& res) 
     if (executor_error(res, result))
         return;
     invalidate_state_cache();
+    if (Learning::enabled())
+        Learning::note(agent_id(req), "send.add");
     Log::info("Track " + std::to_string(index) + " send -> " + std::to_string(to_track));
     json_ok(res, result);
 }

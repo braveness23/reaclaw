@@ -66,6 +66,35 @@ CREATE INDEX IF NOT EXISTS idx_history_executed_at
 
 CREATE INDEX IF NOT EXISTS idx_scripts_name
     ON scripts(name);
+
+-- Epic #20 prep: stored project-state snapshots for the shared snapshot/diff
+-- layer (also backs the #19 A/B diff).
+CREATE TABLE IF NOT EXISTS state_snapshots (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    taken_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    label     TEXT NOT NULL DEFAULT '',
+    json      TEXT NOT NULL
+);
+
+-- Epic #20: local, opt-in learning. Each structured edit is an event; observed
+-- antecedent->consequent transitions (within a window, same agent) accumulate in
+-- learn_pairs. Mined into "after X, agents usually do Y" suggestions. Local only.
+CREATE TABLE IF NOT EXISTS learn_events (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       TEXT NOT NULL DEFAULT (datetime('now')),
+    agent_id TEXT NOT NULL DEFAULT '',
+    action   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_learn_events_agent
+    ON learn_events(agent_id, id DESC);
+
+CREATE TABLE IF NOT EXISTS learn_pairs (
+    antecedent TEXT NOT NULL,
+    consequent TEXT NOT NULL,
+    n          INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (antecedent, consequent)
+);
 )SQL";
 
 }  // namespace

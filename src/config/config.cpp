@@ -110,6 +110,12 @@ bool Config::load(Config& cfg, const std::string& resource_path) {
     cfg.log_file = jval<std::string>(log, "file", "");
     cfg.log_format = jval<std::string>(log, "format", "text");
 
+    auto& learn = j["learning"];
+    cfg.learning_enabled = jval<bool>(learn, "enabled", false);
+    cfg.learning_window_seconds = jval<int>(learn, "window_seconds", 180);
+    cfg.learning_min_support = jval<int>(learn, "min_support", 3);
+    cfg.learning_min_confidence = jval<double>(learn, "min_confidence", 0.3);
+
     // Resolve TLS cert/key paths (user-supplied or derived from certs_dir)
     if (!cfg.tls_cert_file.empty()) {
         cfg.resolved_cert_path = cfg.tls_cert_file;
@@ -135,7 +141,12 @@ bool Config::save() const {
                {{"validate_syntax", validate_syntax},
                 {"log_all_executions", log_all_executions},
                 {"max_script_size_kb", max_script_size_kb}}},
-              {"logging", {{"level", log_level}, {"file", log_file}, {"format", log_format}}}};
+              {"logging", {{"level", log_level}, {"file", log_file}, {"format", log_format}}},
+              {"learning",
+               {{"enabled", learning_enabled},
+                {"window_seconds", learning_window_seconds},
+                {"min_support", learning_min_support},
+                {"min_confidence", learning_min_confidence}}}};
 
     std::ofstream f(resource_dir + "config.json");
     if (!f)

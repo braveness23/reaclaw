@@ -43,15 +43,32 @@ What remains is everything below.
 
 ---
 
-## 2. The two halves, unified
+## 2. The epics, unified (control + perception, and now production)
 
 | # | Epic | Half | Sources | Issue |
 |---|------|------|---------|-------|
 | 1 | Tier-A control verbs ✅ *done (v1.3.0)* | Control | API_ANALYSIS Tier A | [#16](https://github.com/braveness23/reaclaw/issues/16) |
 | 2 | Tier-B/C content manipulation ✅ *Tier-B done (v1.4.0); Tier-C deferred* | Control | API_ANALYSIS Tiers B/C | [#17](https://github.com/braveness23/reaclaw/issues/17) |
 | 3 | Audio perception ("hears itself") ✅ *done (v1.5.0); onset/density deferred* | Perception | IDEAS Q1, Q3 | [#18](https://github.com/braveness23/reaclaw/issues/18) |
-| 4 | Visual perception & musical probes | Perception | IDEAS Q4, Q5, Q7 | [#19](https://github.com/braveness23/reaclaw/issues/19) |
-| 5 | Learned suggestions (the moat) | Learning | IDEAS Q8 | [#20](https://github.com/braveness23/reaclaw/issues/20) |
+| 4 | Visual perception & musical probes ✅ *done (v1.6.0); A/B diff lands with the snapshot layer* | Perception | IDEAS Q4, Q5, Q7 | [#19](https://github.com/braveness23/reaclaw/issues/19) |
+| 5 | Learned suggestions (the moat) ✅ *done; pairwise layer + snapshot/diff. Heavier mining deferred* | Learning | IDEAS Q8 | [#20](https://github.com/braveness23/reaclaw/issues/20) |
+| 6 | Programmatic production — headless offline render engine 🆕 *PoC proven; not yet built* | Production | IDEAS Q9 | [#32](https://github.com/braveness23/reaclaw/issues/32) |
+
+**The first five roadmap epics (control + perception) are complete.** The shared
+**snapshot / state-diff layer** built as #20's prep also retro-unlocks the one #19
+sliver (A/B visual diff).
+
+**A sixth epic opens a new third half — _production_.** Epic 6
+([#32](https://github.com/braveness23/reaclaw/issues/32)) makes ReaClaw a
+headless, API-driven **offline audio render engine**: build a composition through
+the API, render it to a mastered file *faster than real time, with no audio
+device*. Proven 2026-06-24 — a 7-track API-built groove rendered offline in
+**0.36 s for 8 s of audio (~20×+ real time)**; see `demos/` and TECH_DECISIONS
+§19. This is the basis of the project's AI-pipeline story (podcast edit/master,
+AI-video scoring, generative music, batch render).
+
+Other forward work lives in `ReaClaw_IDEAS.md` plus one-off requests (e.g.
+track icons #29, external-change detection #31).
 
 **Tier D** (API_ANALYSIS) is intentionally *not* an epic — real-time PCM/waveform access,
 hardware metering, GUI window control, and audio-device config are not meaningfully
@@ -119,6 +136,39 @@ Distinct from Epic 3's hand-authored hints though they share the suggestion chan
 
 ---
 
+### Epic 6 — Programmatic production: the headless render engine ([#32](https://github.com/braveness23/reaclaw/issues/32))
+
+A new **third half** of the project beside control and perception. REAPER, driven
+entirely through the API and rendered **offline**, becomes a deterministic
+audio-production backend: `composition spec → mastered file`, faster than real
+time, with no audio device and no GUI playback. Proven 2026-06-24 — a 7-track
+groove built via the API rendered offline to a 24-bit WAV in **0.36 s for 8 s of
+audio (~20×+ real time)**; the headless rig and scripts are in `demos/`. It works
+today through the Lua escape hatch (`GetSetProjectInfo_String` RENDER_* + render
+action `41824`); the epic makes it first-class:
+
+- **`/render`** ([#33](https://github.com/braveness23/reaclaw/issues/33)) — offline
+  render to file, hiding REAPER's `RENDER_FORMAT` base64 blob behind
+  `{format, srate, bit_depth, channels, bounds, output, normalize?}`.
+- **Project save/load/open** ([#34](https://github.com/braveness23/reaclaw/issues/34))
+  — persist & version compositions (`.rpp`).
+- **Async render jobs** ([#35](https://github.com/braveness23/reaclaw/issues/35)) —
+  long renders return a job id + pollable status; this is the standing
+  *long-render UX* open question, finally owned.
+- **CI / pipeline** ([#36](https://github.com/braveness23/reaclaw/issues/36)) — the
+  headless render as both an E2E smoke test (the act of rendering *is* the test)
+  and a release artifact; productionizes `demos/`.
+- Stems, regions, and batch/parametric render presets live within the epic.
+
+**Why it's the AI-pipeline story:** an agent uses REAPER's whole FX / instrument /
+time-stretch / format ecosystem as library functions — podcast edit & master,
+score an AI-generated video to length, generative songs/orchestras, and batch
+renders impossible in real time (100 variations at compute speed). The realtime
+path (null sink + screen capture, used for the demo *video*) is incidental;
+production never needs sound-pressure waves until a listener plays the file.
+
+---
+
 ## 4. Cross-cutting concerns
 
 - **Snapshot / state-diff layer.** Both Epic 4's A/B visual diff and Epic 5's
@@ -139,8 +189,9 @@ Distinct from Epic 3's hand-authored hints though they share the suggestion chan
 
 ## 5. Open questions (kept implementation-agnostic)
 
-- **Long-render UX.** When the analyzed/visualized material is long, feedback can't be
-  instant — wait? poll? fast-path short clips? (Epic 3/4.)
+- **Long-render UX.** When the analyzed/visualized/rendered material is long, feedback
+  can't be instant — wait? poll? fast-path short clips? (Epic 3/4, and now **owned by
+  Epic 6's async render-job model, [#35](https://github.com/braveness23/reaclaw/issues/35)**.)
 - **Probe modeling.** Is a "probe" a first-class concept or a flavor of the existing action
   machinery? (Epic 4.)
 - **Where musical attributes live.** Are key/tempo/pitch part of the general analysis

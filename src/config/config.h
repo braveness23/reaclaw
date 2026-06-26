@@ -32,6 +32,14 @@ struct Config {
     std::string log_file;             // empty = REAPER console only
     std::string log_format = "text";  // "text" or "json"
 
+    // learning (Epic #20) — local-first, opt-in correction mining. Off by
+    // default: nothing is recorded unless the user turns it on, and nothing ever
+    // leaves the machine.
+    bool learning_enabled = false;
+    int learning_window_seconds = 180;     // max gap for one edit to "follow" another
+    int learning_min_support = 3;          // min observations before a pattern surfaces
+    double learning_min_confidence = 0.3;  // min P(consequent | antecedent) to surface
+
     // Derived paths (filled in by load())
     std::string resource_dir;  // {GetResourcePath()}/reaclaw/
     std::string certs_dir;     // {resource_dir}/certs/

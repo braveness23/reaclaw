@@ -10,10 +10,12 @@
 #include "handlers/execute.h"
 #include "handlers/history.h"
 #include "handlers/items.h"
+#include "handlers/learning.h"
 #include "handlers/probe.h"
 #include "handlers/project.h"
 #include "handlers/screenshot.h"
 #include "handlers/scripts.h"
+#include "handlers/snapshot.h"
 #include "handlers/state.h"
 #include "handlers/visualize.h"
 #include "reaper/executor.h"
@@ -239,6 +241,25 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
 
     // --- On-demand screenshot (Epic #19 / Q5) — fallback for GUI-only state ---
     svr.Get("/screenshot", auth_wrap(cfg, Handlers::handle_screenshot));
+
+    // --- Snapshot / state-diff layer (Epic #20 prep; also backs #19 A/B diff) ---
+    svr.Post("/snapshot", auth_wrap(cfg, Handlers::handle_snapshot_create));
+    svr.Get("/snapshot", auth_wrap(cfg, Handlers::handle_snapshot_list));
+    svr.Get("/snapshot/diff", auth_wrap(cfg, Handlers::handle_snapshot_diff));
+    svr.Get(R"(/snapshot/(\d+))",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["id"] = req.matches[1];
+                Handlers::handle_snapshot_get(req, res);
+            }));
+    svr.Delete(R"(/snapshot/(\d+))",
+               auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                   const_cast<httplib::Request&>(req).path_params["id"] = req.matches[1];
+                   Handlers::handle_snapshot_delete(req, res);
+               }));
+
+    // --- Learned suggestions (Epic #20) — local-first, opt-in correction mining ---
+    svr.Get("/suggestions", auth_wrap(cfg, Learning::handle_suggestions));
+    svr.Get("/learn/stats", auth_wrap(cfg, Learning::handle_learn_stats));
 
     // Markers & regions.
     svr.Get("/state/markers", auth_wrap(cfg, Handlers::handle_markers_get));

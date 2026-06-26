@@ -795,3 +795,90 @@ won't make x11grab fail.
 Errors: `400` unknown target / malformed region; `404` the named surface isn't
 open (`"No visible window matching '…'"`); `501` no `DISPLAY`, or `ffmpeg`/
 `xdotool` missing; `503` the grab failed.
+
+---
+
+## Phase 4 — Snapshot / state-diff layer (#20 prep)
+
+A shared, cross-cutting layer: capture a canonical project-state snapshot, store
+it, and diff two snapshots (or a snapshot vs. live). It backs both the #19 A/B
+visual diff and #20's correction mining ("what did the agent change, and was it
+corrected?"). A snapshot is a focused, diff-stable slice — project (name, bpm,
+`change_count`) and per-track name/volume/pan/mute/solo/arm/color/fx/sends/item-count.
+
+### POST /snapshot
+
+Capture the current state. Optional body `{ "label": "before mixdown" }`. Returns
+`{ id, taken_at, label, summary: { track_count } }`.
+
+### GET /snapshot · GET /snapshot/{id} · DELETE /snapshot/{id}
+
+List stored snapshots (newest first), fetch one (`{ id, taken_at, state }`), or
+delete one (`404` if absent).
+
+### GET /snapshot/diff?from=&to=
+
+Diff `from=<id>` against `to=<id>` — or, when `to` is omitted/`current`/`live`,
+against a fresh live capture. Returns a flat change list:
+
+```json
+{
+  "from": 3, "to": "current", "change_count": 2,
+  "changes": [
+    { "path": "tracks/0/muted", "op": "changed", "from": false, "to": true },
+    { "path": "tracks/1/fx/0",  "op": "added",   "to": { "name": "ReaEQ", "enabled": true } }
+  ]
+}
+```
+
+`op` is `changed` (scalar differs; carries `from`+`to`), `added` (in `to` only),
+or `removed` (in `from` only). Objects diff by key, arrays by index.
+
+---
+
+## Phase 4 — Learned suggestions (#20, Q8)
+
+**The compounding moat.** Locally and opt-in, ReaClaw mines the agent's own edit
+history into *"after X, agents usually do Y"* associations and surfaces them as
+suggestions tagged `method:"learned"` with a `confidence`. Distinct from the
+hand-authored `hints[]` of #18 (fixed invariants) though it shares the suggestion
+channel — these are *learned from use*.
+
+> **Local-first, opt-in, never phones home.** Off by default; set
+> `learning.enabled=true` in `config.json` to turn it on. While disabled nothing
+> is recorded. All state lives in the local SQLite DB — there is no network egress.
+
+How it works: each structured edit (track create/update field, FX add, send add,
+item create) is recorded as an event keyed to the agent. When the next edit by
+the same agent falls within `learning.window_seconds`, the transition
+(antecedent → consequent) is counted. `confidence = P(consequent | antecedent)`;
+a pattern surfaces once it clears `min_support` and `min_confidence`.
+
+### GET /suggestions?after=&agent=&limit=
+
+Learned suggestions for what usually follows `after` (or the agent's most recent
+edit when `after` is omitted; `agent` defaults to the `X-Agent-Id` header).
+
+```json
+{
+  "enabled": true, "agent": "sparky", "after": "track.create",
+  "suggestions": [
+    { "after": "track.create", "suggest": "track.set:color", "support": 7,
+      "confidence": 0.64, "method": "learned" }
+  ],
+  "note": "learned from this machine's local edit history only; advisory, not automatic."
+}
+```
+
+When learning is disabled, returns `{ "enabled": false, "suggestions": [], "note": … }`.
+
+### GET /learn/stats
+
+What the learner has accumulated locally: `{ enabled, events, patterns, agents,
+window_seconds, min_support, min_confidence }`.
+
+### Config
+
+```json
+"learning": { "enabled": false, "window_seconds": 180, "min_support": 3, "min_confidence": 0.3 }
+```
