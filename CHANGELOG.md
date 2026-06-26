@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-25
+
 ### Added
 - **Snapshot / state-diff layer (Epic #20 prep)** — capture a canonical,
   diffable project-state snapshot, store it, and diff two snapshots (or a
