@@ -7,14 +7,14 @@
 
 #include <httplib.h>
 
-#include <json.hpp>
-
 #include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 #include <reaper_plugin_functions.h>
+
+#include <json.hpp>
 
 namespace ReaClaw::Handlers {
 
@@ -161,16 +161,16 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
         return;
     }
 
-    std::string output      = body["output"].get<std::string>();
-    std::string format      = body.value("format", "wav");
-    int         bit_depth   = body.value("bit_depth", 24);
-    int         srate       = body.value("srate", 44100);
-    int         channels    = body.value("channels", 2);
-    std::string bounds_str  = body.value("bounds", "project");
-    double      start_sec   = body.value("start", 0.0);
-    double      end_sec     = body.value("end", 0.0);
-    int         mp3_bitrate = body.value("mp3_bitrate", 192);
-    int         flac_comp   = body.value("flac_compression", 5);
+    std::string output = body["output"].get<std::string>();
+    std::string format = body.value("format", "wav");
+    int bit_depth = body.value("bit_depth", 24);
+    int srate = body.value("srate", 44100);
+    int channels = body.value("channels", 2);
+    std::string bounds_str = body.value("bounds", "project");
+    double start_sec = body.value("start", 0.0);
+    double end_sec = body.value("end", 0.0);
+    int mp3_bitrate = body.value("mp3_bitrate", 192);
+    int flac_comp = body.value("flac_compression", 5);
 
     // Validate
     if (output.empty()) {
@@ -178,7 +178,8 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
         return;
     }
     if (format != "wav" && format != "flac" && format != "mp3" && format != "ogg") {
-        json_error(res, 400,
+        json_error(res,
+                   400,
                    "Unsupported format '" + format + "'. Supported: wav, flac, mp3, ogg",
                    "BAD_REQUEST");
         return;
@@ -195,9 +196,10 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
         json_error(res, 400, "channels must be between 1 and 64", "BAD_REQUEST");
         return;
     }
-    if (bounds_str != "project" && bounds_str != "time_selection" &&
-        bounds_str != "all_regions" && bounds_str != "custom") {
-        json_error(res, 400,
+    if (bounds_str != "project" && bounds_str != "time_selection" && bounds_str != "all_regions" &&
+        bounds_str != "custom") {
+        json_error(res,
+                   400,
                    "bounds must be 'project', 'time_selection', 'all_regions', or 'custom'",
                    "BAD_REQUEST");
         return;
@@ -245,33 +247,32 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
         }
     }
 
-    Log::info("Render: " + output + " fmt=" + format +
-              " srate=" + std::to_string(srate) + " ch=" + std::to_string(channels) +
-              " bounds=" + bounds_str);
+    Log::info("Render: " + output + " fmt=" + format + " srate=" + std::to_string(srate) +
+              " ch=" + std::to_string(channels) + " bounds=" + bounds_str);
 
     // Capture everything needed inside the lambda by value.
     struct RenderParams {
         std::string render_dir;
         std::string render_pat;
         std::string fmt_blob;
-        int         bounds_flag_val;
-        int         srate;
-        int         channels;
-        bool        custom_bounds;
-        double      start_sec;
-        double      end_sec;
+        int bounds_flag_val;
+        int srate;
+        int channels;
+        bool custom_bounds;
+        double start_sec;
+        double end_sec;
     };
 
     RenderParams params;
-    params.render_dir      = render_dir;
-    params.render_pat      = render_pat;
-    params.fmt_blob        = fmt_blob;
+    params.render_dir = render_dir;
+    params.render_pat = render_pat;
+    params.fmt_blob = fmt_blob;
     params.bounds_flag_val = bounds_flag(bounds_str);
-    params.srate           = srate;
-    params.channels        = channels;
-    params.custom_bounds   = (bounds_str == "custom");
-    params.start_sec       = start_sec;
-    params.end_sec         = end_sec;
+    params.srate = srate;
+    params.channels = channels;
+    params.custom_bounds = (bounds_str == "custom");
+    params.start_sec = start_sec;
+    params.end_sec = end_sec;
 
     auto t0 = std::chrono::steady_clock::now();
 
@@ -295,22 +296,28 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
                 double old_boundsflag = 0, old_srate = 0, old_channels = 0;
                 double old_loop_start = 0, old_loop_end = 0;
 
-                GetSetProjectInfo_String(nullptr, "RENDER_FILE",
-                                         old_file.data(), static_cast<int>(old_file.size()),
+                GetSetProjectInfo_String(nullptr,
+                                         "RENDER_FILE",
+                                         old_file.data(),
+                                         static_cast<int>(old_file.size()),
                                          false);
-                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN",
+                GetSetProjectInfo_String(nullptr,
+                                         "RENDER_PATTERN",
                                          old_pattern.data(),
-                                         static_cast<int>(old_pattern.size()), false);
-                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT",
+                                         static_cast<int>(old_pattern.size()),
+                                         false);
+                GetSetProjectInfo_String(nullptr,
+                                         "RENDER_FORMAT",
                                          old_format.data(),
-                                         static_cast<int>(old_format.size()), false);
+                                         static_cast<int>(old_format.size()),
+                                         false);
                 old_boundsflag = GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", 0, false);
-                old_srate      = GetSetProjectInfo(nullptr, "RENDER_SRATE", 0, false);
-                old_channels   = GetSetProjectInfo(nullptr, "RENDER_CHANNELS", 0, false);
+                old_srate = GetSetProjectInfo(nullptr, "RENDER_SRATE", 0, false);
+                old_channels = GetSetProjectInfo(nullptr, "RENDER_CHANNELS", 0, false);
 
                 if (params.custom_bounds && GetSet_LoopTimeRange2) {
-                    GetSet_LoopTimeRange2(nullptr, false, false, &old_loop_start, &old_loop_end,
-                                          false);
+                    GetSet_LoopTimeRange2(
+                            nullptr, false, false, &old_loop_start, &old_loop_end, false);
                 }
 
                 // Apply render settings.
@@ -321,12 +328,13 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
                 GetSetProjectInfo_String(nullptr, "RENDER_FILE", dir_buf.data(), 0, true);
                 GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", pat_buf.data(), 0, true);
                 GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", fmt_buf.data(), 0, true);
-                GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG",
-                                   static_cast<double>(params.bounds_flag_val), true);
-                GetSetProjectInfo(nullptr, "RENDER_SRATE",
-                                   static_cast<double>(params.srate), true);
-                GetSetProjectInfo(nullptr, "RENDER_CHANNELS",
-                                   static_cast<double>(params.channels), true);
+                GetSetProjectInfo(nullptr,
+                                  "RENDER_BOUNDSFLAG",
+                                  static_cast<double>(params.bounds_flag_val),
+                                  true);
+                GetSetProjectInfo(nullptr, "RENDER_SRATE", static_cast<double>(params.srate), true);
+                GetSetProjectInfo(
+                        nullptr, "RENDER_CHANNELS", static_cast<double>(params.channels), true);
 
                 // For custom bounds: set the project time selection and render
                 // with RENDER_BOUNDSFLAG=1 (time selection).
@@ -345,35 +353,32 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
                 Main_OnCommand(41824, 0);
 
                 // Restore previous render settings.
-                GetSetProjectInfo_String(nullptr, "RENDER_FILE",
-                                         old_file.data(), 0, true);
-                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN",
-                                         old_pattern.data(), 0, true);
-                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT",
-                                         old_format.data(), 0, true);
+                GetSetProjectInfo_String(nullptr, "RENDER_FILE", old_file.data(), 0, true);
+                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", old_pattern.data(), 0, true);
+                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), 0, true);
                 GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", old_boundsflag, true);
                 GetSetProjectInfo(nullptr, "RENDER_SRATE", old_srate, true);
                 GetSetProjectInfo(nullptr, "RENDER_CHANNELS", old_channels, true);
 
                 if (params.custom_bounds && GetSet_LoopTimeRange2) {
-                    GetSet_LoopTimeRange2(nullptr, true, false, &old_loop_start, &old_loop_end,
-                                          false);
+                    GetSet_LoopTimeRange2(
+                            nullptr, true, false, &old_loop_start, &old_loop_end, false);
                 }
 
                 return {{"ok", true}, {"project_length", project_length}};
             },
             300);
 
-    auto t1            = std::chrono::steady_clock::now();
+    auto t1 = std::chrono::steady_clock::now();
     double render_secs = std::chrono::duration<double>(t1 - t0).count();
 
     if (exec_error(res, result))
         return;
 
     double project_length = result.value("project_length", 0.0);
-    double offline_ratio  = (render_secs > 0.001 && project_length > 0.0)
-                                    ? (project_length / render_secs)
-                                    : 0.0;
+    double offline_ratio = (render_secs > 0.001 && project_length > 0.0)
+                                   ? (project_length / render_secs)
+                                   : 0.0;
 
     nlohmann::json resp = {{"output_path", output},
                            {"format", format},
