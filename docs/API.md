@@ -111,14 +111,14 @@ Project and transport state snapshot.
 
 ### GET /state/tracks
 
-All tracks with name, mute, solo, armed, volume, pan, folder nesting, color, and FX list.
+All tracks with name, mute, solo, armed, volume, pan, folder nesting, color, icon, and FX list.
 
 ```json
 {
   "tracks": [
     { "index": 0, "name": "Kick", "muted": false, "soloed": false,
       "armed": true, "volume_db": 0.0, "pan": 0.0,
-      "folder_depth": 1, "color": "#EC436F", "fx": [...] }
+      "folder_depth": 1, "color": "#EC436F", "icon": "kick.png", "fx": [...] }
   ]
 }
 ```
@@ -126,19 +126,39 @@ All tracks with name, mute, solo, armed, volume, pan, folder nesting, color, and
 `folder_depth`: `1` = folder parent (children follow), `0` = normal track,
 negative = closes that many folder levels (last track in a folder).
 `color`: track custom color as `"#RRGGBB"`, or `null` when the track uses the
-default color. Each track also carries a `sends` array
+default color. `icon`: current `P_ICON` value — a relative icon name or absolute
+path — or `null` when no icon is set. Each track also carries a `sends` array
 (`{index, dest_track, volume_db, pan}`) so routing is verifiable via the API.
+
+### GET /state/track-icons
+
+List all icon filenames available in `{ResourcePath}/Data/track_icons`.
+The names returned here can be passed directly as the `icon` field on track
+create/update. Absolute paths are accepted too but will not appear in this list.
+
+```json
+{
+  "icons": ["ac_guitar.png", "amp.png", "bass.png", "kick.png", "vocal1.png", "..."],
+  "count": 91,
+  "search_path": "/home/user/.config/REAPER/Data/track_icons"
+}
+```
 
 ### POST /state/tracks/{index}
 
 Set track properties directly (no action lookup needed). Writable fields:
 `name` (string), `color` (`"#RRGGBB"` or `null` to clear), `folder_depth` (int),
 `muted` (bool), `soloed` (bool), `armed` (bool), `volume_db` (float), `pan`
-(float −1.0→1.0). Returns the updated track. 404 if index out of range.
+(float −1.0→1.0), `icon` (string or `null`). Returns the updated track. 404 if
+index out of range.
+
+`icon`: relative name (e.g. `"bass.png"`) resolved against `Data/track_icons`, or
+an absolute path. `null` or `""` clears it. If a relative name doesn't resolve to a
+file, the response includes an `icon_not_found` hint in `hints[]`.
 
 ```json
 // Request
-{ "name": "Kick", "color": "#33AA55", "volume_db": -6.0 }
+{ "name": "Kick", "color": "#33AA55", "volume_db": -6.0, "icon": "kick.png" }
 ```
 
 ### POST /state/tracks

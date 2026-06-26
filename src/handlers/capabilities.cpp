@@ -43,7 +43,12 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                                       "dual_pan_r",
                                       "rec_input",
                                       "midi_hw_out",
-                                      "main_send"})}}},
+                                      "main_send",
+                                      "icon"})},
+              {"icon",
+               "relative name (e.g. 'bass.png') resolved against Data/track_icons, "
+               "or an absolute path. null/\"\" clears it. "
+               "GET /state/track-icons lists available names"}}},
             {"items",
              {{"read", "GET /state/items  |  GET /state/items/{index}"},
               {"create",
@@ -171,6 +176,7 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                                     "GET /state/markers",
                                     "GET /state/tempo",
                                     "GET /state/meters",
+                                    "GET /state/track-icons",
                                     "GET /project"})},
             {"actions",
              {{"run", "POST /execute/action {id}"},

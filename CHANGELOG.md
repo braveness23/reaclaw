@@ -10,6 +10,14 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Track icons (issue #29)** — agents can now assign and read REAPER's built-in
+  track icon set via the API. `GET /state/tracks` includes an `icon` field (`P_ICON`
+  value, or `null` when unset). `icon` is writable on `POST /state/tracks/{index}`,
+  `POST /state/tracks` (create + batch update): pass a relative name like `"bass.png"`
+  (resolved against `Data/track_icons`), an absolute path, or `null`/`""` to clear.
+  `GET /state/track-icons` discovers all available icon filenames so an agent can pick
+  a valid name instead of guessing. If a relative name doesn't resolve to a file, the
+  mutating response includes an `icon_not_found` hint in `hints[]`. Closes #29.
 - **First-class offline render engine (Epic #32 / issue #33)** — `POST /render` triggers a
   synchronous offline render to a file from the agent, supporting WAV, FLAC, MP3, and OGG
   formats with configurable bit depth, sample rate, channel count, and render bounds
