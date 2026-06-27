@@ -5,6 +5,15 @@ All endpoints:
 - Require `Authorization: Bearer {key}` when `auth.type` is `"api_key"`
 - Return a standard error shape on failure
 
+## Stability & versioning
+
+ReaClaw follows [SemVer](https://semver.org/). Any endpoint documented here and advertised in
+`GET /capabilities` is **stable**: it changes only additively (new endpoints/fields → MINOR
+release) and will not break except in a MAJOR release, with a deprecation notice first. The Lua
+escape hatch (`/scripts/register`) and raw action IDs (`/execute/action`) are version-coupled to
+REAPER and carry no stability guarantee beyond "the call is accepted." Full policy:
+`ReaClaw_TECH_DECISIONS.md` §21.
+
 ## Error format
 
 ```json

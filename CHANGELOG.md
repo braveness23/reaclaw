@@ -10,6 +10,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Governance policies (issue #37)** — `ReaClaw_TECH_DECISIONS.md` now documents a deliberate
+  **dependency policy** (Tier 0–3: vendored core required, SWS/external tools optional and
+  feature-detected, network forbidden) and an explicit **API stability & versioning policy**
+  (SemVer: additive→MINOR, breaking→MAJOR; documented + `/capabilities`-advertised endpoints are
+  stable; no 2.0 for additive growth). Summarized in `docs/API.md`. Closes #37.
 - **Track icons (issue #29)** — agents can now assign and read REAPER's built-in
   track icon set via the API. `GET /state/tracks` includes an `icon` field (`P_ICON`
   value, or `null` when unset). `icon` is writable on `POST /state/tracks/{index}`,
