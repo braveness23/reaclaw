@@ -6,6 +6,7 @@
 #include "handlers/analysis.h"
 #include "handlers/capabilities.h"
 #include "handlers/catalog.h"
+#include "handlers/chunk.h"
 #include "handlers/common.h"
 #include "handlers/execute.h"
 #include "handlers/history.h"
@@ -99,6 +100,11 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     svr.Get("/state/tracks", auth_wrap(cfg, Handlers::handle_state_tracks));
     svr.Get("/state/selection", auth_wrap(cfg, Handlers::handle_state_selection));
     svr.Get("/state/automation", auth_wrap(cfg, Handlers::handle_state_automation));
+    // Universal state-chunk backstop (issue #48): read/write any track/item/
+    // envelope's full RPP chunk. Registered before "/state" so the literal path
+    // is matched ahead of the catch-all snapshot read.
+    svr.Get("/state/chunk", auth_wrap(cfg, Handlers::handle_chunk_get));
+    svr.Post("/state/chunk", auth_wrap(cfg, Handlers::handle_chunk_post));
     svr.Get("/state", auth_wrap(cfg, Handlers::handle_state));
 
     // Create + batch update tracks.

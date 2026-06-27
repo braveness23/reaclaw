@@ -10,6 +10,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **State-chunk endpoint — universal reachability backstop (issue #48)** — `GET/POST
+  /state/chunk` reads and writes the full RPP state chunk of any `track`, `item`, or
+  `envelope` (`GetSetObjectState`/`Get*StateChunk`). Any property REAPER serializes is now
+  reachable even without a dedicated verb, so combined with the action-runner and Lua escape
+  hatch the automation surface is **provably 100% reachable**. Writes are undo-wrapped and bust
+  the state cache; the read buffer grows up to 64 MB. `GET /capabilities` marks the
+  `object_state_chunk` domain `structured`. Closes #48.
 - **Capabilities coverage matrix + feature detection (issue #46)** — `GET /capabilities` now
   carries a `coverage` map of every REST-relevant REAPER domain → `{status, note}`
   (`structured`/`chunk`/`action`/`lua`/`out_of_scope`), an honest `sdk` summary

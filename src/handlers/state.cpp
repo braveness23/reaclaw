@@ -60,14 +60,6 @@ void state_cache_set(const std::string& key, const nlohmann::json& data) {
             data, std::chrono::steady_clock::now() + std::chrono::milliseconds(kStateCacheTTL_ms)};
 }
 
-// Drop cached state so the next read reflects a write immediately.
-void invalidate_state_cache() {
-    std::lock_guard<std::mutex> lk(s_cache_mutex);
-    s_state_cache.erase("tracks");
-    s_state_cache.erase("state");
-    s_state_cache.erase("items");
-}
-
 // Run a mutating body inside a REAPER undo block so the change lands as one
 // coherent, user-undoable step (Edit > Undo "<desc>"). Main-thread only — call
 // from inside an Executor::post() lambda. When the body reports a validation
@@ -514,6 +506,16 @@ nlohmann::json read_project_state() {
 }
 
 }  // namespace
+
+// Drop cached state so the next read reflects a write immediately. Exported
+// (declared in state.h) so other handlers — e.g. the chunk backstop — can
+// invalidate after a mutation. Touches the file-local cache statics above.
+void invalidate_state_cache() {
+    std::lock_guard<std::mutex> lk(s_cache_mutex);
+    s_state_cache.erase("tracks");
+    s_state_cache.erase("state");
+    s_state_cache.erase("items");
+}
 
 // GET /state
 void handle_state(const httplib::Request& req, httplib::Response& res) {
