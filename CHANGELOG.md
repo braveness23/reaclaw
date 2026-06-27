@@ -28,6 +28,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   permanently change the project's render configuration. Timeout: 300 s (covers ~100 min
   of project at 20× real-time). Closes #33.
 
+### Fixed
+- **Build break in `POST /render` (#33) — the project did not compile.** Every
+  `GetSetProjectInfo_String` call in `src/handlers/render.cpp` passed five
+  arguments, but the REAPER SDK signature takes four
+  (`ReaProject*, const char* desc, char* valuestrNeedBig, bool is_set`). This
+  broke `main` for both the render (#33) and track-icons (#29) merges; CI was red
+  on every run since v1.7.0. Dropped the stray buffer-size argument from all nine
+  calls (the buffers are already pre-sized, as the 4-arg form expects). Restores a
+  green build.
+
 ## [1.7.0] - 2026-06-25
 
 ### Added

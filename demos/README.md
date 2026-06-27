@@ -3,6 +3,35 @@
 Everything needed to produce an **audible, captioned trailer/demo video** of
 ReaClaw driving REAPER, on the aarch64 Raspberry Pi test rig.
 
+---
+
+## Short demo: track icons (no audio)
+
+![24 tracks, each with a factory icon and colour-coded folders](icons_demo.png)
+
+`scripts/icons_show.py` builds a **24-track full-production template** and gives
+every track a fitting factory track icon — kick, snare, cymbal, bass, guitars,
+piano, strings, horns, a vocal mic — grouped into six colour-coded folders. It
+exercises the icon write path added in **#29** (`P_ICON` read/write +
+`GET /state/track-icons` discovery) and creates all 24 tracks in a single
+`POST /state/tracks` batch call.
+
+This one is short and deterministic: no MIDI, no instruments, no recording. Just
+start REAPER with ReaClaw on port 9091 and run it; the payoff is visual (open the
+track panel — see the image above).
+
+```bash
+cd demos/scripts
+python3 icons_show.py      # discovers icons, clears project, builds 24 tracks, verifies
+```
+
+It prints a readback table and exits non-zero if any icon failed to resolve
+(`icon_not_found`). The icon set it draws from is whatever REAPER ships under
+`{ResourcePath}/Data/track_icons` (91 icons on the stock install); the script
+queries `GET /state/track-icons` first and warns about any it can't find.
+
+---
+
 The first trailer was built **2026-06-22** (output `~/trailer.mp4`, 1:40 long).
 That file and its original scratchpad scripts have since been cleared. The
 scripts in `scripts/` are **faithful reconstructions** from detailed build notes

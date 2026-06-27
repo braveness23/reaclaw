@@ -296,21 +296,9 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
                 double old_boundsflag = 0, old_srate = 0, old_channels = 0;
                 double old_loop_start = 0, old_loop_end = 0;
 
-                GetSetProjectInfo_String(nullptr,
-                                         "RENDER_FILE",
-                                         old_file.data(),
-                                         static_cast<int>(old_file.size()),
-                                         false);
-                GetSetProjectInfo_String(nullptr,
-                                         "RENDER_PATTERN",
-                                         old_pattern.data(),
-                                         static_cast<int>(old_pattern.size()),
-                                         false);
-                GetSetProjectInfo_String(nullptr,
-                                         "RENDER_FORMAT",
-                                         old_format.data(),
-                                         static_cast<int>(old_format.size()),
-                                         false);
+                GetSetProjectInfo_String(nullptr, "RENDER_FILE", old_file.data(), false);
+                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", old_pattern.data(), false);
+                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), false);
                 old_boundsflag = GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", 0, false);
                 old_srate = GetSetProjectInfo(nullptr, "RENDER_SRATE", 0, false);
                 old_channels = GetSetProjectInfo(nullptr, "RENDER_CHANNELS", 0, false);
@@ -325,9 +313,9 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
                 auto pat_buf = to_mutable(params.render_pat);
                 auto fmt_buf = to_mutable(params.fmt_blob);
 
-                GetSetProjectInfo_String(nullptr, "RENDER_FILE", dir_buf.data(), 0, true);
-                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", pat_buf.data(), 0, true);
-                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", fmt_buf.data(), 0, true);
+                GetSetProjectInfo_String(nullptr, "RENDER_FILE", dir_buf.data(), true);
+                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", pat_buf.data(), true);
+                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", fmt_buf.data(), true);
                 GetSetProjectInfo(nullptr,
                                   "RENDER_BOUNDSFLAG",
                                   static_cast<double>(params.bounds_flag_val),
@@ -353,9 +341,9 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
                 Main_OnCommand(41824, 0);
 
                 // Restore previous render settings.
-                GetSetProjectInfo_String(nullptr, "RENDER_FILE", old_file.data(), 0, true);
-                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", old_pattern.data(), 0, true);
-                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), 0, true);
+                GetSetProjectInfo_String(nullptr, "RENDER_FILE", old_file.data(), true);
+                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", old_pattern.data(), true);
+                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), true);
                 GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", old_boundsflag, true);
                 GetSetProjectInfo(nullptr, "RENDER_SRATE", old_srate, true);
                 GetSetProjectInfo(nullptr, "RENDER_CHANNELS", old_channels, true);
