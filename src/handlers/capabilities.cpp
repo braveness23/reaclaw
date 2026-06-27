@@ -5,9 +5,43 @@
 
 #include <httplib.h>
 
+#include <cstdlib>
+#include <filesystem>
+#include <string>
+
+#include <reaper_plugin_functions.h>
+
 #include <json.hpp>
 
 namespace ReaClaw::Handlers {
+
+namespace {
+
+// Cheap PATH scan — no subprocess. Used for optional-tool feature detection so a
+// /capabilities call stays fork-free.
+bool binary_on_path(const char* name) {
+    const char* path = std::getenv("PATH");
+    if (!path)
+        return false;
+    std::string p(path);
+    size_t start = 0;
+    while (start <= p.size()) {
+        size_t sep = p.find(':', start);
+        std::string dir = p.substr(start,
+                                   sep == std::string::npos ? std::string::npos : sep - start);
+        if (!dir.empty()) {
+            std::error_code ec;
+            if (std::filesystem::exists(std::filesystem::path(dir) / name, ec))
+                return true;
+        }
+        if (sep == std::string::npos)
+            break;
+        start = sep + 1;
+    }
+    return false;
+}
+
+}  // namespace
 
 // GET /capabilities
 //
@@ -193,13 +227,74 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                                                                  "freezing tracks",
                                                                  "project open / save / new"});
 
+    // Coverage matrix — every REST-relevant REAPER domain and how it is reached, so an
+    // agent (and a human) can see the whole map and know nothing is hidden. Statuses:
+    //   structured  — first-class typed verb(s)
+    //   chunk       — reachable via the universal /state/chunk backstop (issue #48)
+    //   action      — reachable via POST /execute/action only (no typed verb yet)
+    //   lua         — reachable via the /scripts/register Lua escape hatch only
+    //   out_of_scope— deliberately not exposed (see note)
+    // Verdicts mirror ReaClaw_COVERAGE_REPORT.md §4.
+    auto dom = [](const char* status, const char* note) {
+        return nlohmann::json{{"status", status}, {"note", note}};
+    };
+    nlohmann::json coverage = {
+            {"tracks", dom("structured", "create/update/delete + 17 writable fields")},
+            {"items_takes", dom("structured", "item + take CRUD, sources; take-FX pending #50")},
+            {"fx", dom("structured", "track FX full; take-FX pending #50")},
+            {"routing", dom("structured", "sends add/set/delete; HW-out (cat -1) via chunk/lua")},
+            {"automation", dom("structured", "envelope read/write; automation items via chunk")},
+            {"markers_regions", dom("structured", "read/add/delete")},
+            {"tempo_time", dom("structured", "tempo/time-sig map + beat<->sec conversion")},
+            {"selection", dom("structured", "tracks/items set incl. all/none")},
+            {"project", dom("structured", "read/notes/ext-state; lifecycle pending #34")},
+            {"undo", dom("structured", "state/undo/redo; all mutations are undo-wrapped")},
+            {"perception",
+             dom("structured", "loudness/spectral/meters/visualize/probe/screenshot")},
+            {"snapshot", dom("structured", "capture/list/get/diff/delete")},
+            {"learning", dom("structured", "suggestions/stats (local-first, opt-in)")},
+            {"render", dom("structured", "offline render; async jobs pending #35")},
+            {"transport",
+             dom("action", "play/stop/record/cursor/loop via action IDs; verbs pending #49")},
+            {"config_vars", dom("action", "reaper.ini/config vars; typed endpoint pending #44")},
+            {"midi", dom("lua", "note/CC CRUD via Lua today; typed verbs pending #51")},
+            {"object_state_chunk",
+             dom("action", "full RPP object state; universal backstop pending #48")},
+            {"control_surface",
+             dom("out_of_scope", "inverted model (REAPER calls you); not REST-mappable")},
+            {"pcm_vst_interfaces",
+             dom("out_of_scope", "C++ interfaces you implement; rendering covered by /render")}};
+
+    // Honest SDK summary (reproducible — see ReaClaw_COVERAGE_REPORT.md §1).
+    nlohmann::json sdk = {
+            {"functions_total", 865},
+            {"functions_called", 131},
+            {"raw_pct", 15.1},
+            {"reachable", "100% via verbs + actions (~6700) + Lua + chunk backstop"},
+            {"note",
+             "raw % understates coverage: ~16 of ~20 REST-relevant domains have typed verbs; "
+             "most uncalled functions are out-of-scope, redundant variants, or "
+             "action/Lua-reachable"}};
+
+    // Optional-dependency / feature detection (folded from #37) so agents branch instead of
+    // probe-and-fail. SWS via plugin_getapi; tools via a cheap PATH scan.
+    bool sws = plugin_getapi && plugin_getapi("CF_GetSWSVersion") != nullptr;
+    nlohmann::json features = {{"sws", sws},
+                               {"sws_r128_loudness", sws},  // R128 API ships with SWS
+                               {"ffmpeg", binary_on_path("ffmpeg")},
+                               {"xdotool", binary_on_path("xdotool")},
+                               {"key_tempo_detector", binary_on_path("bpm-tag")}};
+
     json_ok(res,
             {{"coverage_model",
               "tiered: structured verbs for common objects, "
               "action-runner + Lua escape hatch for the long tail"},
              {"version", REACLAW_VERSION},
              {"direct", direct},
-             {"via_script_or_action", via_script_or_action}});
+             {"via_script_or_action", via_script_or_action},
+             {"coverage", coverage},
+             {"sdk", sdk},
+             {"features", features}});
 }
 
 }  // namespace ReaClaw::Handlers

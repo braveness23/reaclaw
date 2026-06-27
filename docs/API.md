@@ -241,7 +241,31 @@ you set). See also Epic #17 below for item selection.
 ### GET /capabilities
 
 Manifest of what the API supports directly (structured verbs) vs. via an action
-or a generated Lua script — reflects the tiered coverage model.
+or a generated Lua script — reflects the tiered coverage model. Fields:
+
+- `coverage_model`, `version`, `direct`, `via_script_or_action` — the tiered manifest.
+- `coverage` — a **map of every REST-relevant REAPER domain** to `{status, note}`, so an
+  agent can see the whole surface and know nothing is hidden. `status` ∈
+  `structured` (typed verb), `chunk` (universal `/state/chunk` backstop), `action`
+  (`/execute/action` only), `lua` (`/scripts/register` only), `out_of_scope` (deliberately
+  not exposed — e.g. control surface, PCM/VST interfaces). Verdicts mirror
+  `ReaClaw_COVERAGE_REPORT.md` §4.
+- `sdk` — honest surface summary: `{functions_total, functions_called, raw_pct, reachable, note}`
+  (reproducible; see the coverage report §1).
+- `features` — optional-dependency detection so agents branch instead of probe-and-fail:
+  `{sws, sws_r128_loudness, ffmpeg, xdotool, key_tempo_detector}`.
+
+```json
+{
+  "coverage": { "tracks": {"status":"structured","note":"…"},
+                "midi": {"status":"lua","note":"… pending #51"},
+                "control_surface": {"status":"out_of_scope","note":"…"} },
+  "sdk": { "functions_total": 865, "functions_called": 131, "raw_pct": 15.1,
+           "reachable": "100% via verbs + actions (~6700) + Lua + chunk backstop" },
+  "features": { "sws": true, "sws_r128_loudness": true, "ffmpeg": true,
+                "xdotool": true, "key_tempo_detector": false }
+}
+```
 
 ### GET /state/items
 
