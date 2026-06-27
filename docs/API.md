@@ -5,6 +5,15 @@ All endpoints:
 - Require `Authorization: Bearer {key}` when `auth.type` is `"api_key"`
 - Return a standard error shape on failure
 
+## Stability & versioning
+
+ReaClaw follows [SemVer](https://semver.org/). Any endpoint documented here and advertised in
+`GET /capabilities` is **stable**: it changes only additively (new endpoints/fields → MINOR
+release) and will not break except in a MAJOR release, with a deprecation notice first. The Lua
+escape hatch (`/scripts/register`) and raw action IDs (`/execute/action`) are version-coupled to
+REAPER and carry no stability guarantee beyond "the call is accepted." Full policy:
+`ReaClaw_TECH_DECISIONS.md` §21.
+
 ## Error format
 
 ```json
@@ -75,10 +84,21 @@ Query params: `limit` (default 100), `offset` (default 0)
 
 Full-text search (SQLite FTS5) across action names and categories.
 
-Query params: `q` (required), `limit` (default 20)
+Query params: `q` (required), `limit` (default 20), `category`, `section=midi_editor`.
+
+**Synonym expansion (strict-first):** the literal query runs first, so precise queries keep
+their precision. On a miss, the query is widened through a curated synonym map (e.g. "folder
+depth" → "indent", "bounce" → "render", "colour" → "color") — AND-of-synonym-groups first,
+then OR-of-all as a last resort. The response echoes `matched` (the FTS expression actually
+used) and `expanded` (whether widening kicked in).
+
+Each action carries an `interactive` flag — `true` when it opens a modal dialog (ellipsis/
+prompt/known-modal id), so a headless agent can filter out actions that would hang on a dialog.
 
 ```json
-{ "query": "mute", "total": 12, "actions": [...] }
+{ "query": "set folder depth", "matched": "set OR folder OR indent OR depth …",
+  "expanded": true, "total": 3,
+  "actions": [ { "id": 53609, "name": "SWS: Indent selected track(s)", "interactive": false } ] }
 ```
 
 ### GET /catalog/{id}
@@ -232,7 +252,31 @@ you set). See also Epic #17 below for item selection.
 ### GET /capabilities
 
 Manifest of what the API supports directly (structured verbs) vs. via an action
-or a generated Lua script — reflects the tiered coverage model.
+or a generated Lua script — reflects the tiered coverage model. Fields:
+
+- `coverage_model`, `version`, `direct`, `via_script_or_action` — the tiered manifest.
+- `coverage` — a **map of every REST-relevant REAPER domain** to `{status, note}`, so an
+  agent can see the whole surface and know nothing is hidden. `status` ∈
+  `structured` (typed verb), `chunk` (universal `/state/chunk` backstop), `action`
+  (`/execute/action` only), `lua` (`/scripts/register` only), `out_of_scope` (deliberately
+  not exposed — e.g. control surface, PCM/VST interfaces). Verdicts mirror
+  `ReaClaw_COVERAGE_REPORT.md` §4.
+- `sdk` — honest surface summary: `{functions_total, functions_called, raw_pct, reachable, note}`
+  (reproducible; see the coverage report §1).
+- `features` — optional-dependency detection so agents branch instead of probe-and-fail:
+  `{sws, sws_r128_loudness, ffmpeg, xdotool, key_tempo_detector}`.
+
+```json
+{
+  "coverage": { "tracks": {"status":"structured","note":"…"},
+                "midi": {"status":"lua","note":"… pending #51"},
+                "control_surface": {"status":"out_of_scope","note":"…"} },
+  "sdk": { "functions_total": 865, "functions_called": 131, "raw_pct": 15.1,
+           "reachable": "100% via verbs + actions (~6700) + Lua + chunk backstop" },
+  "features": { "sws": true, "sws_r128_loudness": true, "ffmpeg": true,
+                "xdotool": true, "key_tempo_detector": false }
+}
+```
 
 ### GET /state/items
 

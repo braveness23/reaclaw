@@ -409,6 +409,68 @@ project handling for `/project/open` touches the deferred Tier-C area (§16).
 
 ---
 
+## 20. Dependency Policy: Deliberate & Tiered (issue #37)
+
+ReaClaw stays deliberately thin: vendored core libraries only, a Lua escape hatch for the
+long tail, and **no runtime dependency** on REAPER-side extensions. SWS was used *transiently*
+to generate the native-action table (`tools/`) and is never shipped or required. Before leaning
+on anything external we apply a deliberate policy, not ad-hoc decisions.
+
+**Four kinds of dependency, not equal:**
+1. **Vendored / build-time libs** linked into the `.so` (cpp-httplib, SQLite, OpenSSL,
+   nlohmann/json) — ship inside us.
+2. **Optional REAPER-side extensions** (SWS, ReaPack) — live in the user's REAPER, called via
+   the SDK/Lua; we ship nothing but must feature-detect.
+3. **Optional external tools/processes** (ffmpeg, a key/tempo analyzer) — user-installed,
+   path-configured, skipped when absent.
+4. **Network / cloud services** — **forbidden** (local-first; no phoning home; no LLM client, §11).
+
+**Tiered rule:**
+- **Tier 0 — Core (required, vendored):** the minimum to *be* ReaClaw. Pinned, license-cleared, in-tree.
+- **Tier 1 — Always-on built-ins:** Tier 0 only, no external dep.
+- **Tier 2 — Enhanced via optional REAPER extensions (e.g. SWS):** feature-detected
+  (`CF_GetSWSVersion`), graceful fallback, **never required**. `/config/reaper` (#44) is the
+  reference Tier-2 case.
+- **Tier 3 — Enhanced via optional external tools:** opt-in, configured, skipped when absent.
+- **Hard rule:** the core path must never require anything above Tier 0.
+
+**Decision checklist for any new dependency:** necessity · optionality (core stays clean?) ·
+**license compatibility** (SWS is GPL — calling its runtime-registered API differs legally from
+linking it) · feature-detection + graceful degradation · cross-platform incl. aarch64 ·
+version-drift handling · CI reproducibility (Linux k3s runners) · maintenance/abandonment risk ·
+security surface (per `SECURITY.md`). Feature-detection is *reported* via `/capabilities` (#46)
+so agents branch instead of probe-and-fail. Reference research: `docs/research/SWS_DEEP_DIVE.md`.
+
+## 21. API Stability & Versioning Policy (issue #37)
+
+ReaClaw follows [SemVer](https://semver.org/). This section makes the contract explicit.
+
+- **PATCH (x.y.Z):** bug fixes, doc/internal changes; no API surface change.
+- **MINOR (x.Y.0):** **additive** API changes — new endpoints, new optional request fields, new
+  response fields, new `/capabilities` entries. Additive changes are *backward compatible* and
+  are how ReaClaw grows; v1.3→v1.7 added large surface this way, and the full-coverage
+  expansion (epic #45) continues to land as MINOR bumps.
+- **MAJOR (X.0.0):** **breaking** changes only — removing/renaming an endpoint or field,
+  changing a response shape or an error contract, or tightening validation in a
+  backward-incompatible way.
+
+**What "stable" means:** any endpoint documented in `docs/API.md` and advertised in
+`GET /capabilities` is stable — it will not break except in a MAJOR release, with deprecation
+notice first (see below). The Lua escape hatch (`/scripts/register`) and raw action IDs
+(`/execute/action`) are inherently version-coupled to REAPER itself and carry no stability
+guarantee beyond "the call is accepted."
+
+**Deprecation:** before a breaking change, the old form is marked deprecated in `docs/API.md`
+and (where practical) flagged via a `hints[]` entry on the response for at least one MINOR
+release before removal in the next MAJOR.
+
+**No 2.0 for additive growth.** Aggressively expanding coverage does **not** justify a major
+bump — additive surface is correct as MINOR. A 2.0.0 is reserved for the day we choose to make
+the cohesion fixes catalogued in `ReaClaw_COVERAGE_REPORT.md` §6.4 (response-envelope
+normalization, relative/absolute icon symmetry, unified error/hints shapes).
+
+---
+
 ## Summary
 
 | Concern | Decision |
@@ -430,3 +492,5 @@ project handling for `/project/open` touches the deferred Tier-C area (§16).
 | Plugin name | reaper_reaclaw.{dll,dylib,so} |
 | API coverage | Tiered: structured verbs + action-runner + Lua escape hatch |
 | Production/render | Offline-first headless render engine (Epic #32); `/render` hides RENDER_FORMAT; long renders are jobs; local-first |
+| Dependencies | Tiered (0–3): vendored core required; SWS/external tools optional + feature-detected; network forbidden |
+| Versioning | SemVer — additive = MINOR, breaking = MAJOR; documented+advertised endpoints are stable; no 2.0 for additive growth |

@@ -10,6 +10,22 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Capabilities coverage matrix + feature detection (issue #46)** — `GET /capabilities` now
+  carries a `coverage` map of every REST-relevant REAPER domain → `{status, note}`
+  (`structured`/`chunk`/`action`/`lua`/`out_of_scope`), an honest `sdk` summary
+  (`functions_total:865, functions_called:131, raw_pct, reachable`), and a `features` object
+  detecting optional dependencies (`sws`, `sws_r128_loudness`, `ffmpeg`, `xdotool`,
+  `key_tempo_detector`) so agents branch instead of probe-and-fail. Closes #46.
+- **Catalog search synonyms (issue #41)** — `GET /catalog/search` widens to a curated synonym
+  map on a miss (strict-first, so precise queries keep precision): "folder depth" → "indent",
+  "bounce" → "render", "colour" → "color", etc. Response adds `matched` + `expanded`. (The
+  `interactive`/modal flag this issue also called for already shipped on every catalog result.)
+  Closes #41.
+- **Governance policies (issue #37)** — `ReaClaw_TECH_DECISIONS.md` now documents a deliberate
+  **dependency policy** (Tier 0–3: vendored core required, SWS/external tools optional and
+  feature-detected, network forbidden) and an explicit **API stability & versioning policy**
+  (SemVer: additive→MINOR, breaking→MAJOR; documented + `/capabilities`-advertised endpoints are
+  stable; no 2.0 for additive growth). Summarized in `docs/API.md`. Closes #37.
 - **Track icons (issue #29)** — agents can now assign and read REAPER's built-in
   track icon set via the API. `GET /state/tracks` includes an `icon` field (`P_ICON`
   value, or `null` when unset). `icon` is writable on `POST /state/tracks/{index}`,

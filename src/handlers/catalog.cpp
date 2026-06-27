@@ -5,14 +5,102 @@
 
 #include <httplib.h>
 
+#include <algorithm>
 #include <cctype>
 #include <string>
+#include <vector>
 
 #include <json.hpp>
 
 namespace ReaClaw::Handlers {
 
 namespace {
+
+// Curated synonym groups: any token in a group expands (OR) to all members, so
+// natural-language phrasing finds REAPER's vocabulary (e.g. "folder depth" ->
+// "indent"). Used only as a fallback when the literal query misses, so precise
+// queries keep their precision. Extend as gaps surface.
+const std::vector<std::vector<std::string>>& synonym_groups() {
+    static const std::vector<std::vector<std::string>> g = {
+            {"folder", "indent", "depth", "nest", "unindent"},
+            {"arm", "recarm", "record", "rec"},
+            {"color", "colour", "tint"},
+            {"mute", "silence"},
+            {"send", "route", "routing", "bus", "receive"},
+            {"fx", "plugin", "effect", "vst", "instrument"},
+            {"tempo", "bpm"},
+            {"marker", "region"},
+            {"volume", "gain", "level", "fader"},
+            {"pan", "balance"},
+            {"automation", "envelope"},
+            {"midi", "note"},
+            {"render", "bounce", "export"},
+            {"duplicate", "copy"},
+            {"delete", "remove"},
+            {"rename", "name", "label", "title"},
+            {"normalize", "normalise"},
+            {"fade", "crossfade"},
+            {"quantize", "quantise", "snap"},
+            {"zoom", "scroll"},
+    };
+    return g;
+}
+
+// Split into lowercase alphanumeric tokens (also sanitizes for safe FTS5 syntax).
+std::vector<std::string> tokenize_lower(const std::string& q) {
+    std::vector<std::string> out;
+    std::string cur;
+    for (char c : q) {
+        if (std::isalnum(static_cast<unsigned char>(c))) {
+            cur.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        } else if (!cur.empty()) {
+            out.push_back(cur);
+            cur.clear();
+        }
+    }
+    if (!cur.empty())
+        out.push_back(cur);
+    return out;
+}
+
+std::vector<std::string> expand_token(const std::string& t) {
+    for (const auto& grp : synonym_groups())
+        if (std::find(grp.begin(), grp.end(), t) != grp.end())
+            return grp;
+    return {t};
+}
+
+// AND of per-token OR-groups: `set (folder OR indent OR depth)` — keeps every
+// concept the user typed, broadening each to its synonyms.
+std::string build_fts_and(const std::vector<std::string>& toks) {
+    std::string out;
+    for (const auto& t : toks) {
+        auto ex = expand_token(t);
+        std::string grp;
+        if (ex.size() == 1) {
+            grp = ex[0];
+        } else {
+            grp = "(";
+            for (size_t i = 0; i < ex.size(); ++i)
+                grp += (i ? " OR " : "") + ex[i];
+            grp += ")";
+        }
+        out += (out.empty() ? "" : " ") + grp;
+    }
+    return out;
+}
+
+// OR over every expanded term — widest recall fallback.
+std::string build_fts_or(const std::vector<std::string>& toks) {
+    std::vector<std::string> all;
+    for (const auto& t : toks)
+        for (const auto& e : expand_token(t))
+            all.push_back(e);
+    std::string out;
+    for (size_t i = 0; i < all.size(); ++i)
+        out += (i ? " OR " : "") + all[i];
+    return out;
+}
 
 // Known modal native actions whose names lack the usual ellipsis tell but which
 // still pop a blocking dialog (so they'd hang a headless agent). Mirrors the
@@ -136,18 +224,44 @@ void handle_catalog_search(const httplib::Request& req, httplib::Response& res) 
 
     SectionTables st = section_tables(req);
 
-    // FTS5 via the section's *_fts table; join back to its actions table.
-    Rows rows;
-    if (category.empty()) {
-        rows = g_db.query(std::string("SELECT a.id, a.name, a.category FROM ") + st.fts +
-                                  " f JOIN " + st.table + " a ON f.rowid = a.id WHERE " + st.fts +
-                                  " MATCH ?1 ORDER BY rank LIMIT ?2",
-                          {q, std::to_string(limit)});
-    } else {
-        rows = g_db.query(std::string("SELECT a.id, a.name, a.category FROM ") + st.fts +
+    // Run one FTS5 MATCH against the section's *_fts table, joined to its actions
+    // table. `fts` is the raw MATCH expression (caller builds it safely).
+    auto run = [&](const std::string& fts) -> Rows {
+        if (category.empty()) {
+            return g_db.query(std::string("SELECT a.id, a.name, a.category FROM ") + st.fts +
+                                      " f JOIN " + st.table + " a ON f.rowid = a.id WHERE " +
+                                      st.fts + " MATCH ?1 ORDER BY rank LIMIT ?2",
+                              {fts, std::to_string(limit)});
+        }
+        return g_db.query(std::string("SELECT a.id, a.name, a.category FROM ") + st.fts +
                                   " f JOIN " + st.table + " a ON f.rowid = a.id WHERE " + st.fts +
                                   " MATCH ?1 AND a.category = ?2 ORDER BY rank LIMIT ?3",
-                          {q, category, std::to_string(limit)});
+                          {fts, category, std::to_string(limit)});
+    };
+
+    // Strict first (preserves precision for queries that already work), then
+    // widen via synonyms only on a miss, then OR-of-all as a last resort.
+    std::string used = q;
+    bool expanded = false;
+    Rows rows = run(q);
+    if (rows.empty()) {
+        auto toks = tokenize_lower(q);
+        if (!toks.empty()) {
+            std::string fts_and = build_fts_and(toks);
+            if (fts_and != q) {
+                rows = run(fts_and);
+                used = fts_and;
+                expanded = true;
+            }
+            if (rows.empty()) {
+                std::string fts_or = build_fts_or(toks);
+                if (fts_or != fts_and) {
+                    rows = run(fts_or);
+                    used = fts_or;
+                    expanded = true;
+                }
+            }
+        }
     }
 
     nlohmann::json actions = nlohmann::json::array();
@@ -156,6 +270,8 @@ void handle_catalog_search(const httplib::Request& req, httplib::Response& res) 
 
     json_ok(res,
             {{"query", q},
+             {"matched", used},
+             {"expanded", expanded},
              {"section", st.label},
              {"total", (int)actions.size()},
              {"actions", actions}});
