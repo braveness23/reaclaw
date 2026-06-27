@@ -84,10 +84,21 @@ Query params: `limit` (default 100), `offset` (default 0)
 
 Full-text search (SQLite FTS5) across action names and categories.
 
-Query params: `q` (required), `limit` (default 20)
+Query params: `q` (required), `limit` (default 20), `category`, `section=midi_editor`.
+
+**Synonym expansion (strict-first):** the literal query runs first, so precise queries keep
+their precision. On a miss, the query is widened through a curated synonym map (e.g. "folder
+depth" → "indent", "bounce" → "render", "colour" → "color") — AND-of-synonym-groups first,
+then OR-of-all as a last resort. The response echoes `matched` (the FTS expression actually
+used) and `expanded` (whether widening kicked in).
+
+Each action carries an `interactive` flag — `true` when it opens a modal dialog (ellipsis/
+prompt/known-modal id), so a headless agent can filter out actions that would hang on a dialog.
 
 ```json
-{ "query": "mute", "total": 12, "actions": [...] }
+{ "query": "set folder depth", "matched": "set OR folder OR indent OR depth …",
+  "expanded": true, "total": 3,
+  "actions": [ { "id": 53609, "name": "SWS: Indent selected track(s)", "interactive": false } ] }
 ```
 
 ### GET /catalog/{id}
