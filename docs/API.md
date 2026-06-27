@@ -297,6 +297,32 @@ Automation envelopes for the selected track.
 
 ---
 
+### GET /state/chunk · POST /state/chunk
+
+The **universal reachability backstop**: read or write the full RPP state chunk of any
+`track`, `item`, or `envelope`. Any property REAPER serializes into the project file is
+reachable here even when no dedicated structured verb exists — so combined with
+`/execute/action` and `/scripts/register`, the automation surface is provably 100% reachable.
+
+**GET** `?target=track|item|envelope&index=N[&envelope=M]` — `index` is the track/item index;
+for `envelope`, `index` is the track and `envelope` is the envelope index on that track.
+
+```json
+{ "target": "track", "index": 0, "envelope": 0, "chunk": "<TRACK\n  NAME ChunkTest\n  ...\n>" }
+```
+
+**POST** `{ "target", "index", "envelope"?, "chunk" }` — applies the chunk. Writes are wrapped
+in a single undo block ("ReaClaw: set state chunk") and bust the state read-cache.
+
+```json
+{ "target": "track", "index": 0, "envelope": 0, "applied": true }
+```
+
+Errors: `400` bad target/params or malformed request, `404` index out of range, `500` REAPER
+rejected the chunk (malformed RPP). The read buffer grows up to 64 MB for very large objects.
+
+---
+
 ### POST /execute/action
 
 Execute a single action by numeric ID or registered script action ID.

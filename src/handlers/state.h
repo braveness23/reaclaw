@@ -36,4 +36,8 @@ void handle_fx_copy(const httplib::Request& req, httplib::Response& res);
 // Issue #29 — Track icons.
 void handle_state_track_icons(const httplib::Request& req, httplib::Response& res);
 
+// Drop the 1s state read-cache (tracks/state/items) so the next read reflects a
+// just-applied write. Exported for cross-handler use (e.g. the chunk backstop).
+void invalidate_state_cache();
+
 }  // namespace ReaClaw::Handlers

@@ -217,6 +217,12 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"sequence", "POST /execute/sequence {steps:[...]}"},
               {"search", "GET /catalog/search?q=  (add &section=midi_editor for MIDI actions)"},
               {"note", "search the catalog before generating a script"}}},
+            {"chunk",
+             {{"read", "GET /state/chunk?target=track|item|envelope&index=N[&envelope=M]"},
+              {"write", "POST /state/chunk {target,index,envelope?,chunk}"},
+              {"note",
+               "universal backstop: full RPP state of any track/item/envelope, readable and "
+               "writable even with no dedicated verb. Writes are undo-wrapped"}}},
             {"scripts",
              {{"register", "POST /scripts/register  (Lua escape hatch for anything not above)"}}}};
 
@@ -259,7 +265,9 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
             {"config_vars", dom("action", "reaper.ini/config vars; typed endpoint pending #44")},
             {"midi", dom("lua", "note/CC CRUD via Lua today; typed verbs pending #51")},
             {"object_state_chunk",
-             dom("action", "full RPP object state; universal backstop pending #48")},
+             dom("structured",
+                 "GET/POST /state/chunk — full RPP state of any track/item/envelope "
+                 "(the universal reachability backstop)")},
             {"control_surface",
              dom("out_of_scope", "inverted model (REAPER calls you); not REST-mappable")},
             {"pcm_vst_interfaces",
