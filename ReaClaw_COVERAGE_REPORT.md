@@ -189,18 +189,18 @@ Tracked under umbrella epic **#45** ("Full coverage — provable reachability + 
 
 | Step | Issue |
 |---|---|
-| `/capabilities` coverage matrix | #46 |
-| API-stability / versioning policy | #47 |
+| `/capabilities` coverage matrix (+ optional-dep feature detection) | #46 |
+| Governance policies (deps + API stability/versioning) | #37 |
 | State-chunk endpoint (keystone) | #48 |
 | Transport verbs | #49 |
 | Take-FX verbs | #50 |
 | MIDI verbs | #51 |
-| Project lifecycle | #43, #34 |
+| Project lifecycle (new/open/save/load/reset) | #34 |
 | Config vars | #44 |
 
 Order — deliver the "intentional & discoverable" story first, biggest/heaviest last:
-**matrix (#46) + policy (#47) + chunk (#48) → transport (#49) → project-lifecycle/config
-(#43/#34/#44) → take-FX (#50) → MIDI (#51).** Each ships as its own additive minor release.
+**matrix (#46) + policy (#37) + chunk (#48) → transport (#49) → project-lifecycle/config
+(#34/#44) → take-FX (#50) → MIDI (#51).** Each ships as its own additive minor release.
 
 ---
 
