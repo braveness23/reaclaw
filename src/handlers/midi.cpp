@@ -132,8 +132,14 @@ nlohmann::json cc_to_json(MediaItem_Take* take, int idx) {
 // Parse a note spec from the POST body into PPQ values for MIDI_InsertNote.
 // Accepts start_ppq/end_ppq directly, or start_time/end_time (project seconds)
 // converted via MIDI_GetPPQPosFromProjTime. Returns false and fills err on failure.
-bool parse_note_spec(const nlohmann::json& spec, MediaItem_Take* take, double& start_ppq,
-                     double& end_ppq, int& chan, int& pitch, int& vel, std::string& err) {
+bool parse_note_spec(const nlohmann::json& spec,
+                     MediaItem_Take* take,
+                     double& start_ppq,
+                     double& end_ppq,
+                     int& chan,
+                     int& pitch,
+                     int& vel,
+                     std::string& err) {
     if (!spec.contains("pitch") || !spec["pitch"].is_number_integer()) {
         err = "note missing required field: pitch (0-127)";
         return false;
@@ -175,8 +181,14 @@ bool parse_note_spec(const nlohmann::json& spec, MediaItem_Take* take, double& s
 }
 
 // Parse a CC spec from the POST body. chanmsg defaults to 0xB0 (Control Change).
-bool parse_cc_spec(const nlohmann::json& spec, MediaItem_Take* take, double& ppq, int& chanmsg,
-                   int& chan, int& number, int& value, std::string& err) {
+bool parse_cc_spec(const nlohmann::json& spec,
+                   MediaItem_Take* take,
+                   double& ppq,
+                   int& chanmsg,
+                   int& chan,
+                   int& number,
+                   int& value,
+                   std::string& err) {
     if (!spec.contains("number") || !spec["number"].is_number_integer()) {
         err = "cc missing required field: number (0-127)";
         return false;
@@ -291,87 +303,84 @@ void handle_midi_post(const httplib::Request& req, httplib::Response& res) {
         return;
 
     bool replace = body.value("replace", false);
-    nlohmann::json notes_spec =
-            (body.contains("notes") && body["notes"].is_array()) ? body["notes"]
-                                                                  : nlohmann::json::array();
+    nlohmann::json notes_spec = (body.contains("notes") && body["notes"].is_array())
+                                        ? body["notes"]
+                                        : nlohmann::json::array();
     nlohmann::json cc_spec = (body.contains("cc") && body["cc"].is_array())
                                      ? body["cc"]
                                      : nlohmann::json::array();
 
-    auto result =
-            Executor::post([index, replace, notes_spec, cc_spec]() -> nlohmann::json {
-                return with_undo("ReaClaw: edit MIDI", [&]() -> nlohmann::json {
-                    bool is_midi = false;
-                    MediaItem_Take* take = midi_take_at(index, is_midi);
-                    if (!take)
-                        return {{"_not_found", true}};
-                    if (!is_midi)
-                        return {{"_bad_request", true},
-                                {"_message", "active take is not a MIDI source"}};
+    auto result = Executor::post([index, replace, notes_spec, cc_spec]() -> nlohmann::json {
+        return with_undo("ReaClaw: edit MIDI", [&]() -> nlohmann::json {
+            bool is_midi = false;
+            MediaItem_Take* take = midi_take_at(index, is_midi);
+            if (!take)
+                return {{"_not_found", true}};
+            if (!is_midi)
+                return {{"_bad_request", true}, {"_message", "active take is not a MIDI source"}};
 
-                    int notes_deleted = 0, cc_deleted = 0;
+            int notes_deleted = 0, cc_deleted = 0;
 
-                    MIDI_DisableSort(take);
+            MIDI_DisableSort(take);
 
-                    if (replace) {
-                        int notecnt = 0, cccnt = 0, tmp = 0;
-                        MIDI_CountEvts(take, &notecnt, &cccnt, &tmp);
-                        for (int i = notecnt - 1; i >= 0; --i) {
-                            MIDI_DeleteNote(take, i);
-                            ++notes_deleted;
-                        }
-                        for (int i = cccnt - 1; i >= 0; --i) {
-                            MIDI_DeleteCC(take, i);
-                            ++cc_deleted;
-                        }
-                    }
+            if (replace) {
+                int notecnt = 0, cccnt = 0, tmp = 0;
+                MIDI_CountEvts(take, &notecnt, &cccnt, &tmp);
+                for (int i = notecnt - 1; i >= 0; --i) {
+                    MIDI_DeleteNote(take, i);
+                    ++notes_deleted;
+                }
+                for (int i = cccnt - 1; i >= 0; --i) {
+                    MIDI_DeleteCC(take, i);
+                    ++cc_deleted;
+                }
+            }
 
-                    int notes_inserted = 0, cc_inserted = 0;
-                    std::vector<std::string> warnings;
+            int notes_inserted = 0, cc_inserted = 0;
+            std::vector<std::string> warnings;
 
-                    for (const auto& spec : notes_spec) {
-                        if (!spec.is_object())
-                            continue;
-                        double start_ppq = 0.0, end_ppq = 0.0;
-                        int chan = 0, pitch = 0, vel = 0;
-                        std::string err;
-                        if (!parse_note_spec(spec, take, start_ppq, end_ppq, chan, pitch, vel,
-                                             err)) {
-                            warnings.push_back(err);
-                            continue;
-                        }
-                        const bool no_sort = true;
-                        if (MIDI_InsertNote(take, false, false, start_ppq, end_ppq, chan, pitch,
-                                            vel, &no_sort))
-                            ++notes_inserted;
-                    }
+            for (const auto& spec : notes_spec) {
+                if (!spec.is_object())
+                    continue;
+                double start_ppq = 0.0, end_ppq = 0.0;
+                int chan = 0, pitch = 0, vel = 0;
+                std::string err;
+                if (!parse_note_spec(spec, take, start_ppq, end_ppq, chan, pitch, vel, err)) {
+                    warnings.push_back(err);
+                    continue;
+                }
+                const bool no_sort = true;
+                if (MIDI_InsertNote(
+                            take, false, false, start_ppq, end_ppq, chan, pitch, vel, &no_sort))
+                    ++notes_inserted;
+            }
 
-                    for (const auto& spec : cc_spec) {
-                        if (!spec.is_object())
-                            continue;
-                        double ppq = 0.0;
-                        int chanmsg = 0, chan = 0, number = 0, value = 0;
-                        std::string err;
-                        if (!parse_cc_spec(spec, take, ppq, chanmsg, chan, number, value, err)) {
-                            warnings.push_back(err);
-                            continue;
-                        }
-                        if (MIDI_InsertCC(take, false, false, ppq, chanmsg, chan, number, value))
-                            ++cc_inserted;
-                    }
+            for (const auto& spec : cc_spec) {
+                if (!spec.is_object())
+                    continue;
+                double ppq = 0.0;
+                int chanmsg = 0, chan = 0, number = 0, value = 0;
+                std::string err;
+                if (!parse_cc_spec(spec, take, ppq, chanmsg, chan, number, value, err)) {
+                    warnings.push_back(err);
+                    continue;
+                }
+                if (MIDI_InsertCC(take, false, false, ppq, chanmsg, chan, number, value))
+                    ++cc_inserted;
+            }
 
-                    MIDI_Sort(take);
+            MIDI_Sort(take);
 
-                    nlohmann::json r = {{"ok", true},
-                                        {"notes_inserted", notes_inserted},
-                                        {"cc_inserted", cc_inserted},
-                                        {"notes_deleted", notes_deleted},
-                                        {"cc_deleted", cc_deleted}};
-                    if (!warnings.empty())
-                        r["warnings"] = warnings;
-                    return r;
-                });
-            });
+            nlohmann::json r = {{"ok", true},
+                                {"notes_inserted", notes_inserted},
+                                {"cc_inserted", cc_inserted},
+                                {"notes_deleted", notes_deleted},
+                                {"cc_deleted", cc_deleted}};
+            if (!warnings.empty())
+                r["warnings"] = warnings;
+            return r;
+        });
+    });
     if (exec_error(res, result))
         return;
     Log::info("MIDI edit item " + std::to_string(index) + ": " +

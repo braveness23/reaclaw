@@ -26,13 +26,13 @@ TEST(MidiUtil, OutOfRangeIsEmpty) {
 }
 
 TEST(MidiUtil, SharpNotes) {
-    EXPECT_EQ(pitch_to_note_name(61), "C#4");   // C#4 / Db4
+    EXPECT_EQ(pitch_to_note_name(61), "C#4");  // C#4 / Db4
     EXPECT_EQ(pitch_to_note_name(63), "D#4");
     EXPECT_EQ(pitch_to_note_name(70), "A#4");
 }
 
 TEST(MidiUtil, OctaveBoundaries) {
-    EXPECT_EQ(pitch_to_note_name(12), "C0");   // one octave above C-1
+    EXPECT_EQ(pitch_to_note_name(12), "C0");  // one octave above C-1
     EXPECT_EQ(pitch_to_note_name(24), "C1");
     EXPECT_EQ(pitch_to_note_name(48), "C3");
     EXPECT_EQ(pitch_to_note_name(72), "C5");
