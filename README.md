@@ -254,10 +254,9 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.8.0** — Tier-A control verbs, Tier-B content manipulation, the
-audio-perception epic ("the agent hears itself"), and now **visual perception**: audio
-visualization, named-surface screenshots, and key/pitch/tempo probes. See the
-[CHANGELOG](CHANGELOG.md) for the full story.
+Latest release: **v1.9.0** — Project lifecycle endpoints: `POST /project/new`, `/open`,
+`/save`, and `/reset` so an agent can manage the full blank-slate → build → save → reload
+→ render loop without any GUI modal. See the [CHANGELOG](CHANGELOG.md) for the full story.
 
 | Phase | Scope | Tag |
 |---|---|---|
