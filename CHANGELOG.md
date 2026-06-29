@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-06-28
+
 ### Added
 - **MIDI verbs — notes and CC read/write (issue #51)** — `GET /state/items/{index}/midi`
   returns all notes (pitch, note name, channel, velocity, start/end in both PPQ and project
