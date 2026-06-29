@@ -440,7 +440,8 @@ void reset_project_state(bool clear_notes, bool clear_name) {
 
     // 2. Delete all markers and regions.
     if (DeleteProjectMarkerByIndex)
-        while (DeleteProjectMarkerByIndex(nullptr, 0)) {}
+        while (DeleteProjectMarkerByIndex(nullptr, 0)) {
+        }
 
     // 3. Strip extra tempo markers; reset marker 0 to 120 BPM, 4/4.
     if (CountTempoTimeSigMarkers && DeleteTempoTimeSigMarker && SetTempoTimeSigMarker) {
@@ -478,7 +479,7 @@ void reset_project_state(bool clear_notes, bool clear_name) {
     }
 }
 
-}  // namespace (lifecycle helpers)
+}  // namespace
 
 // POST /project/new
 // Body: { discard_changes?: false }
@@ -532,7 +533,8 @@ void handle_project_open(const httplib::Request& req, httplib::Response& res) {
         json_error(res, 400, "Invalid JSON body", "BAD_REQUEST");
         return;
     }
-    if (!body.contains("path") || !body["path"].is_string() || body["path"].get<std::string>().empty()) {
+    if (!body.contains("path") || !body["path"].is_string() ||
+        body["path"].get<std::string>().empty()) {
         json_error(res, 400, "Missing required field: path", "BAD_REQUEST");
         return;
     }
@@ -592,8 +594,7 @@ void handle_project_save(const httplib::Request& req, httplib::Response& res) {
             std::string cur = project_filename();
             if (cur.empty())
                 return {{"_bad_request", true},
-                        {"_message",
-                         "Project has never been saved; provide a path field"}};
+                        {"_message", "Project has never been saved; provide a path field"}};
             if (Main_SaveProjectEx)
                 Main_SaveProjectEx(nullptr, nullptr, 0);
             return {{"ok", true}, {"path", cur}};
@@ -645,7 +646,8 @@ void handle_project_reset(const httplib::Request& req, httplib::Response& res) {
         return {{"ok", true},
                 {"tracks", CountTracks ? CountTracks(nullptr) : 0},
                 {"markers", 0},
-                {"tempo_markers", CountTempoTimeSigMarkers ? CountTempoTimeSigMarkers(nullptr) : 1}};
+                {"tempo_markers",
+                 CountTempoTimeSigMarkers ? CountTempoTimeSigMarkers(nullptr) : 1}};
     });
     if (exec_error(res, result))
         return;

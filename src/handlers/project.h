@@ -43,11 +43,11 @@ void handle_extstate_delete(const httplib::Request& req,
 
 // Issue #34 — project lifecycle: new / open / save / reset.
 void handle_project_new(const httplib::Request& req,
-                        httplib::Response& res);    // POST /project/new
+                        httplib::Response& res);  // POST /project/new
 void handle_project_open(const httplib::Request& req,
-                         httplib::Response& res);   // POST /project/open
+                         httplib::Response& res);  // POST /project/open
 void handle_project_save(const httplib::Request& req,
-                         httplib::Response& res);   // POST /project/save
+                         httplib::Response& res);  // POST /project/save
 void handle_project_reset(const httplib::Request& req,
                           httplib::Response& res);  // POST /project/reset
 
