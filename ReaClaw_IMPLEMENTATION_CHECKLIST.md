@@ -380,8 +380,11 @@ live checks pass. New handler file `src/handlers/items.cpp`.
 - [x] **Item selection write** — `POST /state/selection {items:[...]|"all"|"none"}`.
 - [x] **Project ext state** — `GET/POST/DELETE /project/extstate {section,key,value}`.
 - [x] `GET /capabilities`, `docs/API.md`, `CHANGELOG.md` updated.
-- Tier-C (take FX chains, MIDI note CRUD, multi-project) intentionally deferred —
-      Lua escape hatch covers them; see `ReaClaw_TECH_DECISIONS.md` §16.
+- ~~Tier-C (take FX chains, MIDI note CRUD, multi-project) intentionally deferred —
+  Lua escape hatch covers them; see `ReaClaw_TECH_DECISIONS.md` §16.~~
+- **MIDI note/CC CRUD graduated to verbs (issue #51, v1.8.0)** — `GET/POST
+  /state/items/{index}/midi`; notes/CC read+write, replace mode, PPQ+time duality,
+  undo-wrapped. See `docs/API.md`. Take-FX and multi-project still deferred.
 
 ### Stage 4 / Epic #18 — Hear itself (Q1, Q3) (v1.5.0) — **complete**
 Audio perception: the agent measures its own output and is told the consequence

@@ -666,6 +666,106 @@ close/reopen, unlike the global SQLite store).
 
 ---
 
+## MIDI verbs (issue #51)
+
+Structured read/write for the MIDI content of a media item's active take. Items are
+addressed by the same project-wide index as `GET /state/items`.
+
+### GET /state/items/{index}/midi
+
+Returns all MIDI notes and CC events from the active MIDI take.
+
+Returns 404 when the item index is out of range. Returns 400 when the active take is
+not a MIDI source.
+
+```json
+{
+  "item_index": 0,
+  "note_count": 3,
+  "cc_count": 1,
+  "notes": [
+    {
+      "index": 0,
+      "pitch": 60,
+      "note": "C4",
+      "channel": 0,
+      "velocity": 100,
+      "start_ppq": 0.0,
+      "end_ppq": 480.0,
+      "start_time": 0.0,
+      "end_time": 0.5,
+      "selected": false,
+      "muted": false
+    }
+  ],
+  "cc": [
+    {
+      "index": 0,
+      "chanmsg": 176,
+      "number": 7,
+      "value": 100,
+      "channel": 0,
+      "ppq": 0.0,
+      "time": 0.0,
+      "selected": false,
+      "muted": false
+    }
+  ]
+}
+```
+
+PPQ positions are take-relative (PPQ 0 = start of the item). `start_time`/`end_time`
+are project times in seconds (absolute). `note` is the human-readable name (e.g. `"C4"`).
+`chanmsg` is the MIDI status byte without the channel nibble (176 = 0xB0 = Control Change).
+
+### POST /state/items/{index}/midi
+
+Insert or replace MIDI notes and CC events. Wrapped in a single undo block.
+
+```json
+{
+  "notes": [
+    { "pitch": 60, "channel": 0, "velocity": 100, "start_ppq": 0.0, "end_ppq": 480.0 },
+    { "pitch": 64, "channel": 0, "velocity": 80,  "start_time": 0.5, "end_time": 1.0 }
+  ],
+  "cc": [
+    { "number": 7, "value": 100, "channel": 0, "ppq": 0.0 },
+    { "number": 11, "value": 64,  "channel": 0, "time": 1.0 }
+  ],
+  "replace": false
+}
+```
+
+**Field rules:**
+- `pitch` — required, 0–127
+- `channel` — optional, 0–15, default 0
+- `velocity` — optional, 1–127, default 100
+- Position: either `start_ppq`/`end_ppq` (take-relative PPQ) **or** `start_time`/`end_time`
+  (project seconds). PPQ takes priority when both are present. Omitting the end position
+  defaults to one quarter note (480 PPQ).
+- `cc.number` — required, 0–127 (controller number)
+- `cc.value` — required, 0–127
+- `cc.chanmsg` — optional (defaults to 176 = 0xB0 = Control Change)
+- `replace` — `false` (default) appends; `true` deletes all existing notes and CC first
+
+**Response:**
+```json
+{
+  "ok": true,
+  "notes_inserted": 2,
+  "cc_inserted": 1,
+  "notes_deleted": 0,
+  "cc_deleted": 0,
+  "warnings": []
+}
+```
+
+Validation errors for individual events are collected in `warnings[]` (the rest of
+the batch still proceeds). A missing or unknown item index returns 404; a non-MIDI
+take returns 400.
+
+---
+
 ## Phase 4 — Audio perception (v1.5.0, #18)
 
 "The agent hears itself." Built-in, always-available analysis plus consequence

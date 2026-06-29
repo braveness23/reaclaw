@@ -10,6 +10,17 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **MIDI verbs — notes and CC read/write (issue #51)** — `GET /state/items/{index}/midi`
+  returns all notes (pitch, note name, channel, velocity, start/end in both PPQ and project
+  seconds, selected, muted) and CC events from the active MIDI take. `POST
+  /state/items/{index}/midi` inserts or replaces notes and CC: accepts PPQ positions or
+  project-time seconds, with sensible defaults (channel=0, velocity=100, duration=quarter
+  note). `replace:true` clears existing content first; without it, events are appended. All
+  mutations are undo-wrapped. Non-MIDI items return 400. `GET /capabilities` marks the `midi`
+  domain `structured`. `GET /state/items/{index}/midi` is the first structured MIDI surface in
+  ReaClaw (previously Lua-only). Closes #51.
+
+
 - **State-chunk endpoint — universal reachability backstop (issue #48)** — `GET/POST
   /state/chunk` reads and writes the full RPP state chunk of any `track`, `item`, or
   `envelope` (`GetSetObjectState`/`Get*StateChunk`). Any property REAPER serializes is now
