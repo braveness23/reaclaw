@@ -45,6 +45,29 @@ def post(path, body=None): return _req("POST", path, body if body is not None el
 def delete(path):         return _req("DELETE", path)
 
 
+# ---- MIDI helpers -------------------------------------------------------------
+
+def get_midi(item_index):
+    """GET /state/items/{index}/midi — returns notes and CC as dicts."""
+    return get(f"/state/items/{item_index}/midi")
+
+
+def post_midi(item_index, notes=None, cc=None, replace=False):
+    """POST /state/items/{index}/midi — insert notes/CC into a MIDI take.
+
+    replace=True clears all existing notes and CC first (clean rewrite).
+    notes: list of dicts with pitch, start_ppq/end_ppq or start_time/end_time,
+           and optional velocity (default 100) and channel (default 0).
+    cc: list of dicts with number, value, channel, and ppq or time.
+    """
+    body = {"replace": replace}
+    if notes is not None:
+        body["notes"] = notes
+    if cc is not None:
+        body["cc"] = cc
+    return post(f"/state/items/{item_index}/midi", body)
+
+
 # ---- action / command helpers -------------------------------------------------
 
 def act(cmd_id):
