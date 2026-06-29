@@ -666,6 +666,62 @@ close/reopen, unlike the global SQLite store).
 
 ---
 
+## Project lifecycle (issue #34)
+
+Four endpoints that manage the full project lifecycle without any GUI modal. All
+return **409 UNSAVED_CHANGES** when the current project has unsaved changes and
+`discard_changes` is not `true`.
+
+### POST /project/new
+
+Open a blank project from REAPER's default template, replacing the current project.
+
+```json
+{ "discard_changes": false }
+```
+
+Returns `{ "ok": true }`.
+
+### POST /project/open
+
+Open a `.rpp` file, replacing the current project. Multi-project tab mode is not
+supported — the file always replaces the active project.
+
+```json
+{ "path": "/absolute/path/to/project.rpp", "discard_changes": false }
+```
+
+Returns `{ "ok": true, "path": "/absolute/path/to/project.rpp" }`. Returns **400**
+if `path` is missing or the file does not exist.
+
+### POST /project/save
+
+Save the current project. If `path` is provided, saves to that file and updates
+the project's current filename (save-as). If `path` is omitted, saves in-place
+to the existing filename; returns **400** if the project has never been saved.
+
+```json
+{ "path": "/absolute/path/to/output.rpp" }
+```
+
+Returns `{ "ok": true, "path": "/absolute/path/to/output.rpp" }`.
+
+### POST /project/reset
+
+Blank the current project in-place without opening a new file. Deterministic on a
+headless/virtual display — no GUI modal.
+
+Deletes: all tracks, items, envelopes, markers, regions, and extra tempo markers.
+Resets: tempo to 120 BPM 4/4, time selection, loop range, cursor to 0, project notes.
+
+```json
+{ "discard_changes": false }
+```
+
+Returns `{ "ok": true, "tracks": 0, "markers": 0, "tempo_markers": 1 }`.
+
+---
+
 ## MIDI verbs (issue #51)
 
 Structured read/write for the MIDI content of a media item's active take. Items are

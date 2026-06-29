@@ -307,6 +307,12 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     svr.Get("/project/extstate", auth_wrap(cfg, Handlers::handle_extstate_get));
     svr.Post("/project/extstate", auth_wrap(cfg, Handlers::handle_extstate_post));
     svr.Delete("/project/extstate", auth_wrap(cfg, Handlers::handle_extstate_delete));
+
+    // --- Project lifecycle (issue #34) ---
+    svr.Post("/project/new", auth_wrap(cfg, Handlers::handle_project_new));
+    svr.Post("/project/open", auth_wrap(cfg, Handlers::handle_project_open));
+    svr.Post("/project/save", auth_wrap(cfg, Handlers::handle_project_save));
+    svr.Post("/project/reset", auth_wrap(cfg, Handlers::handle_project_reset));
     svr.Get("/time", auth_wrap(cfg, Handlers::handle_time_convert));
 
     // Capability manifest.
