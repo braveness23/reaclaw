@@ -207,7 +207,24 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"set_notes", "POST /project/notes {notes}"},
               {"ext_state",
                "GET/POST/DELETE /project/extstate {section,key,value} — persistent per-project "
-               "scratchpad stored in the .rpp (survives close/reopen)"}}},
+               "scratchpad stored in the .rpp (survives close/reopen)"},
+              {"new",
+               "POST /project/new {discard_changes?:false} — open a blank project from the "
+               "default template; returns 409 if unsaved changes exist and discard_changes is "
+               "not true"},
+              {"open",
+               "POST /project/open {path, discard_changes?:false} — replace current project "
+               "with a .rpp file; returns 409 on dirty project (without discard_changes:true) "
+               "and 400 if the file does not exist. Tab mode is not supported."},
+              {"save",
+               "POST /project/save {path?} — save to path (sets new project filename) or "
+               "in-place if path is omitted (400 if project has never been saved)"},
+              {"reset",
+               "POST /project/reset {discard_changes?:false} — blank the current project "
+               "in-place: deletes all tracks/items/envelopes, markers, extra tempo markers "
+               "(resets to 120 BPM 4/4), clears time selection/loop, cursor to 0, clears "
+               "project notes. Returns 409 on unsaved changes without discard_changes:true. "
+               "Deterministic on a headless display — no GUI modal."}}},
             {"undo",
              {{"state", "GET /undo  (can_undo, can_redo descriptions)"},
               {"undo", "POST /undo"},
@@ -244,8 +261,7 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
     // generated Lua script. Kept honest so the agent doesn't probe blindly.
     nlohmann::json via_script_or_action = nlohmann::json::array({"take FX chains (TakeFX_*)",
                                                                  "MIDI notes/events",
-                                                                 "freezing tracks",
-                                                                 "project open / save / new"});
+                                                                 "freezing tracks"});
 
     // Coverage matrix — every REST-relevant REAPER domain and how it is reached, so an
     // agent (and a human) can see the whole map and know nothing is hidden. Statuses:
@@ -267,7 +283,7 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
             {"markers_regions", dom("structured", "read/add/delete")},
             {"tempo_time", dom("structured", "tempo/time-sig map + beat<->sec conversion")},
             {"selection", dom("structured", "tracks/items set incl. all/none")},
-            {"project", dom("structured", "read/notes/ext-state; lifecycle pending #34")},
+            {"project", dom("structured", "read/notes/ext-state + lifecycle: new/open/save/reset")},
             {"undo", dom("structured", "state/undo/redo; all mutations are undo-wrapped")},
             {"perception",
              dom("structured", "loudness/spectral/meters/visualize/probe/screenshot")},

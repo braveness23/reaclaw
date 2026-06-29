@@ -7,6 +7,8 @@
 
 #include <httplib.h>
 
+#include <cstdio>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -397,6 +399,257 @@ void handle_extstate_delete(const httplib::Request& req, httplib::Response& res)
     });
     if (exec_error(res, result))
         return;
+    json_ok(res, result);
+}
+
+// ---------------------------------------------------------------------------
+// Issue #34 — project lifecycle: new / open / save / reset
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Return the project's current filename (empty string if never saved).
+// Must be called from the main thread.
+std::string project_filename() {
+    if (!GetSetProjectInfo_String)
+        return "";
+    std::vector<char> buf(4096, 0);
+    GetSetProjectInfo_String(nullptr, "PROJECT_FILENAME", buf.data(), false);
+    return std::string(buf.data());
+}
+
+// Silently discard unsaved changes by saving to a throwaway file, clearing
+// the dirty flag so the subsequent new/open call skips the save-changes dialog.
+// Must be called from the main thread.
+static const char* k_discard_tmp = "/tmp/reaclaw_discard.rpp";
+void discard_changes() {
+    if (Main_SaveProjectEx)
+        Main_SaveProjectEx(nullptr, k_discard_tmp, 0);
+    std::remove(k_discard_tmp);
+}
+
+// In-place project reset: delete every regular track (and their items/envelopes),
+// all markers/regions, all extra tempo markers, then zero the time selection,
+// cursor, repeat flag, and project notes. Used by both /project/new (as a
+// fallback) and /project/reset. Must be called from the main thread.
+void reset_project_state(bool clear_notes, bool clear_name) {
+    // 1. Delete all regular tracks (items and envelopes go with them).
+    if (DeleteTrack && GetTrack)
+        while (CountTracks && CountTracks(nullptr) > 0)
+            DeleteTrack(GetTrack(nullptr, 0));
+
+    // 2. Delete all markers and regions.
+    if (DeleteProjectMarkerByIndex)
+        while (DeleteProjectMarkerByIndex(nullptr, 0)) {}
+
+    // 3. Strip extra tempo markers; reset marker 0 to 120 BPM, 4/4.
+    if (CountTempoTimeSigMarkers && DeleteTempoTimeSigMarker && SetTempoTimeSigMarker) {
+        int n = CountTempoTimeSigMarkers(nullptr);
+        for (int i = n - 1; i >= 1; --i)
+            DeleteTempoTimeSigMarker(nullptr, i);
+        SetTempoTimeSigMarker(nullptr, 0, 0.0, -1, 0.0, 120.0, 4, 4, false);
+    }
+
+    // 4. Clear time selection + loop range.
+    if (GetSet_LoopTimeRange) {
+        double s = 0.0, e = 0.0;
+        GetSet_LoopTimeRange(true, false, &s, &e, false);  // time selection
+        GetSet_LoopTimeRange(true, true, &s, &e, false);   // loop range
+    }
+
+    // 5. Disable repeat.
+    if (GetSetRepeat)
+        GetSetRepeat(0);
+
+    // 6. Cursor to 0.
+    if (SetEditCurPos)
+        SetEditCurPos(0.0, false, false);
+
+    // 7. Optionally clear project notes.
+    if (clear_notes && GetSetProjectNotes) {
+        std::vector<char> empty(2, 0);
+        GetSetProjectNotes(nullptr, true, empty.data(), static_cast<int>(empty.size()));
+    }
+
+    // 8. Optionally reset project name.
+    if (clear_name && GetSetProjectInfo_String) {
+        std::vector<char> empty(2, 0);
+        GetSetProjectInfo_String(nullptr, "PROJECT_NAME", empty.data(), true);
+    }
+}
+
+}  // namespace (lifecycle helpers)
+
+// POST /project/new
+// Body: { discard_changes?: false }
+// Opens a new blank project from REAPER's default template without a GUI modal.
+// Returns 409 if the current project is dirty and discard_changes is not true.
+void handle_project_new(const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(req.body);
+    } catch (...) {
+        body = nlohmann::json::object();
+    }
+    bool discard = body.value("discard_changes", false);
+
+    if (!discard && IsProjectDirty && IsProjectDirty(nullptr)) {
+        json_error(res,
+                   409,
+                   "Project has unsaved changes; send discard_changes:true to proceed",
+                   "UNSAVED_CHANGES");
+        return;
+    }
+
+    auto result = Executor::post([discard]() -> nlohmann::json {
+        if (discard && IsProjectDirty && IsProjectDirty(nullptr))
+            discard_changes();
+
+        if (Main_openProject) {
+            Main_openProject("");
+        } else {
+            reset_project_state(true, true);
+        }
+        return {{"ok", true}};
+    });
+    if (exec_error(res, result))
+        return;
+    Log::info("POST /project/new");
+    json_ok(res, result);
+}
+
+// POST /project/open
+// Body: { path, discard_changes?: false }
+// Opens a .rpp file, replacing the current project. Returns 409 on dirty
+// project (without discard_changes:true) and 400 if path is missing or the
+// file does not exist. Multi-project (tab mode) is not supported; the file
+// replaces the current project.
+void handle_project_open(const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(req.body);
+    } catch (...) {
+        json_error(res, 400, "Invalid JSON body", "BAD_REQUEST");
+        return;
+    }
+    if (!body.contains("path") || !body["path"].is_string() || body["path"].get<std::string>().empty()) {
+        json_error(res, 400, "Missing required field: path", "BAD_REQUEST");
+        return;
+    }
+    std::string path = body["path"].get<std::string>();
+    bool discard = body.value("discard_changes", false);
+
+    {
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec)) {
+            json_error(res, 400, "File not found: " + path, "BAD_REQUEST");
+            return;
+        }
+    }
+
+    if (!discard && IsProjectDirty && IsProjectDirty(nullptr)) {
+        json_error(res,
+                   409,
+                   "Project has unsaved changes; send discard_changes:true to proceed",
+                   "UNSAVED_CHANGES");
+        return;
+    }
+
+    auto result = Executor::post([path, discard]() -> nlohmann::json {
+        if (discard && IsProjectDirty && IsProjectDirty(nullptr))
+            discard_changes();
+
+        if (!Main_openProject)
+            return {{"_error", "Main_openProject not available"}};
+        Main_openProject(path.c_str());
+        return {{"ok", true}, {"path", path}};
+    });
+    if (exec_error(res, result))
+        return;
+    Log::info("POST /project/open: " + path);
+    json_ok(res, result);
+}
+
+// POST /project/save
+// Body: { path? }
+// Saves the current project. If path is provided, saves to that file and
+// updates the project's current filename (save-as). If path is omitted, saves
+// to the current project filename; returns 400 if the project has never been
+// saved (no filename yet). path should be an absolute filesystem path.
+void handle_project_save(const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(req.body);
+    } catch (...) {
+        body = nlohmann::json::object();
+    }
+
+    std::string path = body.value("path", std::string());
+
+    auto result = Executor::post([path]() -> nlohmann::json {
+        if (path.empty()) {
+            // In-place save: require an existing filename.
+            std::string cur = project_filename();
+            if (cur.empty())
+                return {{"_bad_request", true},
+                        {"_message",
+                         "Project has never been saved; provide a path field"}};
+            if (Main_SaveProjectEx)
+                Main_SaveProjectEx(nullptr, nullptr, 0);
+            return {{"ok", true}, {"path", cur}};
+        }
+
+        // Save-as: save to the given path and update the project filename (&8).
+        if (!Main_SaveProjectEx)
+            return {{"_error", "Main_SaveProjectEx not available"}};
+        Main_SaveProjectEx(nullptr, path.c_str(), 8);
+
+        // Confirm the file was written.
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec))
+            return {{"_error", "Save appeared to succeed but file not found: " + path}};
+        return {{"ok", true}, {"path", path}};
+    });
+    if (exec_error(res, result))
+        return;
+    Log::info("POST /project/save: " + path);
+    json_ok(res, result);
+}
+
+// POST /project/reset
+// Body: { discard_changes?: false, keep_master?: true }
+// Blanks the current project in-place: deletes all tracks/items/envelopes,
+// all markers and regions, all extra tempo markers (resets to 120 BPM 4/4),
+// clears time selection and loop, parks cursor at 0, clears project notes.
+// keep_master (default true) leaves master track FX/vol/pan untouched.
+// Returns 409 if dirty and discard_changes is not true.
+void handle_project_reset(const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(req.body);
+    } catch (...) {
+        body = nlohmann::json::object();
+    }
+    bool discard = body.value("discard_changes", false);
+
+    if (!discard && IsProjectDirty && IsProjectDirty(nullptr)) {
+        json_error(res,
+                   409,
+                   "Project has unsaved changes; send discard_changes:true to proceed",
+                   "UNSAVED_CHANGES");
+        return;
+    }
+
+    auto result = Executor::post([]() -> nlohmann::json {
+        reset_project_state(true, false);
+        return {{"ok", true},
+                {"tracks", CountTracks ? CountTracks(nullptr) : 0},
+                {"markers", 0},
+                {"tempo_markers", CountTempoTimeSigMarkers ? CountTempoTimeSigMarkers(nullptr) : 1}};
+    });
+    if (exec_error(res, result))
+        return;
+    Log::info("POST /project/reset");
     json_ok(res, result);
 }
 

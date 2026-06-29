@@ -9,6 +9,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-29
+
+### Added
+- **Project lifecycle endpoints (issue #34)** — four new `POST /project/*` verbs that let an
+  agent manage the full project lifecycle without any GUI modal:
+  - `POST /project/new` — open a blank project from REAPER's default template; returns 409 if
+    the project has unsaved changes unless `discard_changes:true`.
+  - `POST /project/open {path, discard_changes?}` — replace the current project with a `.rpp`
+    file; same 409 guard; 400 if the file does not exist. Tab mode not supported (file replaces
+    active project).
+  - `POST /project/save {path?}` — save in-place (400 if project has never been saved and no
+    path is given) or save-as to `path` (sets the new project filename).
+  - `POST /project/reset {discard_changes?}` — blank the current project in-place: deletes all
+    tracks/items/envelopes, all markers/regions, all extra tempo markers (resets to 120 BPM
+    4/4), clears time selection/loop, parks cursor at 0, clears project notes. Deterministic on
+    a headless/virtual display — no GUI modal. Proven recipe used live in the render-engine
+    demos. Closes #34.
+- `GET /capabilities` updated: `project` domain now shows `new/open/save/reset` verbs; removed
+  "project open/save/new" from the `via_script_or_action` list.
+
 ## [1.8.0] - 2026-06-28
 
 ### Added
