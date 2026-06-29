@@ -259,9 +259,8 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
 
     // Things that have no direct verb yet — reach them via an action ID or a
     // generated Lua script. Kept honest so the agent doesn't probe blindly.
-    nlohmann::json via_script_or_action = nlohmann::json::array({"take FX chains (TakeFX_*)",
-                                                                 "MIDI notes/events",
-                                                                 "freezing tracks"});
+    nlohmann::json via_script_or_action = nlohmann::json::array(
+            {"take FX chains (TakeFX_*)", "MIDI notes/events", "freezing tracks"});
 
     // Coverage matrix — every REST-relevant REAPER domain and how it is reached, so an
     // agent (and a human) can see the whole map and know nothing is hidden. Statuses:
