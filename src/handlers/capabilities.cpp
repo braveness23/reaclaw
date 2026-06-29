@@ -97,6 +97,20 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"source",
                "reads expose source{file,type,length,sample_rate,num_channels} for the active "
                "take"}}},
+            {"midi",
+             {{"read",
+               "GET /state/items/{index}/midi — notes[] + cc[] from the active MIDI take; "
+               "each note has pitch,note(name),channel,velocity,start_ppq,end_ppq,"
+               "start_time,end_time,selected,muted; each cc has number,value,channel,"
+               "chanmsg,ppq,time,selected,muted"},
+              {"write",
+               "POST /state/items/{index}/midi {notes:[{pitch,channel?,velocity?,"
+               "start_ppq,end_ppq}|{...start_time,end_time}], "
+               "cc:[{number,value,channel?,ppq}|{...time}], replace:false} — "
+               "append (default) or replace all MIDI content; wrapped in undo block"},
+              {"note",
+               "requires the item's active take to be a MIDI source; "
+               "non-MIDI items return 400 BAD_REQUEST"}}},
             {"fx",
              {{"add", "POST /state/tracks/{index}/fx {name,enabled,params}"},
               {"read", "GET /state/tracks/{index}/fx/{slot}"},
@@ -263,7 +277,7 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
             {"transport",
              dom("action", "play/stop/record/cursor/loop via action IDs; verbs pending #49")},
             {"config_vars", dom("action", "reaper.ini/config vars; typed endpoint pending #44")},
-            {"midi", dom("lua", "note/CC CRUD via Lua today; typed verbs pending #51")},
+            {"midi", dom("structured", "notes + CC read/write via GET/POST /state/items/{i}/midi")},
             {"object_state_chunk",
              dom("structured",
                  "GET/POST /state/chunk — full RPP state of any track/item/envelope "

@@ -11,6 +11,7 @@
 #include "handlers/execute.h"
 #include "handlers/history.h"
 #include "handlers/items.h"
+#include "handlers/midi.h"
 #include "handlers/learning.h"
 #include "handlers/probe.h"
 #include "handlers/project.h"
@@ -223,6 +224,19 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                }));
     svr.Get("/state/items", auth_wrap(cfg, Handlers::handle_items_get));
     svr.Post("/state/items", auth_wrap(cfg, Handlers::handle_items_post));
+
+    // --- MIDI verbs (issue #51) ---
+    // Registered before the bare items index routes to avoid shadowing.
+    svr.Get(R"(/state/items/(\d+)/midi)",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                Handlers::handle_midi_get(req, res);
+            }));
+    svr.Post(R"(/state/items/(\d+)/midi)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 Handlers::handle_midi_post(req, res);
+             }));
 
     // --- Audio perception (Epic #18) ---
     svr.Get("/state/meters", auth_wrap(cfg, Handlers::handle_meters));

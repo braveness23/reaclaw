@@ -54,6 +54,7 @@ add_library(reaper_reaclaw SHARED
     src/handlers/state.cpp
     src/handlers/chunk.cpp
     src/handlers/items.cpp
+    src/handlers/midi.cpp
     src/handlers/analysis.cpp
     src/handlers/visualize.cpp
     src/handlers/screenshot.cpp
