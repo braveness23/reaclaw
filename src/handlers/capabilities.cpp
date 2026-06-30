@@ -86,8 +86,10 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
             {"items",
              {{"read", "GET /state/items  |  GET /state/items/{index}"},
               {"create",
-               "POST /state/items {create:[{track,position,length?,file?}]}  "
-               "(file loads an audio/MIDI source; length defaults to the source length)"},
+               "POST /state/items {create:[{track,position,length?,file?,midi?}]}  "
+               "midi:true creates an empty MIDI item via CreateNewMIDIItemInProj (the only path "
+               "that produces a take accepting MIDI_InsertNote — do NOT use file: for MIDI). "
+               "file: loads an audio/MIDI source file; length defaults to source length."},
               {"update",
                "POST /state/items/{index}  or batch POST /state/items {update:[{index,...}]}; "
                "fields: position,length,track(move),selected,muted,volume_db,fade_in,fade_out,"
@@ -282,7 +284,17 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                "set loop range and/or toggle repeat; all fields optional; "
                "returns {start, end, enabled}"}}},
             {"scripts",
-             {{"register", "POST /scripts/register  (Lua escape hatch for anything not above)"}}}};
+             {{"register", "POST /scripts/register {name, script, tags?}"},
+              {"list", "GET /scripts/cache — list all registered scripts with id/name/tags"},
+              {"delete", "DELETE /scripts/{id}"},
+              {"execute", "POST /execute/action {id: <script_id_string>}"},
+              {"error_capture",
+               "Scripts are wrapped in pcall at registration. Runtime errors appear in the "
+               "execute response as {status:'lua_error', lua_error:'...'} instead of silent "
+               "success. Errors in reaper.defer() callbacks are NOT captured."},
+              {"render_note",
+               "To render from Lua: wrap in reaper.defer(function() "
+               "reaper.Main_OnCommand(41824,0) end). Prefer POST /render directly."}}}};
 
     // Things that have no direct verb yet — reach them via an action ID or a
     // generated Lua script. Kept honest so the agent doesn't probe blindly.

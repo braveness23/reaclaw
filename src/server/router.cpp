@@ -64,6 +64,48 @@ H auth_wrap(const Config& cfg, H handler) {
 
 void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     // --- Health ---
+    // Landing page — no auth required. A fresh agent hits GET / and gets enough
+    // to orient: what this is, the 9-step recipe, key gotchas, and /capabilities.
+    svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
+        nlohmann::json j = {
+                {"what_i_am",
+                 "ReaClaw — REST/JSON API for REAPER DAW. Embeds an HTTPS server inside REAPER "
+                 "and exposes structured endpoints to create tracks, write MIDI, add FX, and "
+                 "render audio — headless or with a display."},
+                {"version", REACLAW_VERSION},
+                {"auth", "Authorization: Bearer <token> on all requests except GET /"},
+                {"quick_start",
+                 nlohmann::json::array(
+                         {"1. GET /capabilities — full machine-readable API manifest (read first)",
+                          "2. POST /project/reset — blank slate",
+                          "3. POST /state/tempo {\"bpm\":120} — set tempo",
+                          "4. POST /state/tracks {\"create\":[{\"name\":\"bass\"}]} — add tracks",
+                          "5. POST /state/items {\"create\":[{\"track\":0,\"position\":0,"
+                          "\"length\":4,\"midi\":true}]} — add empty MIDI item",
+                          "6. POST /state/items/0/midi {\"notes\":[{\"pitch\":60,"
+                          "\"start_ppq\":0,\"end_ppq\":960,\"velocity\":100}]} — write notes",
+                          "7. POST /state/tracks/0/fx {\"name\":\"ReaSynth\"} — add built-in synth",
+                          "8. POST /render {\"output\":\"/tmp/out.wav\"} — bounce to file",
+                          "9. GET /state/changes — poll for external edits"})},
+                {"key_gotchas",
+                 nlohmann::json::array(
+                         {"MIDI items: use {\"midi\":true} in create spec — "
+                          "NOT file: or PCM_Source_CreateFromType",
+                          "Built-in synth name: 'ReaSynth' (pass as FX name)",
+                          "Execute action field: 'id' (integer or script string), NOT 'action_id'",
+                          "Script listing: GET /scripts/cache (not GET /scripts)",
+                          "Lua scripts are pcall-wrapped — runtime errors return as "
+                          "lua_error in the execute response",
+                          "Render from Lua: use reaper.defer(function() "
+                          "reaper.Main_OnCommand(41824,0) end) — or POST /render (preferred)"})},
+                {"endpoints",
+                 {{"capabilities", "GET /capabilities — full API manifest"},
+                  {"health", "GET /health — status + uptime"},
+                  {"state", "GET /state — full project snapshot"},
+                  {"docs", "https://github.com/braveness23/reaclaw"}}}};
+        res.set_content(j.dump(4), "application/json");
+    });
+
     svr.Get("/health", auth_wrap(cfg, [](const httplib::Request&, httplib::Response& res) {
                 auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
                                       std::chrono::steady_clock::now() - g_start_time)

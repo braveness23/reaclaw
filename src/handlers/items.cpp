@@ -251,25 +251,35 @@ void handle_items_post(const httplib::Request& req, httplib::Response& res) {
                     if (t < 0 || t >= CountTracks(nullptr))
                         continue;
                     MediaTrack* tr = GetTrack(nullptr, t);
-                    MediaItem* it = AddMediaItemToTrack(tr);
-                    if (!it)
-                        continue;
                     double pos = spec.value("position", 0.0);
-                    SetMediaItemInfo_Value(it, "D_POSITION", pos);
                     double length = spec.value("length", -1.0);
-                    if (spec.contains("file") && spec["file"].is_string()) {
-                        PCM_source* src = PCM_Source_CreateFromFile(
-                                spec["file"].get<std::string>().c_str());
-                        if (src) {
-                            MediaItem_Take* tk = AddTakeToMediaItem(it);
-                            SetMediaItemTake_Source(tk, src);
-                            if (length < 0.0) {
-                                bool qn = false;
-                                length = GetMediaSourceLength(src, &qn);
+                    MediaItem* it = nullptr;
+                    if (spec.value("midi", false) && CreateNewMIDIItemInProj) {
+                        // CreateNewMIDIItemInProj produces a take that accepts MIDI_InsertNote.
+                        // AddMediaItemToTrack + PCM_Source_CreateFromType("MIDI") does NOT.
+                        double end = pos + (length >= 0.0 ? length : 4.0);
+                        it = CreateNewMIDIItemInProj(tr, pos, end, nullptr);
+                    } else {
+                        it = AddMediaItemToTrack(tr);
+                        if (it) {
+                            SetMediaItemInfo_Value(it, "D_POSITION", pos);
+                            if (spec.contains("file") && spec["file"].is_string()) {
+                                PCM_source* src = PCM_Source_CreateFromFile(
+                                        spec["file"].get<std::string>().c_str());
+                                if (src) {
+                                    MediaItem_Take* tk = AddTakeToMediaItem(it);
+                                    SetMediaItemTake_Source(tk, src);
+                                    if (length < 0.0) {
+                                        bool qn = false;
+                                        length = GetMediaSourceLength(src, &qn);
+                                    }
+                                }
                             }
+                            SetMediaItemInfo_Value(it, "D_LENGTH", length >= 0.0 ? length : 1.0);
                         }
                     }
-                    SetMediaItemInfo_Value(it, "D_LENGTH", length >= 0.0 ? length : 1.0);
+                    if (!it)
+                        continue;
                     apply_item_props(it, spec);  // honor take/selection on create too
                     int idx = static_cast<int>(GetMediaItemInfo_Value(it, "IP_ITEMNUMBER"));
                     auto j = item_to_json(it, idx);
