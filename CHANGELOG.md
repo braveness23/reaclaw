@@ -9,6 +9,27 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-06-29
+
+### Added
+- **`GET /` discovery landing page** — no auth required; returns `what_i_am`, 9-step
+  `quick_start` recipe, `key_gotchas` list, and pointers to `/capabilities` and `/health`.
+  A fresh agent with only a URL and token can orient in one call without any prior knowledge
+  of ReaClaw.
+- **`midi: true` in `POST /state/items` create spec** — creates a proper MIDI item via
+  `CreateNewMIDIItemInProj`. Previously the only path (`AddMediaItemToTrack +
+  PCM_Source_CreateFromType("MIDI")`) produced a take that silently rejected
+  `MIDI_InsertNote`. The new flag is the correct and only reliable way to create an empty
+  MIDI item for note insertion via `POST /state/items/{i}/midi`.
+- **Lua runtime error capture** — scripts registered via `POST /scripts/register` are
+  now wrapped in a `pcall` at write time. Runtime errors appear in the `POST /execute/action`
+  response as `{status: "lua_error", lua_error: "<message with line number>"}` instead of
+  silent `{status: "success"}`. Errors inside `reaper.defer()` callbacks are not captured
+  (deferred execution is outside the pcall scope).
+- **`GET /capabilities` updates** — `items.create` documents the `midi` field; `scripts`
+  section expanded with `list`, `delete`, `execute`, `error_capture`, and `render_note`
+  entries.
+
 ## [1.10.0] - 2026-06-29
 
 ### Added

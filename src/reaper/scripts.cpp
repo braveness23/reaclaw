@@ -249,8 +249,15 @@ RegisterResult register_script(const std::string& name,
         }
     }
 
-    // --- Write script to disk ---
-    if (!write_file(script_path, body)) {
+    // --- Write script to disk (wrapped in pcall so runtime errors surface via execute) ---
+    std::string wrapped = "local _rc_ok, _rc_err = pcall(function()\n" + body +
+                          "\nend)\n"
+                          "if not _rc_ok then\n"
+                          "  local _f = io.open(reaper.GetResourcePath() .."
+                          " '/reaclaw_last_error.txt', 'w')\n"
+                          "  if _f then _f:write(tostring(_rc_err)) _f:close() end\n"
+                          "end\n";
+    if (!write_file(script_path, wrapped)) {
         result.internal_error = "Failed to write script file: " + script_path;
         Log::error("Scripts: " + result.internal_error);
         return result;

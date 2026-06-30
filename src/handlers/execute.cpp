@@ -15,6 +15,8 @@
 
 #include <atomic>
 #include <cmath>
+#include <cstdio>
+#include <fstream>
 #include <string>
 
 #include <reaper_plugin_functions.h>
@@ -185,6 +187,17 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
         return;
     }
 
+    // For registered scripts (string IDs): clear stale error file before running
+    // so we don't mistake a previous script's error for this one's.
+    std::string lua_err_path;
+    if (body["id"].is_string()) {
+        const char* rp = GetResourcePath ? GetResourcePath() : nullptr;
+        if (rp) {
+            lua_err_path = std::string(rp) + "/reaclaw_last_error.txt";
+            std::remove(lua_err_path.c_str());
+        }
+    }
+
     auto result = Executor::post([body]() -> nlohmann::json {
         int cmd_id = resolve_cmd_id(body["id"]);
         if (cmd_id == 0)
@@ -229,6 +242,22 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
             {"status", "success"}, {"action_id", body["id"]}, {"executed_at", now_iso()}};
     if (!nm.empty())
         resp["action_name"] = nm;
+
+    // Check for Lua runtime errors written by the pcall wrapper in the script file.
+    if (!lua_err_path.empty()) {
+        std::ifstream ef(lua_err_path);
+        if (ef.good()) {
+            std::string lua_err((std::istreambuf_iterator<char>(ef)),
+                                std::istreambuf_iterator<char>());
+            ef.close();
+            std::remove(lua_err_path.c_str());
+            if (!lua_err.empty()) {
+                resp["status"] = "lua_error";
+                resp["lua_error"] = lua_err;
+            }
+        }
+    }
+
     if (want_feedback)
         resp["feedback"] = build_feedback();
     json_ok(res, resp);
