@@ -248,7 +248,17 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                                     "GET /state/tempo",
                                     "GET /state/meters",
                                     "GET /state/track-icons",
+                                    "GET /state/changes",
                                     "GET /project"})},
+            {"change_detection",
+             {{"poll",
+               "GET /state/changes → {change_count} — monotonic counter from "
+               "GetProjectStateChangeCount; increments on any project edit regardless of source. "
+               "Cache the value; re-read state only when it advances. "
+               "Pair with GET /snapshot/diff to find what changed."},
+              {"note",
+               "counter resets on REAPER restart; event-feed (control-surface hook) is out of "
+               "scope for now — snapshot diff is the recommended 'what changed' path"}}},
             {"actions",
              {{"run", "POST /execute/action {id}"},
               {"sequence", "POST /execute/sequence {steps:[...]}"},

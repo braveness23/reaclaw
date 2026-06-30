@@ -1380,6 +1380,27 @@ void handle_state_track_icons(const httplib::Request& req, httplib::Response& re
              {"search_path", icons_dir.string()}});
 }
 
+// GET /state/changes — issue #31 (partial: polling token only).
+// Returns GetProjectStateChangeCount() so an agent can detect whether *any*
+// external edit (human, control surface, another client) modified the project
+// since it last looked, without having to re-read the full state.
+void handle_state_changes(const httplib::Request& req, httplib::Response& res) {
+    (void)req;
+    auto result = Executor::post([]() -> nlohmann::json {
+        int count = GetProjectStateChangeCount ? GetProjectStateChangeCount(nullptr) : -1;
+        return {{"change_count", count}};
+    });
+    if (result.contains("_timeout")) {
+        json_error(res, 408, "Main thread timeout", "TIMEOUT");
+        return;
+    }
+    if (result.contains("_error")) {
+        json_error(res, 500, result["_error"].get<std::string>(), "INTERNAL_ERROR");
+        return;
+    }
+    json_ok(res, result);
+}
+
 // ---------------------------------------------------------------------------
 // Issue #50 — Take-FX verbs
 //

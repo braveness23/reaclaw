@@ -107,6 +107,7 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     // is matched ahead of the catch-all snapshot read.
     svr.Get("/state/chunk", auth_wrap(cfg, Handlers::handle_chunk_get));
     svr.Post("/state/chunk", auth_wrap(cfg, Handlers::handle_chunk_post));
+    svr.Get("/state/changes", auth_wrap(cfg, Handlers::handle_state_changes));
     svr.Get("/state", auth_wrap(cfg, Handlers::handle_state));
 
     // Create + batch update tracks.

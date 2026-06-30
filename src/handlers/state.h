@@ -45,6 +45,9 @@ void handle_take_copy_fx(const httplib::Request& req, httplib::Response& res);
 void handle_take_get_fx_preset(const httplib::Request& req, httplib::Response& res);
 void handle_take_set_fx_preset(const httplib::Request& req, httplib::Response& res);
 
+// Issue #31 — Change token: cheap monotonic poll to detect external edits.
+void handle_state_changes(const httplib::Request& req, httplib::Response& res);
+
 // Drop the 1s state read-cache (tracks/state/items) so the next read reflects a
 // just-applied write. Exported for cross-handler use (e.g. the chunk backstop).
 void invalidate_state_cache();
