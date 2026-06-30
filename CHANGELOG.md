@@ -9,8 +9,6 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.11.2] - 2026-06-30
-
 ### Fixed
 - **`ShowConsoleMsg` now rejected at script registration** — scripts containing
   `ShowConsoleMsg` were silently passed to REAPER where the call blocks the main thread
