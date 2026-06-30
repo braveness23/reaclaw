@@ -9,6 +9,7 @@
 #include "handlers/chunk.h"
 #include "handlers/common.h"
 #include "handlers/execute.h"
+#include "handlers/transport.h"
 #include "handlers/history.h"
 #include "handlers/items.h"
 #include "handlers/learning.h"
@@ -320,6 +321,11 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
 
     // --- Render (Epic #32 / issue #33) ---
     svr.Post("/render", auth_wrap(cfg, Handlers::handle_render));
+
+    // --- Transport verbs (issue #49) ---
+    svr.Post("/transport", auth_wrap(cfg, Handlers::handle_transport_action));
+    svr.Post("/transport/cursor", auth_wrap(cfg, Handlers::handle_transport_cursor));
+    svr.Post("/transport/loop", auth_wrap(cfg, Handlers::handle_transport_loop));
 
     // --- Execute ---
     svr.Post("/execute/action", auth_wrap(cfg, Handlers::handle_execute_action));

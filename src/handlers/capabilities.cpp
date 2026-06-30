@@ -254,13 +254,24 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"note",
                "universal backstop: full RPP state of any track/item/envelope, readable and "
                "writable even with no dedicated verb. Writes are undo-wrapped"}}},
+            {"transport",
+             {{"action",
+               "POST /transport {action: play|stop|pause|record} — "
+               "backed by CSurf_OnPlay/Stop/Pause/Record; returns transport state after dispatch"},
+              {"cursor",
+               "POST /transport/cursor {position, moveview?:false, seekplay?:false} — "
+               "moves edit cursor to position (seconds); returns actual cursor position"},
+              {"loop",
+               "POST /transport/loop {start?, end?, enabled?} — "
+               "set loop range and/or toggle repeat; all fields optional; "
+               "returns {start, end, enabled}"}}},
             {"scripts",
              {{"register", "POST /scripts/register  (Lua escape hatch for anything not above)"}}}};
 
     // Things that have no direct verb yet — reach them via an action ID or a
     // generated Lua script. Kept honest so the agent doesn't probe blindly.
     nlohmann::json via_script_or_action = nlohmann::json::array(
-            {"take FX chains (TakeFX_*)", "MIDI notes/events", "freezing tracks"});
+            {"MIDI notes/events", "freezing tracks"});
 
     // Coverage matrix — every REST-relevant REAPER domain and how it is reached, so an
     // agent (and a human) can see the whole map and know nothing is hidden. Statuses:
@@ -290,7 +301,9 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
             {"learning", dom("structured", "suggestions/stats (local-first, opt-in)")},
             {"render", dom("structured", "offline render; async jobs pending #35")},
             {"transport",
-             dom("action", "play/stop/record/cursor/loop via action IDs; verbs pending #49")},
+             dom("structured",
+                 "POST /transport {action:play|stop|pause|record}, "
+                 "POST /transport/cursor {position}, POST /transport/loop {start,end,enabled}")},
             {"config_vars", dom("action", "reaper.ini/config vars; typed endpoint pending #44")},
             {"midi", dom("structured", "notes + CC read/write via GET/POST /state/items/{i}/midi")},
             {"object_state_chunk",
