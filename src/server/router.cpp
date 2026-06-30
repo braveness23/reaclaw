@@ -20,6 +20,7 @@
 #include "handlers/scripts.h"
 #include "handlers/snapshot.h"
 #include "handlers/state.h"
+#include "handlers/transport.h"
 #include "handlers/visualize.h"
 #include "reaper/executor.h"
 #include "server/server.h"
@@ -106,6 +107,7 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     // is matched ahead of the catch-all snapshot read.
     svr.Get("/state/chunk", auth_wrap(cfg, Handlers::handle_chunk_get));
     svr.Post("/state/chunk", auth_wrap(cfg, Handlers::handle_chunk_post));
+    svr.Get("/state/changes", auth_wrap(cfg, Handlers::handle_state_changes));
     svr.Get("/state", auth_wrap(cfg, Handlers::handle_state));
 
     // Create + batch update tracks.
@@ -225,6 +227,60 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     svr.Get("/state/items", auth_wrap(cfg, Handlers::handle_items_get));
     svr.Post("/state/items", auth_wrap(cfg, Handlers::handle_items_post));
 
+    // --- Take-FX verbs (issue #50) — registered before bare item-index routes ---
+    // Preset sub-resource first (3 captures + /preset suffix — most specific).
+    svr.Get(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+)/preset)",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
+                const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
+                Handlers::handle_take_get_fx_preset(req, res);
+            }));
+    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+)/preset)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
+                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
+                 Handlers::handle_take_set_fx_preset(req, res);
+             }));
+    // Copy sub-resource (3 captures + /copy suffix).
+    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+)/copy)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
+                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
+                 Handlers::handle_take_copy_fx(req, res);
+             }));
+    // Bare slot routes (3 captures).
+    svr.Get(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+))",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
+                const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
+                Handlers::handle_take_get_fx(req, res);
+            }));
+    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+))",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
+                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
+                 Handlers::handle_take_set_fx(req, res);
+             }));
+    svr.Delete(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+))",
+               auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                   const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                   const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
+                   const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
+                   Handlers::handle_take_delete_fx(req, res);
+               }));
+    // Add FX to take (2 captures, no slot).
+    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
+                 Handlers::handle_take_add_fx(req, res);
+             }));
+
     // --- MIDI verbs (issue #51) ---
     // Registered before the bare items index routes to avoid shadowing.
     svr.Get(R"(/state/items/(\d+)/midi)",
@@ -320,6 +376,11 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
 
     // --- Render (Epic #32 / issue #33) ---
     svr.Post("/render", auth_wrap(cfg, Handlers::handle_render));
+
+    // --- Transport verbs (issue #49) ---
+    svr.Post("/transport", auth_wrap(cfg, Handlers::handle_transport_action));
+    svr.Post("/transport/cursor", auth_wrap(cfg, Handlers::handle_transport_cursor));
+    svr.Post("/transport/loop", auth_wrap(cfg, Handlers::handle_transport_loop));
 
     // --- Execute ---
     svr.Post("/execute/action", auth_wrap(cfg, Handlers::handle_execute_action));

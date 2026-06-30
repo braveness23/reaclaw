@@ -11,6 +11,9 @@
 #include <json.hpp>
 
 // REAPER SDK — extern declarations (REAPERAPI_IMPLEMENT only in reaper/api.cpp)
+#include "WDL/swell/swell.h"
+
+#include <atomic>
 #include <cmath>
 #include <string>
 
@@ -19,6 +22,21 @@
 namespace ReaClaw::Handlers {
 
 namespace {
+
+// Async action: fires via SWELL SetTimer from REAPER's main message dispatch.
+// Unlike the plugin timer callback, WM_TIMER dispatch is compatible with
+// REAPER's render progress dialog running its own modal sub-event-loop.
+static std::atomic<int> s_async_pending_cmd{0};
+static constexpr UINT_PTR k_async_timer_id = 0xC1A77001;
+
+static void async_action_timer_proc(HWND hwnd, UINT, UINT_PTR id, DWORD) {
+    KillTimer(hwnd, id);
+    int cmd = s_async_pending_cmd.exchange(0);
+    Log::info("Async timer fired: cmd=" + std::to_string(cmd));
+    if (cmd != 0 && Main_OnCommand)
+        Main_OnCommand(cmd, 0);
+    Log::info("Async timer done: cmd=" + std::to_string(cmd));
+}
 
 void log_history(const std::string& type,
                  const std::string& target_id,
@@ -123,6 +141,49 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
     std::string ag = agent_id(req);
     std::string id_str = body["id"].is_number() ? std::to_string(body["id"].get<int>())
                                                 : body["id"].get<std::string>();
+
+    // Async mode: schedule via SWELL SetTimer instead of blocking the executor.
+    // SetTimer fires via WM_TIMER dispatch in REAPER's main message loop —
+    // a context where Main_OnCommand can safely run a modal sub-event-loop
+    // (e.g. REAPER's render progress dialog) without deadlocking.
+    if (body.value("async", false)) {
+        int cmd_id = 0;
+        if (body["id"].is_number_integer()) {
+            cmd_id = body["id"].get<int>();
+        } else if (body["id"].is_string()) {
+            // DB lookup only — no REAPER SDK calls from the HTTP thread
+            auto rows = g_db.query("SELECT reaper_cmd_id FROM scripts WHERE id = ?1",
+                                   {body["id"].get<std::string>()});
+            if (!rows.empty()) {
+                try {
+                    cmd_id = std::stoi(rows[0].at("reaper_cmd_id"));
+                } catch (...) {
+                }
+            }
+        }
+        if (cmd_id == 0) {
+            json_error(res,
+                       400,
+                       "async mode requires an integer action ID or registered script",
+                       "BAD_REQUEST");
+            return;
+        }
+        if (!GetMainHwnd) {
+            json_error(res, 500, "GetMainHwnd not available", "INTERNAL_ERROR");
+            return;
+        }
+        HWND hwnd = GetMainHwnd();
+        if (!hwnd) {
+            json_error(res, 500, "Cannot get main window handle", "INTERNAL_ERROR");
+            return;
+        }
+        s_async_pending_cmd.store(cmd_id);
+        SetTimer(hwnd, k_async_timer_id, 50, async_action_timer_proc);
+        Log::info("Async action scheduled: " + id_str + (ag.empty() ? "" : " (agent: " + ag + ")"));
+        log_history("action", id_str, ag, "queued", "", "");
+        json_ok(res, {{"status", "queued"}, {"cmd_id", cmd_id}, {"action_id", body["id"]}});
+        return;
+    }
 
     auto result = Executor::post([body]() -> nlohmann::json {
         int cmd_id = resolve_cmd_id(body["id"]);

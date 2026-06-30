@@ -492,12 +492,23 @@ The epic makes it first-class.
       output path + render seconds + offline-vs-realtime ratio.
 - [ ] Stem + region rendering; batch/parametric presets (within the epic).
 
-**Project save / load / open ([#34](https://github.com/braveness23/reaclaw/issues/34)).**
-- [ ] `POST /project/save {path}`, `POST /project/open {path}`, `POST /project/new`
-      (the last replaces the `demos/lib.py` Lua DeleteTrack loop). Mind multi-
-      project / Tier-C (§16): decide replace vs. tab for `open`.
+**Project save / load / open ([#34](https://github.com/braveness23/reaclaw/issues/34)). Done v1.9.0.**
+- [x] `POST /project/new`, `POST /project/open {path}`, `POST /project/save {path?}`, `POST /project/reset`.
+
+**Transport verbs ([#49](https://github.com/braveness23/reaclaw/issues/49)).**
+- [x] `POST /transport {action: play|stop|pause|record}` — backed by `CSurf_On*`. **Done v1.10.0.**
+- [x] `POST /transport/cursor {position}` — `SetEditCurPos`. **Done v1.10.0.**
+- [x] `POST /transport/loop {start?, end?, enabled?}` — `GetSet_LoopTimeRange2` + `GetSetRepeatEx`. **Done v1.10.0.**
+
+**Take-FX verbs ([#50](https://github.com/braveness23/reaclaw/issues/50)).**
+- [x] Full `TakeFX_*` surface at `/state/items/{i}/takes/{t}/fx/...`: add, read, set, delete, copy, preset. **Done v1.10.0.**
+
+**Change-token polling ([#31](https://github.com/braveness23/reaclaw/issues/31), partial).**
+- [x] `GET /state/changes` → `{change_count}` via `GetProjectStateChangeCount()`. **Done v1.10.0.**
+- [ ] Event feed (IReaperControlSurface hook) + attribution — deferred.
 
 **Async render-job model ([#35](https://github.com/braveness23/reaclaw/issues/35)).**
+- [x] `async: true` flag on `POST /execute/action` — schedules via SWELL `SetTimer`. **Done v1.10.0.**
 - [ ] Long renders return `{job_id, status}`; `GET /render/jobs/{id}` polls
       status/progress/output; list + cancel. Must not starve the main-thread
       command queue (§8). Owns the "long-render UX" open question.

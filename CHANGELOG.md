@@ -9,6 +9,39 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-06-29
+
+### Added
+- **Async action dispatch — `async` flag on `POST /execute/action` (partial #35)** — Pass
+  `"async": true` to schedule the action via SWELL `SetTimer`/`WM_TIMER` instead of blocking
+  the executor. Returns `{status:"queued", cmd_id, action_id}` immediately. The timer fires in
+  REAPER's main message loop — a context where `Main_OnCommand` can safely drive a modal
+  sub-event-loop (e.g. the render progress dialog) without deadlocking.
+- **Transport verbs — play/stop/pause/record/cursor/loop (closes #49)** — First-class transport
+  endpoints backed by `CSurf_On*` rather than opaque action IDs:
+  - `POST /transport {action: play|stop|pause|record}` — drives `CSurf_OnPlay/Stop/Pause/Record`;
+    returns transport state (playing, recording, paused, position) after dispatch.
+  - `POST /transport/cursor {position, moveview?:false, seekplay?:false}` — moves the edit cursor
+    to a project-time position in seconds via `SetEditCurPos`; returns actual cursor position.
+  - `POST /transport/loop {start?, end?, enabled?}` — sets loop range (`GetSet_LoopTimeRange2`)
+    and/or toggles repeat (`GetSetRepeatEx`); all fields optional so you can update range-only or
+    enabled-only. Returns `{start, end, enabled}`.
+  `GET /capabilities`: transport domain moves from `action` to `structured`.
+- **Take-FX verbs — full `TakeFX_*` surface (closes #50)** — Mirrors the track-FX endpoints for
+  item takes. New routes under `/state/items/{i}/takes/{t}/fx/...`:
+  - `POST .../fx {name, enabled?, params?}` — add FX (`TakeFX_AddByName`)
+  - `GET/POST/DELETE .../fx/{slot}` — read params / set enabled+params / remove
+  - `POST .../fx/{slot}/copy {to_item, to_take, to_slot?:-1, move?:false}` — copy or move via
+    `TakeFX_CopyToTake`
+  - `GET/POST .../fx/{slot}/preset {name|navigate:-1|1}` — load/navigate presets
+  Full TakeFX param snapshots (index, name, normalized value, formatted string, real-unit
+  min/max/mid/raw). All mutations undo-wrapped. Coverage matrix updated.
+- **Change-token polling endpoint (partial #31)** — `GET /state/changes` returns
+  `{change_count}` from `GetProjectStateChangeCount()` — a cheap monotonic counter that
+  increments on any project edit (GUI, control surface, another API client). Cache the count;
+  re-read state only when it advances. Pair with `GET /snapshot/diff` to find what changed.
+  Full event feed (IReaperControlSurface hook) remains out of scope.
+
 ## [1.9.0] - 2026-06-29
 
 ### Added

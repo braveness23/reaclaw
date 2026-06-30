@@ -254,7 +254,7 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.9.0** — Project lifecycle endpoints: `POST /project/new`, `/open`,
+Latest release: **v1.10.0** — Project lifecycle endpoints: `POST /project/new`, `/open`,
 `/save`, and `/reset` so an agent can manage the full blank-slate → build → save → reload
 → render loop without any GUI modal. See the [CHANGELOG](CHANGELOG.md) for the full story.
 

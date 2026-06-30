@@ -96,7 +96,13 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"delete", "DELETE /state/items/{index}"},
               {"source",
                "reads expose source{file,type,length,sample_rate,num_channels} for the active "
-               "take"}}},
+               "take"},
+              {"take_fx",
+               "POST /state/items/{i}/takes/{t}/fx {name,enabled,params} — add FX to a take; "
+               "GET/POST/DELETE /state/items/{i}/takes/{t}/fx/{slot} — read/set/delete; "
+               "POST .../fx/{slot}/copy {to_item,to_take,to_slot:-1,move:false}; "
+               "GET/POST .../fx/{slot}/preset {name|navigate:-1|1}. "
+               "Mirrors the TrackFX_* surface via TakeFX_*."}}},
             {"midi",
              {{"read",
                "GET /state/items/{index}/midi — notes[] + cc[] from the active MIDI take; "
@@ -242,7 +248,17 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                                     "GET /state/tempo",
                                     "GET /state/meters",
                                     "GET /state/track-icons",
+                                    "GET /state/changes",
                                     "GET /project"})},
+            {"change_detection",
+             {{"poll",
+               "GET /state/changes → {change_count} — monotonic counter from "
+               "GetProjectStateChangeCount; increments on any project edit regardless of source. "
+               "Cache the value; re-read state only when it advances. "
+               "Pair with GET /snapshot/diff to find what changed."},
+              {"note",
+               "counter resets on REAPER restart; event-feed (control-surface hook) is out of "
+               "scope for now — snapshot diff is the recommended 'what changed' path"}}},
             {"actions",
              {{"run", "POST /execute/action {id}"},
               {"sequence", "POST /execute/sequence {steps:[...]}"},
@@ -254,13 +270,24 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"note",
                "universal backstop: full RPP state of any track/item/envelope, readable and "
                "writable even with no dedicated verb. Writes are undo-wrapped"}}},
+            {"transport",
+             {{"action",
+               "POST /transport {action: play|stop|pause|record} — "
+               "backed by CSurf_OnPlay/Stop/Pause/Record; returns transport state after dispatch"},
+              {"cursor",
+               "POST /transport/cursor {position, moveview?:false, seekplay?:false} — "
+               "moves edit cursor to position (seconds); returns actual cursor position"},
+              {"loop",
+               "POST /transport/loop {start?, end?, enabled?} — "
+               "set loop range and/or toggle repeat; all fields optional; "
+               "returns {start, end, enabled}"}}},
             {"scripts",
              {{"register", "POST /scripts/register  (Lua escape hatch for anything not above)"}}}};
 
     // Things that have no direct verb yet — reach them via an action ID or a
     // generated Lua script. Kept honest so the agent doesn't probe blindly.
     nlohmann::json via_script_or_action = nlohmann::json::array(
-            {"take FX chains (TakeFX_*)", "MIDI notes/events", "freezing tracks"});
+            {"MIDI notes/events", "freezing tracks"});
 
     // Coverage matrix — every REST-relevant REAPER domain and how it is reached, so an
     // agent (and a human) can see the whole map and know nothing is hidden. Statuses:
@@ -275,8 +302,11 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
     };
     nlohmann::json coverage = {
             {"tracks", dom("structured", "create/update/delete + 17 writable fields")},
-            {"items_takes", dom("structured", "item + take CRUD, sources; take-FX pending #50")},
-            {"fx", dom("structured", "track FX full; take-FX pending #50")},
+            {"items_takes",
+             dom("structured", "item + take CRUD, sources; take-FX: full TakeFX_* surface")},
+            {"fx",
+             dom("structured",
+                 "track FX full; take FX full (TakeFX_*) via /state/items/{i}/takes/{t}/fx/...")},
             {"routing", dom("structured", "sends add/set/delete; HW-out (cat -1) via chunk/lua")},
             {"automation", dom("structured", "envelope read/write; automation items via chunk")},
             {"markers_regions", dom("structured", "read/add/delete")},
@@ -290,7 +320,9 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
             {"learning", dom("structured", "suggestions/stats (local-first, opt-in)")},
             {"render", dom("structured", "offline render; async jobs pending #35")},
             {"transport",
-             dom("action", "play/stop/record/cursor/loop via action IDs; verbs pending #49")},
+             dom("structured",
+                 "POST /transport {action:play|stop|pause|record}, "
+                 "POST /transport/cursor {position}, POST /transport/loop {start,end,enabled}")},
             {"config_vars", dom("action", "reaper.ini/config vars; typed endpoint pending #44")},
             {"midi", dom("structured", "notes + CC read/write via GET/POST /state/items/{i}/midi")},
             {"object_state_chunk",

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(reaper_reaclaw VERSION 1.9.0 LANGUAGES C CXX)
+project(reaper_reaclaw VERSION 1.10.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -65,6 +65,7 @@ add_library(reaper_reaclaw SHARED
     src/handlers/project.cpp
     src/handlers/render.cpp
     src/handlers/execute.cpp
+    src/handlers/transport.cpp
     src/handlers/scripts.cpp
     src/handlers/history.cpp
     src/reaper/api.cpp
