@@ -30,7 +30,8 @@ void handle_transport_action(const httplib::Request& req, httplib::Response& res
         return;
     }
     if (!body.contains("action") || !body["action"].is_string()) {
-        json_error(res, 400, "Missing required field: action (play|stop|pause|record)", "BAD_REQUEST");
+        json_error(
+                res, 400, "Missing required field: action (play|stop|pause|record)", "BAD_REQUEST");
         return;
     }
     std::string action = body["action"].get<std::string>();
@@ -153,20 +154,21 @@ void handle_transport_loop(const httplib::Request& req, httplib::Response& res) 
     }
     bool enabled_val = has_enabled ? body["enabled"].get<bool>() : false;
 
-    auto result = Executor::post([has_range, start, end, has_enabled, enabled_val]() -> nlohmann::json {
-        if (has_range && GetSet_LoopTimeRange2) {
-            double s = start, e = end;
-            GetSet_LoopTimeRange2(nullptr, true, false, &s, &e, false);
-        }
-        if (has_enabled && GetSetRepeatEx)
-            GetSetRepeatEx(nullptr, enabled_val ? 1 : 0);
+    auto result = Executor::post(
+            [has_range, start, end, has_enabled, enabled_val]() -> nlohmann::json {
+                if (has_range && GetSet_LoopTimeRange2) {
+                    double s = start, e = end;
+                    GetSet_LoopTimeRange2(nullptr, true, false, &s, &e, false);
+                }
+                if (has_enabled && GetSetRepeatEx)
+                    GetSetRepeatEx(nullptr, enabled_val ? 1 : 0);
 
-        double lo = 0.0, hi = 0.0;
-        if (GetSet_LoopTimeRange2)
-            GetSet_LoopTimeRange2(nullptr, false, false, &lo, &hi, false);
-        int rep = GetSetRepeatEx ? GetSetRepeatEx(nullptr, -1) : 0;
-        return {{"start", lo}, {"end", hi}, {"enabled", rep != 0}};
-    });
+                double lo = 0.0, hi = 0.0;
+                if (GetSet_LoopTimeRange2)
+                    GetSet_LoopTimeRange2(nullptr, false, false, &lo, &hi, false);
+                int rep = GetSetRepeatEx ? GetSetRepeatEx(nullptr, -1) : 0;
+                return {{"start", lo}, {"end", hi}, {"enabled", rep != 0}};
+            });
 
     if (result.contains("_timeout")) {
         json_error(res, 408, "Main thread timeout", "TIMEOUT");

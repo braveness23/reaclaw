@@ -1452,7 +1452,10 @@ void apply_take_fx_params(MediaItem_Take* take, int slot, const nlohmann::json& 
             for (int i = 0; i < n; i++) {
                 char nm[256] = {};
                 TakeFX_GetParamName(take, slot, i, nm, sizeof(nm));
-                if (want == nm) { idx = i; break; }
+                if (want == nm) {
+                    idx = i;
+                    break;
+                }
             }
         }
         if (idx < 0)
@@ -1462,7 +1465,7 @@ void apply_take_fx_params(MediaItem_Take* take, int slot, const nlohmann::json& 
     }
 }
 
-}  // namespace (anonymous extension for take-FX helpers)
+}  // namespace
 
 // POST /state/items/{index}/takes/{take}/fx
 void handle_take_add_fx(const httplib::Request& req, httplib::Response& res) {
@@ -1640,33 +1643,35 @@ void handle_take_copy_fx(const httplib::Request& req, httplib::Response& res) {
     int to_take = body["to_take"].get<int>();
     int to_slot = body.value("to_slot", -1);
     bool move = body.value("move", false);
-    auto result = Executor::post([item_idx, take_idx, slot, to_item, to_take, to_slot, move]() -> nlohmann::json {
-        return with_undo("ReaClaw: copy take FX", [&]() -> nlohmann::json {
-            int n_items = CountMediaItems(nullptr);
-            if (item_idx < 0 || item_idx >= n_items || to_item < 0 || to_item >= n_items)
-                return {{"_not_found", true}};
-            MediaItem* src_it = GetMediaItem(nullptr, item_idx);
-            MediaItem* dst_it = GetMediaItem(nullptr, to_item);
-            if (!src_it || !dst_it)
-                return {{"_not_found", true}};
-            if (take_idx >= GetMediaItemNumTakes(src_it) || to_take >= GetMediaItemNumTakes(dst_it))
-                return {{"_not_found", true}};
-            MediaItem_Take* src_tk = GetMediaItemTake(src_it, take_idx);
-            MediaItem_Take* dst_tk = GetMediaItemTake(dst_it, to_take);
-            if (!src_tk || !dst_tk)
-                return {{"_not_found", true}};
-            if (slot < 0 || slot >= TakeFX_GetCount(src_tk))
-                return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
-            TakeFX_CopyToTake(src_tk, slot, dst_tk, to_slot, move);
-            return {{"from_item", item_idx},
-                    {"from_take", take_idx},
-                    {"from_slot", slot},
-                    {"to_item", to_item},
-                    {"to_take", to_take},
-                    {"moved", move},
-                    {"dest_fx_count", TakeFX_GetCount(dst_tk)}};
-        });
-    });
+    auto result = Executor::post(
+            [item_idx, take_idx, slot, to_item, to_take, to_slot, move]() -> nlohmann::json {
+                return with_undo("ReaClaw: copy take FX", [&]() -> nlohmann::json {
+                    int n_items = CountMediaItems(nullptr);
+                    if (item_idx < 0 || item_idx >= n_items || to_item < 0 || to_item >= n_items)
+                        return {{"_not_found", true}};
+                    MediaItem* src_it = GetMediaItem(nullptr, item_idx);
+                    MediaItem* dst_it = GetMediaItem(nullptr, to_item);
+                    if (!src_it || !dst_it)
+                        return {{"_not_found", true}};
+                    if (take_idx >= GetMediaItemNumTakes(src_it) ||
+                        to_take >= GetMediaItemNumTakes(dst_it))
+                        return {{"_not_found", true}};
+                    MediaItem_Take* src_tk = GetMediaItemTake(src_it, take_idx);
+                    MediaItem_Take* dst_tk = GetMediaItemTake(dst_it, to_take);
+                    if (!src_tk || !dst_tk)
+                        return {{"_not_found", true}};
+                    if (slot < 0 || slot >= TakeFX_GetCount(src_tk))
+                        return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
+                    TakeFX_CopyToTake(src_tk, slot, dst_tk, to_slot, move);
+                    return {{"from_item", item_idx},
+                            {"from_take", take_idx},
+                            {"from_slot", slot},
+                            {"to_item", to_item},
+                            {"to_take", to_take},
+                            {"moved", move},
+                            {"dest_fx_count", TakeFX_GetCount(dst_tk)}};
+                });
+            });
     if (executor_error(res, result))
         return;
     json_ok(res, result);
@@ -1722,38 +1727,40 @@ void handle_take_set_fx_preset(const httplib::Request& req, httplib::Response& r
         json_error(res, 400, "Provide 'name' or 'navigate'", "BAD_REQUEST");
         return;
     }
-    auto result = Executor::post([item_idx, take_idx, slot, body, has_name, has_nav]() -> nlohmann::json {
-        return with_undo("ReaClaw: load take FX preset", [&]() -> nlohmann::json {
-            int n_items = CountMediaItems(nullptr);
-            if (item_idx < 0 || item_idx >= n_items)
-                return {{"_not_found", true}};
-            MediaItem* it = GetMediaItem(nullptr, item_idx);
-            if (!it || take_idx >= GetMediaItemNumTakes(it))
-                return {{"_not_found", true}};
-            MediaItem_Take* tk = GetMediaItemTake(it, take_idx);
-            if (!tk)
-                return {{"_not_found", true}};
-            if (slot < 0 || slot >= TakeFX_GetCount(tk))
-                return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
-            bool ok = false;
-            if (has_name)
-                ok = TakeFX_SetPreset(tk, slot, body["name"].get<std::string>().c_str());
-            else
-                ok = TakeFX_NavigatePresets(tk, slot, body["navigate"].get<int>());
-            if (!ok)
-                return {{"_bad_request", true}, {"_message", "Preset not found / not changed"}};
-            char pname[512] = {};
-            TakeFX_GetPreset(tk, slot, pname, sizeof(pname));
-            int total = 0;
-            int cur = TakeFX_GetPresetIndex(tk, slot, &total);
-            return {{"item", item_idx},
-                    {"take", take_idx},
-                    {"slot", slot},
-                    {"preset", pname},
-                    {"preset_index", cur},
-                    {"preset_count", total}};
-        });
-    });
+    auto result = Executor::post(
+            [item_idx, take_idx, slot, body, has_name, has_nav]() -> nlohmann::json {
+                return with_undo("ReaClaw: load take FX preset", [&]() -> nlohmann::json {
+                    int n_items = CountMediaItems(nullptr);
+                    if (item_idx < 0 || item_idx >= n_items)
+                        return {{"_not_found", true}};
+                    MediaItem* it = GetMediaItem(nullptr, item_idx);
+                    if (!it || take_idx >= GetMediaItemNumTakes(it))
+                        return {{"_not_found", true}};
+                    MediaItem_Take* tk = GetMediaItemTake(it, take_idx);
+                    if (!tk)
+                        return {{"_not_found", true}};
+                    if (slot < 0 || slot >= TakeFX_GetCount(tk))
+                        return {{"_bad_request", true}, {"_message", "FX slot out of range"}};
+                    bool ok = false;
+                    if (has_name)
+                        ok = TakeFX_SetPreset(tk, slot, body["name"].get<std::string>().c_str());
+                    else
+                        ok = TakeFX_NavigatePresets(tk, slot, body["navigate"].get<int>());
+                    if (!ok)
+                        return {{"_bad_request", true},
+                                {"_message", "Preset not found / not changed"}};
+                    char pname[512] = {};
+                    TakeFX_GetPreset(tk, slot, pname, sizeof(pname));
+                    int total = 0;
+                    int cur = TakeFX_GetPresetIndex(tk, slot, &total);
+                    return {{"item", item_idx},
+                            {"take", take_idx},
+                            {"slot", slot},
+                            {"preset", pname},
+                            {"preset_index", cur},
+                            {"preset_count", total}};
+                });
+            });
     if (executor_error(res, result))
         return;
     json_ok(res, result);

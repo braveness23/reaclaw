@@ -11,12 +11,13 @@
 #include <json.hpp>
 
 // REAPER SDK — extern declarations (REAPERAPI_IMPLEMENT only in reaper/api.cpp)
+#include "WDL/swell/swell.h"
+
 #include <atomic>
 #include <cmath>
 #include <string>
 
 #include <reaper_plugin_functions.h>
-#include "WDL/swell/swell.h"
 
 namespace ReaClaw::Handlers {
 
@@ -154,11 +155,16 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
             auto rows = g_db.query("SELECT reaper_cmd_id FROM scripts WHERE id = ?1",
                                    {body["id"].get<std::string>()});
             if (!rows.empty()) {
-                try { cmd_id = std::stoi(rows[0].at("reaper_cmd_id")); } catch (...) {}
+                try {
+                    cmd_id = std::stoi(rows[0].at("reaper_cmd_id"));
+                } catch (...) {
+                }
             }
         }
         if (cmd_id == 0) {
-            json_error(res, 400, "async mode requires an integer action ID or registered script",
+            json_error(res,
+                       400,
+                       "async mode requires an integer action ID or registered script",
                        "BAD_REQUEST");
             return;
         }

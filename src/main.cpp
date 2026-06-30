@@ -36,7 +36,7 @@ __declspec(dllexport)
 #else
 __attribute__((visibility("default")))
 #endif
-        int ReaperPluginEntry(void* hInstance, reaper_plugin_info_t* rec) {
+int ReaperPluginEntry(void* hInstance, reaper_plugin_info_t* rec) {
 #ifdef _WIN32
     // Diagnostic: step-by-step breadcrumb file written via raw Win32 handles
     // so it works even if the CRT, REAPER API, or logging subsystem fails.

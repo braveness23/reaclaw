@@ -31,7 +31,7 @@ inline void not_implemented(httplib::Response& res) {
 inline std::string now_iso() {
     auto now = std::chrono::system_clock::now();
     auto t = std::chrono::system_clock::to_time_t(now);
-    struct tm tm_buf {};
+    struct tm tm_buf{};
 #ifdef _WIN32
     gmtime_s(&tm_buf, &t);
 #else

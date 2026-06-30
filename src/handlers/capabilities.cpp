@@ -302,8 +302,11 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
     };
     nlohmann::json coverage = {
             {"tracks", dom("structured", "create/update/delete + 17 writable fields")},
-            {"items_takes", dom("structured", "item + take CRUD, sources; take-FX: full TakeFX_* surface")},
-            {"fx", dom("structured", "track FX full; take FX full (TakeFX_*) via /state/items/{i}/takes/{t}/fx/...")},
+            {"items_takes",
+             dom("structured", "item + take CRUD, sources; take-FX: full TakeFX_* surface")},
+            {"fx",
+             dom("structured",
+                 "track FX full; take FX full (TakeFX_*) via /state/items/{i}/takes/{t}/fx/...")},
             {"routing", dom("structured", "sends add/set/delete; HW-out (cat -1) via chunk/lua")},
             {"automation", dom("structured", "envelope read/write; automation items via chunk")},
             {"markers_regions", dom("structured", "read/add/delete")},
