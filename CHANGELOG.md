@@ -9,8 +9,6 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.11.0] - 2026-06-30
-
 ### Added
 - **`GET /` discovery landing page** — no auth required; returns `what_i_am`, 9-step
   `quick_start` recipe, `key_gotchas` list, and pointers to `/capabilities` and `/health`.
