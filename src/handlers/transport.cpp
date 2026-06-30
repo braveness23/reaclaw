@@ -154,8 +154,10 @@ void handle_transport_loop(const httplib::Request& req, httplib::Response& res) 
     bool enabled_val = has_enabled ? body["enabled"].get<bool>() : false;
 
     auto result = Executor::post([has_range, start, end, has_enabled, enabled_val]() -> nlohmann::json {
-        if (has_range && GetSet_LoopTimeRange2)
-            GetSet_LoopTimeRange2(nullptr, true, false, &start, &end, false);
+        if (has_range && GetSet_LoopTimeRange2) {
+            double s = start, e = end;
+            GetSet_LoopTimeRange2(nullptr, true, false, &s, &e, false);
+        }
         if (has_enabled && GetSetRepeatEx)
             GetSetRepeatEx(nullptr, enabled_val ? 1 : 0);
 

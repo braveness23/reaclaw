@@ -1490,7 +1490,7 @@ void handle_take_add_fx(const httplib::Request& req, httplib::Response& res) {
             MediaItem_Take* tk = GetMediaItemTake(it, take_idx);
             if (!tk)
                 return {{"_not_found", true}};
-            int slot = TakeFX_AddByName(tk, fx_name.c_str(), false, -1);
+            int slot = TakeFX_AddByName(tk, fx_name.c_str(), -1);
             if (slot < 0)
                 return {{"_bad_request", true}, {"_message", "FX not found: " + fx_name}};
             if (body.contains("enabled") && body["enabled"].is_boolean())
