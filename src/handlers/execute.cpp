@@ -207,13 +207,15 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
         }
     }
 
-    auto result = Executor::post([body]() -> nlohmann::json {
-        int cmd_id = resolve_cmd_id(body["id"]);
-        if (cmd_id == 0)
-            return {{"_not_found", true}};
-        Main_OnCommand(cmd_id, 0);
-        return {{"ok", true}, {"cmd_id", cmd_id}};
-    }, timeout_seconds);
+    auto result = Executor::post(
+            [body]() -> nlohmann::json {
+                int cmd_id = resolve_cmd_id(body["id"]);
+                if (cmd_id == 0)
+                    return {{"_not_found", true}};
+                Main_OnCommand(cmd_id, 0);
+                return {{"ok", true}, {"cmd_id", cmd_id}};
+            },
+            timeout_seconds);
 
     int cmd_id = result.value("cmd_id", 0);
     std::string nm = display_name(body["id"], cmd_id);
