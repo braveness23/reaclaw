@@ -9,6 +9,19 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-06-30
+
+### Fixed
+- **`POST /render` WAV format** — `wav_render_format()` was building a blob with
+  `0x00000000` as the codec discriminator; REAPER's PCM sink expects the `"evaw"` FourCC
+  prefix and rejected the blob with a blocking "Invalid render format!" dialog that froze
+  the main thread. Fix: return `""` and let REAPER use its own built-in WAV default.
+- **`POST /render` bounds mapping** — `bounds_flag()` had the entire REAPER API mapping
+  wrong (`"project"` → 0, which is actually custom time range, not entire project). Correct
+  mapping: `0`=custom, `1`=project, `2`=time_selection, `3`=all_regions. Default render with
+  `bounds:"project"` was silently triggering "Nothing to render!" dialog and blocking the
+  main thread for the full 300 s timeout. Both bugs found by a naive-agent benchmark run.
+
 ## [1.11.0] - 2026-06-29
 
 ### Added

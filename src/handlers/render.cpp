@@ -25,26 +25,23 @@ namespace {
 //
 // REAPER stores codec settings for the render output as a base64-encoded
 // binary blob under the "RENDER_FORMAT" project info key. The blob is
-// codec-specific; leaving it empty (or as-is) uses whatever the project
-// currently has, which defaults to WAV 24-bit in a fresh REAPER project.
+// codec-specific and starts with the sink's FourCC tag (e.g. "evaw" for WAV),
+// NOT a simple numeric discriminator.
 //
-// Blob layout (integers little-endian):
-//   [0..3]  uint32  codec type discriminator
-//   [4..]   codec-specific parameters
+// For WAV: we return an empty string so REAPER keeps/uses its own default WAV
+// format (from [wave sink defaults] in reaper.ini). Attempting to hand-craft
+// the WAV blob with a 0x00000000 discriminator causes an "Invalid render
+// format" error because REAPER's PCM sink expects the "evaw" FourCC prefix.
 //
-// Type discriminators (from REAPER internal codec registry):
-//   0x00000000  PCM / WAV
-//   0x00010000  FLAC
-//   0x00020000  LAME MP3
-//   0x00030000  OGG Vorbis
+// For FLAC / MP3 / OGG: the blob layout below has been observed to work for
+// those codecs which DO use a numeric discriminator in the upper half of the
+// first 4 bytes.
 // ---------------------------------------------------------------------------
 
-static std::string wav_render_format(int bit_depth) {
-    std::vector<uint8_t> blob(8, 0);
-    // [0..3]: type = 0 (PCM) — already zero
-    blob[4] = static_cast<uint8_t>(bit_depth);  // 16, 24, or 32
-    // [5..7]: dither=0, flags=0, reserved=0
-    return Image::base64(blob);
+static std::string wav_render_format(int /*bit_depth*/) {
+    // Return empty: let REAPER use its built-in default WAV format.
+    // The project's RENDER_FORMAT is NOT overridden when this is empty.
+    return "";
 }
 
 static std::string flac_render_format(int bit_depth, int compression) {
@@ -78,17 +75,17 @@ static std::string ogg_render_format(int quality_x10) {
 
 // ---------------------------------------------------------------------------
 // RENDER_BOUNDSFLAG values (REAPER API):
-//   0 = entire project
-//   1 = time selection
-//   2 = all project regions/markers
-//   3 = selected markers/regions
+//   0 = custom time range
+//   1 = entire project
+//   2 = time selection
+//   3 = all project regions/markers
 // ---------------------------------------------------------------------------
 static int bounds_flag(const std::string& bounds) {
     if (bounds == "time_selection")
-        return 1;
-    if (bounds == "all_regions")
         return 2;
-    return 0;  // "project" or fallback → entire project
+    if (bounds == "all_regions")
+        return 3;
+    return 1;  // "project" or fallback → entire project
 }
 
 // Shared executor error → HTTP mapping.
@@ -311,11 +308,16 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
                 // Apply render settings.
                 auto dir_buf = to_mutable(params.render_dir);
                 auto pat_buf = to_mutable(params.render_pat);
-                auto fmt_buf = to_mutable(params.fmt_blob);
 
                 GetSetProjectInfo_String(nullptr, "RENDER_FILE", dir_buf.data(), true);
                 GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", pat_buf.data(), true);
-                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", fmt_buf.data(), true);
+                // Only override RENDER_FORMAT when we have a specific codec blob.
+                // For WAV (empty blob) we leave the project's current format intact
+                // so REAPER uses its built-in default rather than showing an error.
+                if (!params.fmt_blob.empty()) {
+                    auto fmt_buf = to_mutable(params.fmt_blob);
+                    GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", fmt_buf.data(), true);
+                }
                 GetSetProjectInfo(nullptr,
                                   "RENDER_BOUNDSFLAG",
                                   static_cast<double>(params.bounds_flag_val),
@@ -325,12 +327,12 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
                         nullptr, "RENDER_CHANNELS", static_cast<double>(params.channels), true);
 
                 // For custom bounds: set the project time selection and render
-                // with RENDER_BOUNDSFLAG=1 (time selection).
+                // with RENDER_BOUNDSFLAG=2 (time selection in REAPER's API).
                 if (params.custom_bounds && GetSet_LoopTimeRange2) {
                     double s = params.start_sec;
                     double e = params.end_sec;
                     GetSet_LoopTimeRange2(nullptr, true, false, &s, &e, false);
-                    GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", 1.0, true);
+                    GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", 2.0, true);
                 }
 
                 double project_length = GetProjectLength(nullptr);
@@ -343,7 +345,9 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
                 // Restore previous render settings.
                 GetSetProjectInfo_String(nullptr, "RENDER_FILE", old_file.data(), true);
                 GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", old_pattern.data(), true);
-                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), true);
+                if (!params.fmt_blob.empty()) {
+                    GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), true);
+                }
                 GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", old_boundsflag, true);
                 GetSetProjectInfo(nullptr, "RENDER_SRATE", old_srate, true);
                 GetSetProjectInfo(nullptr, "RENDER_CHANNELS", old_channels, true);
