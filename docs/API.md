@@ -57,6 +57,19 @@ Returns server status.
 }
 ```
 
+When the main thread is stuck (queue non-empty for >10s), `status` changes to
+`"degraded"` and a `degraded_reason` field is added. Only recovery is restarting
+REAPER.
+
+```json
+{
+  "status": "degraded",
+  "degraded_reason": "command queue non-empty for >10s — main thread may be blocked; restart REAPER to recover",
+  "queue_depth": 3,
+  ...
+}
+```
+
 - `queue_depth` — commands currently waiting for the REAPER main thread
 - `db_ok` — SQLite connection is open
 - `server_running` — HTTPS listener thread is active
@@ -332,6 +345,9 @@ Execute a single action by numeric ID or registered script action ID.
 { "id": 40285, "feedback": true }
 // id may also be a string: "_parallel_comp_a1b2c3"
 
+// With per-call timeout (useful for slow scripts on ARM/Pi rigs):
+{ "id": "_midi_build_6f9653d4", "timeout_ms": 30000 }
+
 // Response
 {
   "status": "success",
@@ -342,11 +358,17 @@ Execute a single action by numeric ID or registered script action ID.
 }
 ```
 
+**Fields:**
+- `id` *(required)* — integer action ID or string registered-script action ID
+- `feedback` *(optional, bool)* — include a post-execution state snapshot in the response
+- `timeout_ms` *(optional, int)* — override the default 15 000 ms main-thread wait; clamped to [1 000, 120 000]
+- `async` *(optional, bool)* — fire via SWELL SetTimer instead of blocking; returns `{"status":"queued"}` immediately
+
 `action_name` is the resolved human-readable name (from the bundled catalog;
 omitted only when the id is unknown). Sequence step results include `action_name`
 per step the same way.
 
-Returns 408 if the REAPER main thread doesn't respond within 5 seconds.
+Returns 408 if the REAPER main thread doesn't respond within the timeout (default 15s).
 
 ---
 
@@ -374,7 +396,7 @@ Register an agent-generated Lua ReaScript as a custom REAPER action.
 }
 ```
 
-**Response — Lua syntax error:**
+**Response — Lua syntax error or unsafe call:**
 ```json
 {
   "registered": false,
@@ -384,6 +406,10 @@ Register an agent-generated Lua ReaScript as a custom REAPER action.
   }
 }
 ```
+
+Scripts containing `ShowConsoleMsg` are rejected at registration — this call blocks
+the main thread in headless sessions. Use `reaper.SetExtState("ns","key",val,false)`
+to return data from scripts instead.
 
 Idempotent: sending the same `name` again returns the existing `action_id`.
 

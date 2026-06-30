@@ -219,6 +219,20 @@ RegisterResult register_script(const std::string& name,
         }
     }
 
+    // --- Headless-safety check: reject ShowConsoleMsg before it reaches REAPER ---
+    // ShowConsoleMsg blocks the main thread waiting for a GUI dialog that never
+    // appears in headless sessions, permanently wedging the command queue.
+    // The correct data-return pattern is reaper.SetExtState().
+    if (body.find("ShowConsoleMsg") != std::string::npos) {
+        result.syntax_error_line = 0;
+        result.syntax_error_message =
+                "ShowConsoleMsg is not supported in headless sessions — it blocks the "
+                "main thread waiting for a GUI dialog. Return data via "
+                "reaper.SetExtState(\"namespace\", \"key\", value, false) instead.";
+        Log::warn("Scripts: blocked '" + name + "' — contains ShowConsoleMsg");
+        return result;
+    }
+
     // --- Lua syntax validation ---
     if (g_config.validate_syntax) {
         auto syn = check_lua_syntax(body);

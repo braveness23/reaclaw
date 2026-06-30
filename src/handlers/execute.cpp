@@ -144,6 +144,15 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
     std::string id_str = body["id"].is_number() ? std::to_string(body["id"].get<int>())
                                                 : body["id"].get<std::string>();
 
+    // Per-call timeout: timeout_ms overrides the global default (15s).
+    // Clamped to [1s, 120s] to prevent accidental runaway waits.
+    int timeout_seconds = 15;
+    if (body.contains("timeout_ms") && body["timeout_ms"].is_number_integer()) {
+        int ms = body["timeout_ms"].get<int>();
+        ms = std::max(1000, std::min(120000, ms));
+        timeout_seconds = (ms + 999) / 1000;
+    }
+
     // Async mode: schedule via SWELL SetTimer instead of blocking the executor.
     // SetTimer fires via WM_TIMER dispatch in REAPER's main message loop —
     // a context where Main_OnCommand can safely run a modal sub-event-loop
@@ -198,13 +207,15 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
         }
     }
 
-    auto result = Executor::post([body]() -> nlohmann::json {
-        int cmd_id = resolve_cmd_id(body["id"]);
-        if (cmd_id == 0)
-            return {{"_not_found", true}};
-        Main_OnCommand(cmd_id, 0);
-        return {{"ok", true}, {"cmd_id", cmd_id}};
-    });
+    auto result = Executor::post(
+            [body]() -> nlohmann::json {
+                int cmd_id = resolve_cmd_id(body["id"]);
+                if (cmd_id == 0)
+                    return {{"_not_found", true}};
+                Main_OnCommand(cmd_id, 0);
+                return {{"ok", true}, {"cmd_id", cmd_id}};
+            },
+            timeout_seconds);
 
     int cmd_id = result.value("cmd_id", 0);
     std::string nm = display_name(body["id"], cmd_id);
