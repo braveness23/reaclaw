@@ -36,6 +36,15 @@ void handle_fx_copy(const httplib::Request& req, httplib::Response& res);
 // Issue #29 — Track icons.
 void handle_state_track_icons(const httplib::Request& req, httplib::Response& res);
 
+// Issue #50 — Take-FX verbs (mirror of track-FX surface for item takes).
+void handle_take_add_fx(const httplib::Request& req, httplib::Response& res);
+void handle_take_get_fx(const httplib::Request& req, httplib::Response& res);
+void handle_take_set_fx(const httplib::Request& req, httplib::Response& res);
+void handle_take_delete_fx(const httplib::Request& req, httplib::Response& res);
+void handle_take_copy_fx(const httplib::Request& req, httplib::Response& res);
+void handle_take_get_fx_preset(const httplib::Request& req, httplib::Response& res);
+void handle_take_set_fx_preset(const httplib::Request& req, httplib::Response& res);
+
 // Drop the 1s state read-cache (tracks/state/items) so the next read reflects a
 // just-applied write. Exported for cross-handler use (e.g. the chunk backstop).
 void invalidate_state_cache();
