@@ -114,16 +114,23 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                         g_db.scalar_int("SELECT COUNT(*) FROM actions"));
 
                 const char* rv = GetAppVersion ? GetAppVersion() : "unknown";
+                int queue_depth = static_cast<int>(Executor::queue_depth());
+                bool stuck = Executor::is_stuck();
 
-                Handlers::json_ok(res,
-                                  {{"status", "ok"},
-                                   {"version", REACLAW_VERSION},
-                                   {"reaper_version", rv ? rv : ""},
-                                   {"catalog_size", catalog_size},
-                                   {"uptime_seconds", uptime},
-                                   {"queue_depth", static_cast<int>(Executor::queue_depth())},
-                                   {"db_ok", g_db.is_open()},
-                                   {"server_running", Server::is_running()}});
+                nlohmann::json health = {{"status", stuck ? "degraded" : "ok"},
+                                         {"version", REACLAW_VERSION},
+                                         {"reaper_version", rv ? rv : ""},
+                                         {"catalog_size", catalog_size},
+                                         {"uptime_seconds", uptime},
+                                         {"queue_depth", queue_depth},
+                                         {"db_ok", g_db.is_open()},
+                                         {"server_running", Server::is_running()}};
+                if (stuck)
+                    health["degraded_reason"] =
+                            "command queue non-empty for >10s — main thread may be blocked; "
+                            "restart REAPER to recover";
+
+                Handlers::json_ok(res, health);
             }));
 
     // --- Catalog ---

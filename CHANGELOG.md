@@ -9,6 +9,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.2] - 2026-06-30
+
+### Fixed
+- **`ShowConsoleMsg` now rejected at script registration** — scripts containing
+  `ShowConsoleMsg` were silently passed to REAPER where the call blocks the main thread
+  indefinitely in headless sessions (waiting for a GUI dialog that never appears), permanently
+  wedging the command queue. Registration now returns `registered: false` with a clear error
+  pointing to `reaper.SetExtState()` as the correct data-return pattern.
+- **`/health` reports `"status": "degraded"` when the main thread is stuck** — previously
+  the health endpoint always returned `"status": "ok"` even when the command queue had been
+  non-empty for seconds without draining (indicating a stuck main thread). Now reports
+  `"degraded"` with a `degraded_reason` field after 10 s of queue stall.
+- **Default command queue timeout raised from 5 s to 15 s** — 5 s was too tight for
+  aarch64 ARM (Raspberry Pi); Lua scripts doing meaningful work (MIDI builds, FX probe
+  loops) routinely exceeded it, leaving phantom items in the queue. 15 s is the new default
+  across all platforms.
+- **Per-call `timeout_ms` field on `POST /execute/action`** — agents running on slow
+  hardware can now override the timeout per call (`"timeout_ms": 30000`), clamped to
+  [1 000, 120 000] ms. Resolves #65.
+
 ## [1.11.1] - 2026-06-30
 
 ### Fixed

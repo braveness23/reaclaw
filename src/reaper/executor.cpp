@@ -2,6 +2,7 @@
 
 #include "util/logging.h"
 
+#include <atomic>
 #include <chrono>
 #include <exception>
 #include <future>
@@ -20,6 +21,13 @@ struct Command {
 std::queue<Command> s_queue;
 std::mutex s_mutex;
 
+// Milliseconds since epoch when tick() last ran. Used to detect a stuck main thread.
+std::atomic<int64_t> s_last_tick_ms{0};
+
+// Milliseconds since epoch when the queue first became non-empty in the current
+// backlog (reset to 0 when the queue empties).
+std::atomic<int64_t> s_queue_nonempty_since_ms{0};
+
 }  // namespace
 
 nlohmann::json post(std::function<nlohmann::json()> fn, int timeout_seconds) {
@@ -30,6 +38,13 @@ nlohmann::json post(std::function<nlohmann::json()> fn, int timeout_seconds) {
     {
         std::lock_guard<std::mutex> lk(s_mutex);
         s_queue.push(std::move(cmd));
+        // Record when the queue first became non-empty (don't overwrite if already set).
+        if (s_queue_nonempty_since_ms.load() == 0) {
+            s_queue_nonempty_since_ms.store(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count());
+        }
     }
 
     auto status = fut.wait_for(std::chrono::seconds(timeout_seconds));
@@ -54,13 +69,19 @@ size_t queue_depth() {
 }
 
 void tick() {
+    s_last_tick_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::steady_clock::now().time_since_epoch())
+                                 .count());
+
     // Drain up to 10 commands per tick (~30fps → ~300 commands/sec sustained).
     for (int i = 0; i < 10; i++) {
         Command cmd;
         {
             std::lock_guard<std::mutex> lk(s_mutex);
-            if (s_queue.empty())
+            if (s_queue.empty()) {
+                s_queue_nonempty_since_ms.store(0);  // queue empty — reset stuck timer
                 break;
+            }
             cmd = std::move(s_queue.front());
             s_queue.pop();
         }
@@ -70,6 +91,19 @@ void tick() {
             cmd.result.set_exception(std::current_exception());
         }
     }
+}
+
+bool is_stuck() {
+    if (queue_depth() == 0)
+        return false;
+    int64_t since = s_queue_nonempty_since_ms.load();
+    if (since == 0)
+        return false;
+    int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now().time_since_epoch())
+                             .count();
+    // Degraded if queue has been non-empty for >10s (main thread not draining).
+    return (now_ms - since) > 10000;
 }
 
 }  // namespace ReaClaw::Executor
