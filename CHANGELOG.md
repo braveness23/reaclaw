@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-06-30
+
 ### Fixed
 - **`POST /render` WAV format** — `wav_render_format()` was building a blob with
   `0x00000000` as the codec discriminator; REAPER's PCM sink expects the `"evaw"` FourCC
