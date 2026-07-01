@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-07-01
+
 ### Added
 - **`POST /reaper/restart`** — full main-thread-wedge recovery: kills and
   relaunches the REAPER process ReaClaw is embedded in, replaying its own

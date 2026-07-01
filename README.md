@@ -254,7 +254,7 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.12.0** — Agent-friendliness fixes from a live friction-test session:
+Latest release: **v1.13.0** — Agent-friendliness fixes from a live friction-test session:
 live `GET /transport` + play/stop/pause/record aliases, one-shot `POST /execute/script`,
 `POST /queue/flush` for stuck-queue recovery, paginated FX/MIDI reads for large plugins
 and note counts, and `context.schema` hints on the most commonly-guessed-wrong `400`s.
