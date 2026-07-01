@@ -256,15 +256,15 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.16.0** — the A/B visual diff: `POST /snapshot` gains an
-optional `audio: {item|file}` field that freezes a reference to a piece of
-audio at capture time, and `GET /snapshot/diff/visualize` produces paired
-waveform/spectrum/loudness images (a snapshot's audio vs. current, or another
-snapshot) plus a machine-readable digest delta — "did this edit actually
-change the sound?" as one call. Also ships the CI E2E render smoke test that
-closes out the programmatic-production epic: every PR now builds a tiny
-composition, renders it, and asserts the output is non-silent against a real
-(throwaway, unlicensed) REAPER instance. See the
+Latest release: **v1.16.0** — the external-change event feed: `GET /events` (poll)
+and `GET /events/stream` (Server-Sent Events) push granular, attributed change
+events — track volume/pan/mute/solo/recarm/selected/title, play/repeat state —
+from *any* source, each tagged `source: "reaclaw"` or `"external"` so an agent
+can tell its own edits apart from a human at the GUI or another client. Also
+ships server-side semantic catalog search (`GET /catalog/search?semantic=true`,
+opt-in, loopback-only local embedding model) and `GET /recipes` for callers
+without the Skill loaded, plus a prebuilt Windows `.dll` release asset
+alongside the Linux `.so`. See the
 [CHANGELOG](CHANGELOG.md) for the full story.
 
 | Phase | Scope | Tag |

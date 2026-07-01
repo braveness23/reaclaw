@@ -579,3 +579,56 @@ starvation — REAPER's main thread pumps no message loop at all during an
 offline render, so other `Executor`-backed endpoints still queue up (and can
 still time out) while a render is actually running. `DELETE
 /render/jobs/{id}` cancels a still-`queued` job (`409` once it's `running`).
+
+## External-Change Event Feed (#31)
+
+### Know when something changed that you didn't do
+
+```bash
+CURSOR=$(curl -sk "$BASE/events" -H "$AUTH" | jq -r '.cursor')
+# ... time passes, a human moves a fader in the GUI ...
+curl -sk "$BASE/events?since=$CURSOR" -H "$AUTH" | jq '.events[] | {kind, source, value}'
+# → { "kind": "track_volume", "source": "external", "value": { "volume_db": -4.2 } }
+```
+
+`source` is `"reaclaw"` for edits ReaClaw itself made (via this API, sync or
+async action dispatch) and `"external"` for everything else — a GUI edit,
+another control surface, another API client. Save the response's `cursor`
+and pass it as `since` on your next poll.
+
+### Stream instead of polling
+
+```bash
+curl -sk -N "$BASE/events/stream" -H "$AUTH"
+# data: {"seq":187,"kind":"track_mute","source":"external","value":{"muted":true},...}
+```
+
+Each connection is capped at 10 minutes — reconnect with `?since=<last seq>`.
+
+## Semantic Catalog Search (#10)
+
+Off by default. Enable it in `config.json`, then pass `semantic=true`:
+
+```json
+{ "semantic_search": { "enabled": true } }
+```
+
+```bash
+curl -sk "$BASE/catalog/search?q=make%20the%20drums%20quieter&semantic=true" -H "$AUTH" | jq .
+# → { "mode": "semantic", "actions": [ { "name": "Track: Nudge volume for master track down", "score": 0.81, ... } ] }
+```
+
+Falls back to keyword search silently if `semantic_search.enabled` is `false`,
+the request omits `semantic=true`, or the local Ollama instance is
+unreachable — never an error either way.
+
+## Curated Recipes (#10)
+
+```bash
+curl -sk "$BASE/recipes" -H "$AUTH" | jq '.recipes[].id'
+curl -sk "$BASE/recipes/folder_group_session" -H "$AUTH" | jq .
+```
+
+Structured, ready-to-run versions of the Skill's snippets — folder groups,
+search-then-run, Lua register-then-run, FX + tune, sends, screenshot verify —
+for callers that don't have `skill/reaclaw/SKILL.md` loaded.
