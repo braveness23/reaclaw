@@ -88,6 +88,52 @@ Drains the pending command backlog (issue #64). Resolves every queued-but-
 not-yet-executing command with `{"_flushed": true}` so its caller unblocks
 immediately. Returns `{ "flushed": N }`.
 
+### POST /reaper/restart
+
+Kills and relaunches the REAPER process ReaClaw is embedded in — for
+self-recovery when the main thread is actually wedged (not just a pending
+backlog — `/queue/flush` alone can't fix that; only a full restart can).
+Linux only (501 elsewhere).
+
+```json
+{ "save_project": true }
+```
+
+- `save_project` *(optional, bool, default `true`)* — best-effort in-place
+  save before restarting, with a short (5s) timeout so a wedged main thread
+  doesn't hold up the recovery path itself. Skipped (not attempted) if the
+  project has never been saved (no filename yet) — no save-as dialog is ever
+  triggered.
+
+```json
+{
+  "restarting": true,
+  "saved": true,
+  "pid": 12345,
+  "restart_command": ["/home/user/opt/REAPER/reaper", "-nosplash", "-newinst", "..."]
+}
+```
+
+`restart_command` is REAPER's own current `argv`, read live from
+`/proc/self/cmdline` at request time (this process *is* REAPER — ReaClaw is a
+shared library loaded inside it) — surfaced so the caller can see exactly
+what's about to relaunch. The full current environment
+(`/proc/self/environ`, including `DISPLAY`/`XAUTHORITY`) is replayed
+byte-for-byte on relaunch too, so the new instance's display/X-auth context
+is exactly what's already working, not reconstructed from whatever shell
+issues the HTTP request.
+
+**Sequence:** best-effort save → fork a detached helper → respond
+immediately (REAPER keeps running normally for the response to reach you) →
+~300ms later the helper sends `SIGTERM`, waits up to 8s, escalates to
+`SIGKILL` if still alive, then relaunches with the captured argv/environment.
+Poll `GET /health` until it responds again (a fresh instance has
+`uptime_seconds` near 0).
+
+Any other in-flight request at the moment of the kill will simply see its
+connection dropped, not a graceful error — expected given what this
+endpoint does.
+
 ---
 
 ### GET /catalog

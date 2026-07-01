@@ -471,6 +471,38 @@ normalization, relative/absolute icon symmetry, unified error/hints shapes).
 
 ---
 
+## 22. Process Restart: `/proc` argv/environment replay, no SDK dependency (issue #77)
+
+**Decision:** `POST /reaper/restart` recovers from a wedged main thread by killing and
+relaunching the REAPER process, replaying REAPER's *own currently-running* `argv` and full
+environment — read live from `/proc/self/cmdline` and `/proc/self/environ` at request time —
+rather than reconstructing a launch command/environment by hand.
+
+**Why this instead of capturing DISPLAY/XAUTHORITY/launch-flags at startup:**
+Since ReaClaw is a shared library loaded *inside* REAPER's process, `getpid()` inside a
+handler *is* REAPER's pid, and `/proc/self/{cmdline,environ}` are REAPER's own argv/environment
+— guaranteed valid because REAPER is running successfully with them right now. This avoids the
+exact failure mode issue #77 named (relaunching from a *different* shell context loses X auth —
+independently reproduced during the #64/#77 friction-test work: a plain `DISPLAY=:0.0` relaunch
+failed with "Invalid MIT-MAGIC-COOKIE-1 key" once the desktop session had logged out) without
+inventing new config for a launch command that ReaClaw has no reliable way to guess anyway (it
+doesn't control how it was launched — flags, working directory, etc. are a deployer choice).
+
+**Why the critical path makes zero REAPER SDK calls:** the whole point is recovering from a
+wedged main thread, so the restart mechanism cannot depend on `Executor::post` (which blocks on
+that same main thread) or any non-threadsafe SDK call. Only the *optional* best-effort project
+save (short 5s timeout, skipped entirely if the project has never been saved, to avoid ever
+risking a save-as dialog) touches the SDK, and its failure/timeout doesn't block the restart.
+
+**Linux only.** The mechanism is `/proc`-based; macOS/Windows return `501`, consistent with the
+existing platform-support precedent in `screenshot.cpp`.
+
+**No approval gate.** Consistent with §10/§12 (agent is trusted, no approval gates exist
+anywhere else in the API) — any authenticated caller can trigger it, same as any other
+mutating endpoint.
+
+---
+
 ## Summary
 
 | Concern | Decision |

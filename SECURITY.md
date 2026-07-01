@@ -107,6 +107,17 @@ permitted actions; the API gives full access to REAPER's action catalog. This
 is by design — the intended deployment is a trusted local AI agent. Users who
 need to restrict the action surface should firewall the port at the OS level.
 
+### Process Restart
+
+`POST /reaper/restart` (Linux only) kills and relaunches the REAPER process
+ReaClaw runs inside, for recovery from a wedged main thread. Any caller with a
+valid API key can trigger it — there is no separate confirmation or approval
+gate, consistent with the trust model above. It replays REAPER's own current
+`argv`/environment (via `/proc/self/cmdline`/`environ`), so it never executes
+attacker-influenced input — no shell, no request-derived command construction.
+As with the rest of the API, the mitigation is network isolation (bind to
+loopback, or firewall the port), not per-endpoint gating.
+
 ---
 
 ## Scope

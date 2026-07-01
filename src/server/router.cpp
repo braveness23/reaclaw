@@ -16,6 +16,7 @@
 #include "handlers/probe.h"
 #include "handlers/project.h"
 #include "handlers/render.h"
+#include "handlers/restart.h"
 #include "handlers/screenshot.h"
 #include "handlers/scripts.h"
 #include "handlers/snapshot.h"
@@ -142,6 +143,11 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                  size_t n = Executor::flush();
                  Handlers::json_ok(res, {{"flushed", n}});
              }));
+
+    // POST /reaper/restart — issue #77: full main-thread-wedge recovery,
+    // beyond what /queue/flush's pending-backlog drain can fix. Also does
+    // not go through Executor::post — see handlers/restart.h.
+    svr.Post("/reaper/restart", auth_wrap(cfg, Handlers::handle_reaper_restart));
 
     // --- Catalog ---
     svr.Get("/catalog/search", auth_wrap(cfg, Handlers::handle_catalog_search));
