@@ -1342,6 +1342,7 @@ configuration is never permanently changed by an agent render.
 | `end` | float | `0.0` | Render end in seconds — required when `bounds="custom"`, must be > `start` |
 | `mp3_bitrate` | int | `192` | CBR bitrate in kbps — MP3 only |
 | `flac_compression` | int | `5` | Compression level 1–8 — FLAC only |
+| `async` | bool | `false` | Issue #35: return a job handle immediately instead of blocking — see below |
 
 ```json
 {
@@ -1384,3 +1385,62 @@ configuration is never permanently changed by an agent render.
 - `bounds="custom"` temporarily sets the project time selection to `[start, end]` and renders with `RENDER_BOUNDSFLAG=1` (time selection), then restores the original time selection.
 - The `normalize` field is accepted but not yet implemented (warning emitted).
 - Errors: `400` for bad/missing parameters, `408` for render timeout, `500` for REAPER API failure.
+
+### Async render jobs (issue #35)
+
+Pass `"async": true` in the `POST /render` body to get a job handle back
+immediately instead of blocking the HTTP connection for the render's
+duration:
+
+```json
+{ "output": "/tmp/mix.wav", "async": true }
+```
+
+```json
+{ "job_id": "job_1", "status": "queued" }
+```
+
+**`GET /render/jobs/{id}`** — poll a job's status:
+
+```json
+{
+  "job_id": "job_1",
+  "status": "running",
+  "output_path": "/tmp/mix.wav",
+  "format": "wav",
+  "srate": 44100,
+  "channels": 2,
+  "created_at": "2026-07-01T14:40:29Z",
+  "started_at": "2026-07-01T14:40:29Z",
+  "elapsed_seconds": 5.27
+}
+```
+
+`status` is one of `queued` → `running` → `done` | `error` | `cancelled`. A
+`done` job's response also carries `render_seconds`, `project_length`, and
+`offline_ratio` (same fields as the synchronous response); an `error` job
+carries `error`. There is no numeric progress percentage — the REAPER SDK
+exposes no render-progress primitive, so `elapsed_seconds` (measured) is
+reported instead of a fabricated percent-complete.
+
+**`GET /render/jobs`** — list all tracked jobs: `{ "jobs": [ ... ] }` (same
+shape as a single job). Bounded to the 200 most recent; oldest *terminal*
+jobs are evicted first, queued/running jobs are never evicted.
+
+**`DELETE /render/jobs/{id}`** — cancel a job. Only works while the job is
+still `queued` (hasn't started rendering yet) — returns the now-`cancelled`
+job. Returns `409` if the job is already `running` (REAPER's SDK has no safe
+way to abort an in-flight offline render — wait for it to finish) or already
+in a terminal state. Returns `404` for an unknown job id.
+
+**Important limitation — async does not make other endpoints stay responsive
+during the render.** Confirmed live: REAPER's main thread pumps no message
+loop at all while an offline render is in progress (`Main_OnCommand(41824)`
+is a tight, uninterruptible loop) — every other endpoint that depends on
+`Executor::post` (most of the API) will queue up and can time out during that
+window, exactly as it would with a synchronous render. `async: true` solves
+"don't hold the HTTP connection open and don't have to guess a timeout" — it
+does not solve "REAPER stays responsive to other calls while rendering." A
+second async render request queues cleanly behind the first (no corrupted
+render settings — Executor's FIFO drain serializes them), so this is safe,
+just not concurrent.

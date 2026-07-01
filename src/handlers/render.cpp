@@ -7,9 +7,13 @@
 
 #include <httplib.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <reaper_plugin_functions.h>
@@ -112,6 +116,246 @@ static std::vector<char> to_mutable(const std::string& s) {
     std::vector<char> buf(s.begin(), s.end());
     buf.push_back('\0');
     return buf;
+}
+
+struct RenderParams {
+    std::string render_dir;
+    std::string render_pat;
+    std::string fmt_blob;
+    int bounds_flag_val;
+    int srate;
+    int channels;
+    bool custom_bounds;
+    double start_sec;
+    double end_sec;
+};
+
+// The actual render, run on the main thread (call only from inside an
+// Executor::post lambda). Shared by both the synchronous and async-job paths
+// so there's exactly one place that knows how to save/apply/restore REAPER's
+// render settings around action 41824.
+nlohmann::json do_render(const RenderParams& params) {
+    if (!GetSetProjectInfo || !GetSetProjectInfo_String || !Main_OnCommand || !GetProjectLength) {
+        return {{"_error",
+                 "Required REAPER API functions unavailable "
+                 "(GetSetProjectInfo / Main_OnCommand / GetProjectLength)"}};
+    }
+
+    // Save current render settings so they can be restored afterwards.
+    // Use large-enough fixed buffers — RENDER_FORMAT can be a long blob.
+    std::vector<char> old_file(4096, 0);
+    std::vector<char> old_pattern(1024, 0);
+    std::vector<char> old_format(8192, 0);
+    double old_boundsflag = 0, old_srate = 0, old_channels = 0;
+    double old_loop_start = 0, old_loop_end = 0;
+
+    GetSetProjectInfo_String(nullptr, "RENDER_FILE", old_file.data(), false);
+    GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", old_pattern.data(), false);
+    GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), false);
+    old_boundsflag = GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", 0, false);
+    old_srate = GetSetProjectInfo(nullptr, "RENDER_SRATE", 0, false);
+    old_channels = GetSetProjectInfo(nullptr, "RENDER_CHANNELS", 0, false);
+
+    if (params.custom_bounds && GetSet_LoopTimeRange2) {
+        GetSet_LoopTimeRange2(nullptr, false, false, &old_loop_start, &old_loop_end, false);
+    }
+
+    // Apply render settings.
+    auto dir_buf = to_mutable(params.render_dir);
+    auto pat_buf = to_mutable(params.render_pat);
+
+    GetSetProjectInfo_String(nullptr, "RENDER_FILE", dir_buf.data(), true);
+    GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", pat_buf.data(), true);
+    // Only override RENDER_FORMAT when we have a specific codec blob.
+    // For WAV (empty blob) we leave the project's current format intact
+    // so REAPER uses its built-in default rather than showing an error.
+    if (!params.fmt_blob.empty()) {
+        auto fmt_buf = to_mutable(params.fmt_blob);
+        GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", fmt_buf.data(), true);
+    }
+    GetSetProjectInfo(
+            nullptr, "RENDER_BOUNDSFLAG", static_cast<double>(params.bounds_flag_val), true);
+    GetSetProjectInfo(nullptr, "RENDER_SRATE", static_cast<double>(params.srate), true);
+    GetSetProjectInfo(nullptr, "RENDER_CHANNELS", static_cast<double>(params.channels), true);
+
+    // For custom bounds: set the project time selection and render
+    // with RENDER_BOUNDSFLAG=2 (time selection in REAPER's API).
+    if (params.custom_bounds && GetSet_LoopTimeRange2) {
+        double s = params.start_sec;
+        double e = params.end_sec;
+        GetSet_LoopTimeRange2(nullptr, true, false, &s, &e, false);
+        GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", 2.0, true);
+    }
+
+    double project_length = GetProjectLength(nullptr);
+
+    // Action 41824 = "File: Render project, using the most recent
+    // render settings". Runs synchronously on the main thread and blocks
+    // until the render file is fully written. Confirmed live (issue #35):
+    // this call pumps no message loop at all — REAPER's main thread is fully
+    // unresponsive to everything else (including ReaClaw's own "timer"
+    // plugin hook that drives Executor::tick()) for the render's entire
+    // duration, regardless of which thread triggered it.
+    Main_OnCommand(41824, 0);
+
+    // Restore previous render settings.
+    GetSetProjectInfo_String(nullptr, "RENDER_FILE", old_file.data(), true);
+    GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", old_pattern.data(), true);
+    if (!params.fmt_blob.empty()) {
+        GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), true);
+    }
+    GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", old_boundsflag, true);
+    GetSetProjectInfo(nullptr, "RENDER_SRATE", old_srate, true);
+    GetSetProjectInfo(nullptr, "RENDER_CHANNELS", old_channels, true);
+
+    if (params.custom_bounds && GetSet_LoopTimeRange2) {
+        GetSet_LoopTimeRange2(nullptr, true, false, &old_loop_start, &old_loop_end, false);
+    }
+
+    return {{"ok", true}, {"project_length", project_length}};
+}
+
+// ---------------------------------------------------------------------------
+// Issue #35 — async render-job registry.
+//
+// A single global mutex guards a small bounded vector of jobs (matches
+// Executor's own single-mutex style — job volume is low, single-user tool,
+// no need for finer-grained locking). Jobs are in-memory only; they don't
+// need to survive a ReaClaw/REAPER restart any more than Executor's own
+// pending-command queue does.
+// ---------------------------------------------------------------------------
+
+struct RenderJob {
+    std::string id;
+    std::string status = "queued";  // queued | running | done | error | cancelled
+    std::string output_path;
+    std::string format;
+    int srate = 0;
+    int channels = 0;
+    nlohmann::json warnings = nlohmann::json::array();
+    double render_seconds = 0.0;
+    double project_length = 0.0;
+    double offline_ratio = 0.0;
+    std::string error;
+    std::string created_at;
+    std::string started_at;
+    std::string finished_at;
+    std::chrono::steady_clock::time_point start_tp{};
+    std::string agent_id;
+};
+
+std::mutex s_jobs_mutex;
+std::vector<std::shared_ptr<RenderJob>> s_jobs;  // creation order
+std::atomic<uint64_t> s_next_job_id{1};
+
+constexpr size_t kMaxJobs = 200;
+
+// Caller must hold s_jobs_mutex. Drops the oldest terminal (done/error/
+// cancelled) jobs once the registry exceeds kMaxJobs — queued/running jobs
+// are never evicted.
+void evict_old_jobs_locked() {
+    if (s_jobs.size() <= kMaxJobs)
+        return;
+    for (auto it = s_jobs.begin(); it != s_jobs.end() && s_jobs.size() > kMaxJobs;) {
+        const auto& st = (*it)->status;
+        if (st == "done" || st == "error" || st == "cancelled")
+            it = s_jobs.erase(it);
+        else
+            ++it;
+    }
+}
+
+// Caller must hold s_jobs_mutex.
+std::shared_ptr<RenderJob> find_job_locked(const std::string& id) {
+    for (auto& j : s_jobs) {
+        if (j->id == id)
+            return j;
+    }
+    return nullptr;
+}
+
+nlohmann::json job_to_json(const std::shared_ptr<RenderJob>& job) {
+    nlohmann::json j = {{"job_id", job->id},
+                        {"status", job->status},
+                        {"output_path", job->output_path},
+                        {"format", job->format},
+                        {"srate", job->srate},
+                        {"channels", job->channels},
+                        {"created_at", job->created_at}};
+    if (!job->warnings.empty())
+        j["warnings"] = job->warnings;
+    if (!job->started_at.empty())
+        j["started_at"] = job->started_at;
+    if (!job->finished_at.empty())
+        j["finished_at"] = job->finished_at;
+    if (job->status == "running") {
+        j["elapsed_seconds"] = std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                                             job->start_tp)
+                                       .count();
+    }
+    if (job->status == "done") {
+        j["render_seconds"] = job->render_seconds;
+        j["project_length"] = job->project_length;
+        j["offline_ratio"] = job->offline_ratio;
+    }
+    if (job->status == "error")
+        j["error"] = job->error;
+    return j;
+}
+
+// Runs the render on a detached worker thread so the HTTP thread returns
+// immediately. The render itself still goes through the normal
+// Executor::post path — this only moves the *waiting* off the HTTP thread;
+// see do_render's comment for why that does not make REAPER responsive to
+// other calls during the render.
+//
+// A job's status stays "queued" for as long as it sits in Executor's FIFO
+// queue — even if several async renders are queued back-to-back and their
+// worker threads have all already started — and only flips to "running"
+// once Executor::tick() actually dequeues it and starts do_render on
+// REAPER's main thread. That's the point where cancellation genuinely stops
+// being possible, so it's also where DELETE's "queued vs. running" check
+// needs to line up with reality.
+void run_render_job_async(std::shared_ptr<RenderJob> job, RenderParams params) {
+    std::thread([job, params]() {
+        auto t0 = std::chrono::steady_clock::now();
+        // Long timeout — async jobs exist specifically so a caller doesn't
+        // need to guess a project's render time up front.
+        auto result = Executor::post(
+                [job, params]() -> nlohmann::json {
+                    {
+                        std::lock_guard<std::mutex> lk(s_jobs_mutex);
+                        if (job->status == "cancelled")
+                            return {{"_cancelled", true}};
+                        job->status = "running";
+                        job->started_at = now_iso();
+                        job->start_tp = std::chrono::steady_clock::now();
+                    }
+                    return do_render(params);
+                },
+                3600);
+        auto t1 = std::chrono::steady_clock::now();
+        double render_secs = std::chrono::duration<double>(t1 - t0).count();
+
+        std::lock_guard<std::mutex> lk(s_jobs_mutex);
+        if (job->status == "cancelled")
+            return;  // cancelled while queued; the lambda skipped the render
+        job->finished_at = now_iso();
+        if (result.contains("_timeout")) {
+            job->status = "error";
+            job->error = "Render timed out on main thread";
+        } else if (result.contains("_error")) {
+            job->status = "error";
+            job->error = result["_error"].get<std::string>();
+        } else {
+            job->status = "done";
+            job->render_seconds = render_secs;
+            job->project_length = result.value("project_length", 0.0);
+            job->offline_ratio = (render_secs > 0.001 && job->project_length > 0.0)
+                                         ? (job->project_length / render_secs)
+                                         : 0.0;
+        }
+    }).detach();
 }
 
 }  // namespace
@@ -261,19 +505,6 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
     Log::info("Render: " + output + " fmt=" + format + " srate=" + std::to_string(srate) +
               " ch=" + std::to_string(channels) + " bounds=" + bounds_str);
 
-    // Capture everything needed inside the lambda by value.
-    struct RenderParams {
-        std::string render_dir;
-        std::string render_pat;
-        std::string fmt_blob;
-        int bounds_flag_val;
-        int srate;
-        int channels;
-        bool custom_bounds;
-        double start_sec;
-        double end_sec;
-    };
-
     RenderParams params;
     params.render_dir = render_dir;
     params.render_pat = render_pat;
@@ -285,93 +516,39 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
     params.start_sec = start_sec;
     params.end_sec = end_sec;
 
+    // Issue #35 — async job path: return a job handle immediately instead of
+    // blocking the HTTP thread. Mirrors the `async` field already used by
+    // POST /execute/action.
+    if (body.value("async", false)) {
+        auto job = std::make_shared<RenderJob>();
+        job->id = "job_" + std::to_string(s_next_job_id.fetch_add(1));
+        job->output_path = output;
+        job->format = format;
+        job->srate = srate;
+        job->channels = channels;
+        job->warnings = warnings;
+        job->created_at = now_iso();
+        job->agent_id = agent_id(req);
+
+        {
+            std::lock_guard<std::mutex> lk(s_jobs_mutex);
+            s_jobs.push_back(job);
+            evict_old_jobs_locked();
+        }
+
+        run_render_job_async(job, params);
+
+        json_ok(res, {{"job_id", job->id}, {"status", "queued"}});
+        return;
+    }
+
     auto t0 = std::chrono::steady_clock::now();
 
     // Render must run on the main thread. Use a long timeout (300 s) because
-    // offline renders can exceed the default 5 s for large projects. The async
-    // job model (issue #35) will handle very long renders with a job handle.
+    // offline renders can exceed the default 5 s for large projects.
     auto result = Executor::post(
             [params]() -> nlohmann::json {
-                if (!GetSetProjectInfo || !GetSetProjectInfo_String || !Main_OnCommand ||
-                    !GetProjectLength) {
-                    return {{"_error",
-                             "Required REAPER API functions unavailable "
-                             "(GetSetProjectInfo / Main_OnCommand / GetProjectLength)"}};
-                }
-
-                // Save current render settings so they can be restored afterwards.
-                // Use large-enough fixed buffers — RENDER_FORMAT can be a long blob.
-                std::vector<char> old_file(4096, 0);
-                std::vector<char> old_pattern(1024, 0);
-                std::vector<char> old_format(8192, 0);
-                double old_boundsflag = 0, old_srate = 0, old_channels = 0;
-                double old_loop_start = 0, old_loop_end = 0;
-
-                GetSetProjectInfo_String(nullptr, "RENDER_FILE", old_file.data(), false);
-                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", old_pattern.data(), false);
-                GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), false);
-                old_boundsflag = GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", 0, false);
-                old_srate = GetSetProjectInfo(nullptr, "RENDER_SRATE", 0, false);
-                old_channels = GetSetProjectInfo(nullptr, "RENDER_CHANNELS", 0, false);
-
-                if (params.custom_bounds && GetSet_LoopTimeRange2) {
-                    GetSet_LoopTimeRange2(
-                            nullptr, false, false, &old_loop_start, &old_loop_end, false);
-                }
-
-                // Apply render settings.
-                auto dir_buf = to_mutable(params.render_dir);
-                auto pat_buf = to_mutable(params.render_pat);
-
-                GetSetProjectInfo_String(nullptr, "RENDER_FILE", dir_buf.data(), true);
-                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", pat_buf.data(), true);
-                // Only override RENDER_FORMAT when we have a specific codec blob.
-                // For WAV (empty blob) we leave the project's current format intact
-                // so REAPER uses its built-in default rather than showing an error.
-                if (!params.fmt_blob.empty()) {
-                    auto fmt_buf = to_mutable(params.fmt_blob);
-                    GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", fmt_buf.data(), true);
-                }
-                GetSetProjectInfo(nullptr,
-                                  "RENDER_BOUNDSFLAG",
-                                  static_cast<double>(params.bounds_flag_val),
-                                  true);
-                GetSetProjectInfo(nullptr, "RENDER_SRATE", static_cast<double>(params.srate), true);
-                GetSetProjectInfo(
-                        nullptr, "RENDER_CHANNELS", static_cast<double>(params.channels), true);
-
-                // For custom bounds: set the project time selection and render
-                // with RENDER_BOUNDSFLAG=2 (time selection in REAPER's API).
-                if (params.custom_bounds && GetSet_LoopTimeRange2) {
-                    double s = params.start_sec;
-                    double e = params.end_sec;
-                    GetSet_LoopTimeRange2(nullptr, true, false, &s, &e, false);
-                    GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", 2.0, true);
-                }
-
-                double project_length = GetProjectLength(nullptr);
-
-                // Action 41824 = "File: Render project, using the most recent
-                // render settings". Runs synchronously on the main thread and blocks
-                // until the render file is fully written.
-                Main_OnCommand(41824, 0);
-
-                // Restore previous render settings.
-                GetSetProjectInfo_String(nullptr, "RENDER_FILE", old_file.data(), true);
-                GetSetProjectInfo_String(nullptr, "RENDER_PATTERN", old_pattern.data(), true);
-                if (!params.fmt_blob.empty()) {
-                    GetSetProjectInfo_String(nullptr, "RENDER_FORMAT", old_format.data(), true);
-                }
-                GetSetProjectInfo(nullptr, "RENDER_BOUNDSFLAG", old_boundsflag, true);
-                GetSetProjectInfo(nullptr, "RENDER_SRATE", old_srate, true);
-                GetSetProjectInfo(nullptr, "RENDER_CHANNELS", old_channels, true);
-
-                if (params.custom_bounds && GetSet_LoopTimeRange2) {
-                    GetSet_LoopTimeRange2(
-                            nullptr, true, false, &old_loop_start, &old_loop_end, false);
-                }
-
-                return {{"ok", true}, {"project_length", project_length}};
+                return do_render(params);
             },
             300);
 
@@ -398,6 +575,69 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
         resp["warnings"] = warnings;
 
     json_ok(res, resp);
+}
+
+// ---------------------------------------------------------------------------
+// GET /render/jobs/{id}
+// ---------------------------------------------------------------------------
+void handle_render_job_get(const httplib::Request& req, httplib::Response& res) {
+    auto it = req.path_params.find("id");
+    if (it == req.path_params.end()) {
+        json_error(res, 400, "Missing job id", "BAD_REQUEST");
+        return;
+    }
+
+    std::lock_guard<std::mutex> lk(s_jobs_mutex);
+    auto job = find_job_locked(it->second);
+    if (!job) {
+        json_error(res, 404, "Render job not found: " + it->second, "NOT_FOUND");
+        return;
+    }
+    json_ok(res, job_to_json(job));
+}
+
+// ---------------------------------------------------------------------------
+// GET /render/jobs
+// ---------------------------------------------------------------------------
+void handle_render_jobs_list(const httplib::Request&, httplib::Response& res) {
+    nlohmann::json jobs = nlohmann::json::array();
+    std::lock_guard<std::mutex> lk(s_jobs_mutex);
+    for (const auto& job : s_jobs)
+        jobs.push_back(job_to_json(job));
+    json_ok(res, {{"jobs", jobs}});
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /render/jobs/{id}
+// ---------------------------------------------------------------------------
+void handle_render_job_cancel(const httplib::Request& req, httplib::Response& res) {
+    auto it = req.path_params.find("id");
+    if (it == req.path_params.end()) {
+        json_error(res, 400, "Missing job id", "BAD_REQUEST");
+        return;
+    }
+
+    std::lock_guard<std::mutex> lk(s_jobs_mutex);
+    auto job = find_job_locked(it->second);
+    if (!job) {
+        json_error(res, 404, "Render job not found: " + it->second, "NOT_FOUND");
+        return;
+    }
+    if (job->status == "queued") {
+        job->status = "cancelled";
+        job->finished_at = now_iso();
+        json_ok(res, job_to_json(job));
+        return;
+    }
+    if (job->status == "running") {
+        json_error(res,
+                   409,
+                   "Render job is already in progress; REAPER's offline render has no safe "
+                   "abort — wait for it to finish",
+                   "CONFLICT");
+        return;
+    }
+    json_error(res, 409, "Render job already finished (status: " + job->status + ")", "CONFLICT");
 }
 
 }  // namespace ReaClaw::Handlers
