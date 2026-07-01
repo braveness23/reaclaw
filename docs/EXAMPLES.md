@@ -507,3 +507,26 @@ curl -sk -X POST "$BASE/state/tracks/0" -H "$AUTH" \
 # → [{ "code": "icon_not_found", "severity": "warn",
 #      "message": "Icon 'typo_icon.png' was not found under Data/track_icons; ..." }]
 ```
+
+## Recovery: Wedged Main Thread (#77)
+
+### Restart REAPER in place, saving first
+
+```bash
+curl -sk -X POST "$BASE/reaper/restart" -H "$AUTH" -d '{"save_project": true}'
+# → { "restarting": true, "saved": true, "pid": 12345,
+#     "restart_command": ["/path/to/reaper", "-nosplash", ...] }
+```
+
+Poll `GET /health` until it responds again — a fresh instance reports
+`uptime_seconds` near 0:
+
+```bash
+until curl -sk "$BASE/health" -H "$AUTH" | jq -e '.status == "ok"' >/dev/null 2>&1; do
+  sleep 1
+done
+```
+
+Beyond `POST /queue/flush`, which only drains the pending backlog — use
+`/reaper/restart` when a call is stuck *mid-execute* and nothing responds at
+all, even to a flush.
