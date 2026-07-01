@@ -516,12 +516,16 @@ The epic makes it first-class.
       that REAPER pumps no message loop during an offline render, documented
       as an honest v1 limitation. See `ReaClaw_TECH_DECISIONS.md` §23.
 
-**CI / pipeline integration ([#36](https://github.com/braveness23/reaclaw/issues/36)).**
-- [ ] E2E smoke test: build a tiny composition → offline render → assert valid +
-      non-silent (`master.peak_db > -150`, ffprobe duration, volumedetect). Fast,
-      no realtime, no display — productionizes `demos/`.
-- [ ] (stretch) release-triggered showcase render / trailer as a build artifact on
-      the self-hosted aarch64 runner (`arc-runner-reaclaw`).
+**CI / pipeline integration ([#36](https://github.com/braveness23/reaclaw/issues/36)). Done.**
+- [x] E2E smoke test: `demos/scripts/ci_smoke_test.py` builds a tiny composition →
+      offline render → asserts non-silent via `GET /analysis/file` (no ffmpeg
+      dependency). Wired into `.github/workflows/ci.yml` as `e2e-render-smoke`,
+      running on every PR against a throwaway, unlicensed REAPER install under
+      Xvfb + dummy JACK on the self-hosted runner. Confirmed REAPER's evaluation
+      mode renders correctly with no blocking license/nag dialog — no license
+      file needed in CI. Closes Epic #32.
+- [ ] (stretch, not done) release-triggered showcase render / trailer as a build
+      artifact.
 
 ---
 

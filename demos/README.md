@@ -5,6 +5,22 @@ ReaClaw driving REAPER, on the aarch64 Raspberry Pi test rig.
 
 ---
 
+## CI smoke test (headless, no display, no video)
+
+`scripts/ci_smoke_test.py` is the automated counterpart to the trailer scripts
+below — issue #36's "productionize `demos/`" — and runs on every PR
+(`.github/workflows/ci.yml`'s `e2e-render-smoke` job). It builds a tiny
+composition via the API, renders it offline, and asserts the output is
+non-silent via `GET /analysis/file` — no ffmpeg, no GUI, no realtime audio.
+Run it locally against any running ReaClaw instance:
+
+```bash
+REACLAW_BASE=https://127.0.0.1:9091 REACLAW_KEY=sk_change_me \
+  python3 demos/scripts/ci_smoke_test.py
+```
+
+---
+
 ## Short demo: track icons (no audio)
 
 ![24 tracks, each with a factory icon and colour-coded folders](icons_demo.png)

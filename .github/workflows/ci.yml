@@ -15,6 +15,10 @@ env:
   HTTPLIB_URL:    https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.41.0/httplib.h
   REAPER_SDK_URL: https://github.com/justinfrankel/reaper-sdk.git
   WDL_COMMIT:     6aaf30c
+  # Pinned REAPER *binary* (distinct from the header-only SDK above) — only
+  # used to actually run the extension for the E2E smoke test below. Pinned
+  # rather than "latest" so a new REAPER release can't silently break CI.
+  REAPER_VERSION: "774"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -68,6 +72,108 @@ jobs:
         with:
           name: reaper_reaclaw-linux-x86_64
           path: reaper_reaclaw-linux-x86_64.so
+
+  # ---------------------------------------------------------------------------
+  # E2E: headless offline render smoke test (issue #36, part of Epic #32).
+  #
+  # Installs a throwaway REAPER (unlicensed — REAPER's evaluation mode is
+  # fully functional, no license needed for offline rendering; confirmed live
+  # that a completely fresh, never-before-run REAPER install renders
+  # correctly with no blocking eval/nag dialog when launched with -nosplash)
+  # under Xvfb + a dummy JACK backend, loads the just-built extension, and
+  # runs demos/scripts/ci_smoke_test.py: build a tiny composition via the API
+  # -> POST /render -> assert the output is non-silent via ReaClaw's own
+  # GET /analysis/file (no ffmpeg dependency). The render succeeding for real
+  # exercises the executor, the REAPER API bridge, and the audio path against
+  # an actual REAPER — the strongest end-to-end test available.
+  # ---------------------------------------------------------------------------
+  e2e-render-smoke:
+    name: E2E render smoke test
+    needs: [build-linux]
+    runs-on: arc-runner-reaclaw
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download built extension
+        uses: actions/download-artifact@v4
+        with:
+          name: reaper_reaclaw-linux-x86_64
+          path: dist/
+
+      - name: Install REAPER + headless X/audio deps
+        run: |
+          echo "jackd jackd/tweak_rt_limits boolean false" | sudo debconf-set-selections
+          sudo apt-get update -y
+          # xvfb/jackd2 host the headless display + dummy audio backend;
+          # the rest are REAPER's own runtime shared-lib deps (its Linux
+          # build links against X11/GL/ALSA even for offline, display-less
+          # rendering) — confirmed missing live: REAPER failed to load
+          # libSwell.so with "libXi.so.6: cannot open shared object file"
+          # on a bare runner image that only has the build toolchain.
+          sudo apt-get install -y --no-install-recommends \
+            xvfb jackd2 python3 \
+            libx11-6 libxi6 libxext6 libxcb1 libfontconfig1 libfreetype6 \
+            libgl1 libasound2t64 libgtk-3-0t64 libpulse0
+          curl -fsSL "https://www.reaper.fm/files/7.x/reaper${REAPER_VERSION}_linux_x86_64.tar.xz" -o /tmp/reaper.tar.xz
+          tar -xf /tmp/reaper.tar.xz -C /tmp
+          /tmp/reaper_linux_x86_64/install-reaper.sh --install "$HOME/opt" --quiet
+
+      - name: Configure ReaClaw plugin
+        run: |
+          mkdir -p ~/.config/REAPER/UserPlugins ~/.config/REAPER/reaclaw
+          cp dist/reaper_reaclaw-linux-x86_64.so ~/.config/REAPER/UserPlugins/reaper_reaclaw.so
+          cat > ~/.config/REAPER/reaclaw/config.json <<'JSON'
+          {
+            "server":  { "host": "127.0.0.1", "port": 9091, "thread_pool_size": 2 },
+            "tls":     { "enabled": true, "generate_if_missing": true, "cert_file": "", "key_file": "" },
+            "auth":    { "type": "api_key", "key": "sk_ci_smoke_test" },
+            "database": { "path": "" },
+            "script_security": { "validate_syntax": true, "log_all_executions": true, "max_script_size_kb": 512 },
+            "logging": { "level": "warn", "file": "/tmp/reaclaw_ci.log", "format": "text" }
+          }
+          JSON
+          # Pre-seed the "last version check" timestamp so REAPER believes it
+          # just checked and skips its own outbound update check on first
+          # launch. Confirmed live (via an instrumented Executor::tick() build
+          # on a throwaway debug pod) that skipping this pre-seed lets REAPER
+          # pop a modal "New Version Notification" dialog on a truly virgin
+          # config — with no window manager to ever dismiss it, that dialog's
+          # modal loop blocks REAPER's main thread forever, starving the timer
+          # callback that drives every Executor::post-backed endpoint. A
+          # long-lived local install never hits this because its config
+          # already has a real cached check timestamp.
+          printf '[verchk]\nlastt=%s\n' "$(date +%s)" > ~/.config/REAPER/reaper.ini
+
+      - name: Start Xvfb + dummy JACK + REAPER
+        run: |
+          Xvfb :99 -screen 0 1280x800x24 -ac +extension RANDR > /tmp/xvfb.log 2>&1 &
+          disown
+          jackd -d dummy -r 48000 > /tmp/jackd.log 2>&1 &
+          disown
+          sleep 2
+          DISPLAY=:99 XAUTHORITY=/dev/null "$HOME/opt/REAPER/reaper" -nosplash -newinst \
+            -splashlog /tmp/reaper_splash.log > /tmp/reaper_stdout.log 2>&1 &
+          disown
+
+      - name: Run smoke test
+        env:
+          REACLAW_BASE: https://127.0.0.1:9091
+          REACLAW_KEY: sk_ci_smoke_test
+        run: python3 demos/scripts/ci_smoke_test.py
+
+      - name: Upload logs for debugging
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-test-logs
+          path: |
+            /tmp/reaclaw_ci.log
+            /tmp/reaper_splash.log
+            /tmp/reaper_stdout.log
+            /tmp/xvfb.log
+            /tmp/jackd.log
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ---------------------------------------------------------------------------
   # clang-format check

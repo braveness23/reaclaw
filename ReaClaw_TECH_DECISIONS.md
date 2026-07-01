@@ -407,6 +407,37 @@ a `composition spec → mastered file` function — and that production path is
 API contracts are designed when Epic #32 is picked up (children #33–#36); multi-
 project handling for `/project/open` touches the deferred Tier-C area (§16).
 
+**CI E2E render smoke test (#36) needs no REAPER license.** Confirmed live: a
+completely fresh, never-before-run REAPER install (`~/opt/REAPER` inside a
+throwaway CI container) launches cleanly with `-nosplash` and renders correctly
+with no blocking evaluation/nag dialog — REAPER's eval mode is fully functional
+for offline rendering, and an ephemeral CI container never accumulates the
+30/60-day eval clock a persistent install would. This is why the smoke test
+(`.github/workflows/ci.yml`'s `e2e-render-smoke` job, `demos/scripts/
+ci_smoke_test.py`) downloads and installs REAPER fresh per run rather than
+needing Dave's personal license baked into the runner image — avoiding both a
+licensing concern and a shared-runner-image change.
+
+**CI E2E smoke test needs `reaper.ini`'s `[verchk]` timestamp pre-seeded, or
+REAPER's main thread wedges permanently on first launch.** Root-caused via an
+instrumented `Executor::tick()` build (a temporary log line on every tick,
+compiled and run on a throwaway debug pod against the real self-hosted
+runner's image): `plugin_register("timer", ...)` succeeds and `tick()` fires
+normally for the first few seconds, then **stops forever** — not slowdown,
+complete silence — even with zero commands queued. `xwininfo` showed the
+cause: on a truly virgin config with real internet egress, REAPER's own
+outbound "check for updates" call succeeds and pops a modal "REAPER New
+Version Notification" window. With no window manager ever running under
+Xvfb, nothing dismisses it, and that dialog's modal message loop blocks
+REAPER's main thread — and therefore the "timer" plugin hook that drives
+`Executor::tick()` — indefinitely. Confirmed by dismissing the window by hand
+via `xdotool`: `tick()` resumed immediately. A long-lived local install never
+hits this because its `reaper.ini` already has a real cached check timestamp
+from prior actual use — only a genuinely first-ever launch with working
+network access triggers it. Fix: write `~/.config/REAPER/reaper.ini` with
+`[verchk]\nlastt=<now>` *before* REAPER's first launch, so it believes it
+just checked and skips the network call (and the dialog) entirely.
+
 ---
 
 ## 20. Dependency Policy: Deliberate & Tiered (issue #37)
