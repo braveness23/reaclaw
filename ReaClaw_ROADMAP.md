@@ -52,9 +52,9 @@ What remains is everything below.
 | 3 | Audio perception ("hears itself") ✅ *done (v1.5.0); onset/density deferred* | Perception | IDEAS Q1, Q3 | [#18](https://github.com/braveness23/reaclaw/issues/18) |
 | 4 | Visual perception & musical probes ✅ *done (v1.6.0); A/B diff lands with the snapshot layer* | Perception | IDEAS Q4, Q5, Q7 | [#19](https://github.com/braveness23/reaclaw/issues/19) |
 | 5 | Learned suggestions (the moat) ✅ *done; pairwise layer + snapshot/diff. Heavier mining deferred* | Learning | IDEAS Q8 | [#20](https://github.com/braveness23/reaclaw/issues/20) |
-| 6 | Programmatic production — headless offline render engine 🆕 *PoC proven; not yet built* | Production | IDEAS Q9 | [#32](https://github.com/braveness23/reaclaw/issues/32) |
+| 6 | Programmatic production — headless offline render engine ✅ *done (v1.13.0–v1.14.0): render, project lifecycle, async jobs, CI E2E* | Production | IDEAS Q9 | [#32](https://github.com/braveness23/reaclaw/issues/32) |
 
-**The first five roadmap epics (control + perception) are complete.** The shared
+**All six roadmap epics are complete.** The shared
 **snapshot / state-diff layer** built as #20's prep also retro-unlocks the one #19
 sliver (A/B visual diff).
 
@@ -189,9 +189,12 @@ production never needs sound-pressure waves until a listener plays the file.
 
 ## 5. Open questions (kept implementation-agnostic)
 
-- **Long-render UX.** When the analyzed/visualized/rendered material is long, feedback
-  can't be instant — wait? poll? fast-path short clips? (Epic 3/4, and now **owned by
-  Epic 6's async render-job model, [#35](https://github.com/braveness23/reaclaw/issues/35)**.)
+- **Long-render UX. ✅ Resolved (v1.14.0).** `async: true` on `POST /render` +
+  `GET/DELETE /render/jobs/{id}` ([#35](https://github.com/braveness23/reaclaw/issues/35)) —
+  explicit caller-chosen flag, not an auto-inline heuristic. Does not make other
+  endpoints stay responsive during an active render (documented limitation,
+  `ReaClaw_TECH_DECISIONS.md` §23) — chunked rendering would be needed for that
+  and is deferred until it's a real pain point.
 - **Probe modeling.** Is a "probe" a first-class concept or a flavor of the existing action
   machinery? (Epic 4.)
 - **Where musical attributes live.** Are key/tempo/pitch part of the general analysis
