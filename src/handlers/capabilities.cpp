@@ -265,6 +265,20 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
              {{"run", "POST /execute/action {id}"},
               {"sequence", "POST /execute/sequence {steps:[...]}"},
               {"search", "GET /catalog/search?q=  (add &section=midi_editor for MIDI actions)"},
+              {"semantic_search",
+               "GET /catalog/search?q=&semantic=true — embedding-ranked (Ollama, local, "
+               "loopback-only), opt-in twice over: config.semantic_search.enabled must be "
+               "true AND the request must pass semantic=true. Off by default; silently "
+               "degrades to keyword search on any failure (Ollama unreachable, cache "
+               "build failed). See ReaClaw_TECH_DECISIONS.md §25."},
+              {"result_flags",
+               "each result carries interactive (opens a modal dialog), mutates_state "
+               "(vs. a View:/Options: UI-only toggle), requires_selection (name-based "
+               "heuristics, not guarantees)"},
+              {"recipes",
+               "GET /recipes[/{id}] — vetted, structured snippets (folder builds, "
+               "search-then-run, Lua register, FX/routing, screenshot verify) mirroring "
+               "skill/reaclaw/SKILL.md, for callers without the Skill loaded"},
               {"note", "search the catalog before generating a script"}}},
             {"chunk",
              {{"read", "GET /state/chunk?target=track|item|envelope&index=N[&envelope=M]"},

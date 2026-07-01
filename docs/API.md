@@ -155,24 +155,69 @@ Query params: `limit` (default 100), `offset` (default 0)
 
 ### GET /catalog/search?q=\<query\>
 
-Full-text search (SQLite FTS5) across action names and categories.
+Full-text search (SQLite FTS5) across action names and categories by default; optional
+embedding-based **semantic** ranking (issue #10) — see below.
 
-Query params: `q` (required), `limit` (default 20), `category`, `section=midi_editor`.
+Query params: `q` (required), `limit` (default 20), `category`, `section=midi_editor`,
+`semantic=true` (opt-in, see below).
 
-**Synonym expansion (strict-first):** the literal query runs first, so precise queries keep
-their precision. On a miss, the query is widened through a curated synonym map (e.g. "folder
-depth" → "indent", "bounce" → "render", "colour" → "color") — AND-of-synonym-groups first,
-then OR-of-all as a last resort. The response echoes `matched` (the FTS expression actually
-used) and `expanded` (whether widening kicked in).
+**Synonym expansion (strict-first, keyword mode):** the literal query runs first, so precise
+queries keep their precision. On a miss, the query is widened through a curated synonym map
+(e.g. "folder depth" → "indent", "bounce" → "render", "colour" → "color") — AND-of-synonym-
+groups first, then OR-of-all as a last resort. The response echoes `matched` (the FTS
+expression actually used) and `expanded` (whether widening kicked in). Every response also
+carries `mode` (`"keyword"` or `"semantic"`) so the caller knows which path served it.
 
-Each action carries an `interactive` flag — `true` when it opens a modal dialog (ellipsis/
-prompt/known-modal id), so a headless agent can filter out actions that would hang on a dialog.
+Each action carries three heuristic flags, name/category-based (not guarantees):
+- `interactive` — opens a modal dialog (ellipsis/prompt/known-modal id); a headless agent
+  should avoid these or route them through a structured verb instead.
+- `mutates_state` — `false` only for REAPER's own `View:`/`Options:`-prefixed UI/session-only
+  toggles; everything else defaults `true` (the safer assumption).
+- `requires_selection` — `true` when the name says "selected" (REAPER's own convention for
+  selection-dependent actions).
 
 ```json
-{ "query": "set folder depth", "matched": "set OR folder OR indent OR depth …",
+{ "query": "set folder depth", "mode": "keyword", "matched": "set OR folder OR indent OR depth …",
   "expanded": true, "total": 3,
-  "actions": [ { "id": 53609, "name": "SWS: Indent selected track(s)", "interactive": false } ] }
+  "actions": [ { "id": 53609, "name": "SWS: Indent selected track(s)", "interactive": false,
+                 "mutates_state": true, "requires_selection": true } ] }
 ```
+
+**Semantic search (opt-in, off by default).** Pass `semantic=true` to rank by an embedding
+model instead of keywords — catches phrasing the synonym map misses (e.g. "make the drums
+quieter" → volume actions). Requires **both**:
+1. `semantic_search.enabled: true` in `config.json` (off by default — see below).
+2. `semantic=true` on the request.
+
+If either is off, or the semantic path fails for any reason (Ollama unreachable, embedding
+cache build failed), the request **silently falls back to keyword search** — never an error.
+Results carry a `score` (cosine similarity, 0–1) instead of `matched`/`expanded`:
+
+```json
+{ "query": "make the drums quieter", "mode": "semantic", "total": 1,
+  "actions": [ { "id": 40308, "name": "Track: Nudge volume for master track down",
+                 "score": 0.81, "interactive": false, "mutates_state": true,
+                 "requires_selection": false } ] }
+```
+
+**Config** (`config.json`, all optional, shown with defaults):
+
+```json
+{ "semantic_search": { "enabled": false, "ollama_url": "http://127.0.0.1:11434", "model": "nomic-embed-text" } }
+```
+
+`ollama_url` must resolve to loopback (`127.0.0.1`/`localhost`/`::1`) — a non-loopback URL is
+rejected instantly (no network attempt), falling back to keyword. See
+`ReaClaw_TECH_DECISIONS.md` §25 for why this is a deliberate, narrow exception to ReaClaw's
+"no network egress" stance (§11): an embedding model, not a generative one, called only to
+rank ReaClaw's own catalog — the same call the MCP client (`mcp/`) already makes, now
+available without it.
+
+The catalog's embeddings are built lazily on first semantic search and cached (keyed by
+catalog size + model, invalidated automatically on a catalog rebuild or model change) — the
+first call after a cache miss embeds every action name and can take a while (minutes, on a
+CPU-only local Ollama, for the ~6700-action main catalog); subsequent calls are fast
+(sub-second, only the query itself needs embedding).
 
 ### GET /catalog/{id}
 
@@ -186,6 +231,35 @@ Single action by numeric ID. Returns 404 if not found.
 
 ```json
 { "categories": [ { "name": "Track", "count": 4200 }, ... ] }
+```
+
+---
+
+### GET /recipes · GET /recipes/{id}
+
+Vetted, structured recipes (issue #10) — the same snippets curated in
+`skill/reaclaw/SKILL.md`, exposed as JSON so a plain REST/MCP client without the Skill
+loaded still gets them: folder-group session build, search-then-run an action, register
++ run a Lua script, add + tune an FX, add a send, and the screenshot-verify technique.
+
+`GET /recipes` lists all; `GET /recipes/{id}` fetches one (404 if unknown). Each recipe is
+`{id, title, description, steps: [...], notes?}`; each step is either an HTTP call
+(`{description, method, path, body?}`) or a shell command (`{description, command}` — only
+the screenshot recipe, which needs `ffmpeg`).
+
+```json
+{
+  "id": "search_then_run_action",
+  "title": "Search the action catalog, then run what you find",
+  "description": "For anything without a structured verb: search first ...",
+  "steps": [
+    { "description": "Search for a matching action", "method": "GET",
+      "path": "/catalog/search?q=mute%20drums" },
+    { "description": "Run the action you picked from the results", "method": "POST",
+      "path": "/execute/action", "body": { "id": 40702 } }
+  ],
+  "notes": "Response includes action_name for confirmation. ..."
+}
 ```
 
 ---

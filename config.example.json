@@ -32,6 +32,22 @@
 
   "logging": {
     "level": "info",
-    "file": ""
+    "file": "",
+    "format": "text"
+  },
+
+  "learning": {
+    "_comment": "Epic #20 — local-first, opt-in correction mining. Off by default; nothing is recorded or leaves the machine unless enabled.",
+    "enabled": false,
+    "window_seconds": 180,
+    "min_support": 3,
+    "min_confidence": 0.3
+  },
+
+  "semantic_search": {
+    "_comment": "Issue #10 — opt-in, loopback-only embedding-based catalog search via a local Ollama instance. Off by default; see ReaClaw_TECH_DECISIONS.md §25.",
+    "enabled": false,
+    "ollama_url": "http://127.0.0.1:11434",
+    "model": "nomic-embed-text"
   }
 }
