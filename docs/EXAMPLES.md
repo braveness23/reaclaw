@@ -530,3 +530,29 @@ done
 Beyond `POST /queue/flush`, which only drains the pending backlog — use
 `/reaper/restart` when a call is stuck *mid-execute* and nothing responds at
 all, even to a flush.
+
+## Async Render Job (#35)
+
+### Fire a render without blocking the HTTP connection
+
+```bash
+curl -sk -X POST "$BASE/render" -H "$AUTH" \
+  -d '{"output": "/tmp/mix.wav", "async": true}'
+# → { "job_id": "job_1", "status": "queued" }
+```
+
+Poll it until it finishes:
+
+```bash
+until curl -sk "$BASE/render/jobs/job_1" -H "$AUTH" | jq -e '.status != "queued" and .status != "running"' >/dev/null 2>&1; do
+  sleep 1
+done
+curl -sk "$BASE/render/jobs/job_1" -H "$AUTH" | jq .
+# → { "job_id": "job_1", "status": "done", "render_seconds": 4.9, ... }
+```
+
+Solves the HTTP-timeout problem for long renders, not cross-endpoint
+starvation — REAPER's main thread pumps no message loop at all during an
+offline render, so other `Executor`-backed endpoints still queue up (and can
+still time out) while a render is actually running. `DELETE
+/render/jobs/{id}` cancels a still-`queued` job (`409` once it's `running`).

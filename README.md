@@ -254,11 +254,14 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.14.0** — `POST /reaper/restart` for full main-thread-wedge
-recovery: kills and relaunches the REAPER process ReaClaw is embedded in,
-replaying its own current argv/environment byte-for-byte so DISPLAY/XAUTHORITY
-stay exactly what's already working, with a best-effort in-place project save
-first. Also fixes a silent no-op in in-place project saves. See the
+Latest release: **v1.14.0** — async render jobs: `POST /render` gains an
+`async: true` field, returning `{job_id, status: "queued"}` immediately instead
+of blocking the HTTP connection for the render's duration. `GET
+/render/jobs/{id}` polls status/result, `GET /render/jobs` lists tracked jobs,
+`DELETE /render/jobs/{id}` cancels a not-yet-started job (409 if already
+running). Solves the HTTP-timeout/long-poll problem for long renders — honestly
+does **not** fix cross-endpoint starvation, since REAPER's main thread pumps no
+message loop at all during an offline render. See the
 [CHANGELOG](CHANGELOG.md) for the full story.
 
 | Phase | Scope | Tag |
