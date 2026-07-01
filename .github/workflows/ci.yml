@@ -8,13 +8,20 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Pinned vendor versions — update here and in vendor/README.md together
+# Cancel superseded runs on the same branch/PR — a quick follow-up push
+# shouldn't burn the (capacity-limited) self-hosted runner pool finishing a
+# now-stale commit. Each tag gets its own ref, so releases are never cancelled
+# by another tag's run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Vendor header/SDK versions (SQLite, json.hpp, httplib, reaper-sdk, WDL) are
+# pinned in scripts/fetch-vendor-deps.sh, not here — that script is the single
+# source of truth for those versions (see the "Fetch vendor deps" step below,
+# and its cache key). Duplicating the pins in both places was the actual
+# footgun; don't reintroduce it.
 env:
-  SQLITE_ZIP_URL: https://www.sqlite.org/2024/sqlite-amalgamation-3470200.zip
-  JSON_HPP_URL:   https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp
-  HTTPLIB_URL:    https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.41.0/httplib.h
-  REAPER_SDK_URL: https://github.com/justinfrankel/reaper-sdk.git
-  WDL_COMMIT:     6aaf30c
   # Pinned REAPER *binary* (distinct from the header-only SDK above) — only
   # used to actually run the extension for the E2E smoke test below. Pinned
   # rather than "latest" so a new REAPER release can't silently break CI.
@@ -37,32 +44,46 @@ jobs:
   build-linux:
     name: Build (Linux, GCC)
     runs-on: arc-runner-reaclaw
+    env:
+      # Absolute path, not `~/.ccache` — GitHub Actions `env:` doesn't do
+      # shell tilde-expansion, so a literal `~` would silently break ccache.
+      CCACHE_DIR: /home/runner/.ccache
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch vendor deps
-        run: |
-          curl -fsSL $HTTPLIB_URL   -o vendor/httplib.h
-          curl -fsSL $JSON_HPP_URL  -o vendor/json.hpp
-          curl -fsSL $SQLITE_ZIP_URL -o /tmp/sqlite.zip
-          unzip -j /tmp/sqlite.zip "*/sqlite3.c" "*/sqlite3.h" -d vendor/
-          git clone --depth=1 $REAPER_SDK_URL vendor/reaper-sdk
-          cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
-          mkdir -p /tmp/wdl-dl
-          curl -fsSL https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz | tar xz -C /tmp/wdl-dl
-          WDL_DIR=$(ls /tmp/wdl-dl | head -1)
-          mkdir -p $GITHUB_WORKSPACE/vendor/WDL
-          cp -r /tmp/wdl-dl/$WDL_DIR/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
-          rm -rf /tmp/wdl-dl
+      # Keyed on the fetch script's own hash: the script is the single source
+      # of truth for vendor versions, so a cache hit is only ever wrong for
+      # the unpinned `git clone` of reaper-sdk's default branch (a pre-existing
+      # gap, not introduced by caching — see fetch-vendor-deps.sh).
+      - name: Cache vendor deps
+        id: cache-vendor
+        uses: actions/cache@v4
+        with:
+          path: vendor/
+          key: vendor-${{ hashFiles('scripts/fetch-vendor-deps.sh') }}
 
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Fetch vendor deps
+        if: steps.cache-vendor.outputs.cache-hit != 'true'
+        run: bash scripts/fetch-vendor-deps.sh
+
+      # Persists gcc's object cache across runs on the same branch so an
+      # incremental change (the common case) doesn't recompile the whole
+      # extension. scripts/checks/build.sh auto-detects ccache when present
+      # (it's baked into the runner image) and no-ops otherwise.
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ github.ref }}-
+            ccache-
 
       - name: Build
-        run: cmake --build build --config Release -j$(nproc)
+        run: bash scripts/checks/build.sh
 
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: bash scripts/checks/test.sh
 
       - name: Rename artifact
         run: cp build/reaper_reaclaw.so reaper_reaclaw-linux-x86_64.so
@@ -100,20 +121,15 @@ jobs:
           name: reaper_reaclaw-linux-x86_64
           path: dist/
 
-      - name: Install REAPER + headless X/audio deps
+      # Xvfb/jackd2/python3 and REAPER's runtime shared-lib deps (X11/GL/ALSA —
+      # confirmed missing live: REAPER failed to load libSwell.so with
+      # "libXi.so.6: cannot open shared object file" on a bare toolchain image)
+      # are baked into the runner image (.github/runner-image/Dockerfile) so
+      # this job doesn't pay the apt-get cost every run. Only the REAPER
+      # *binary* itself is fetched per-run, since REAPER_VERSION is pinned
+      # here rather than in the Dockerfile (one place for that version, not two).
+      - name: Install REAPER
         run: |
-          echo "jackd jackd/tweak_rt_limits boolean false" | sudo debconf-set-selections
-          sudo apt-get update -y
-          # xvfb/jackd2 host the headless display + dummy audio backend;
-          # the rest are REAPER's own runtime shared-lib deps (its Linux
-          # build links against X11/GL/ALSA even for offline, display-less
-          # rendering) — confirmed missing live: REAPER failed to load
-          # libSwell.so with "libXi.so.6: cannot open shared object file"
-          # on a bare runner image that only has the build toolchain.
-          sudo apt-get install -y --no-install-recommends \
-            xvfb jackd2 python3 \
-            libx11-6 libxi6 libxext6 libxcb1 libfontconfig1 libfreetype6 \
-            libgl1 libasound2t64 libgtk-3-0t64 libpulse0
           curl -fsSL "https://www.reaper.fm/files/7.x/reaper${REAPER_VERSION}_linux_x86_64.tar.xz" -o /tmp/reaper.tar.xz
           tar -xf /tmp/reaper.tar.xz -C /tmp
           /tmp/reaper_linux_x86_64/install-reaper.sh --install "$HOME/opt" --quiet
@@ -185,9 +201,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check formatting
-        run: |
-          find src -name "*.cpp" -o -name "*.h" | \
-            xargs clang-format-18 --dry-run --Werror
+        run: bash scripts/checks/format.sh --check
 
   # ---------------------------------------------------------------------------
   # Release — runs only on version tags; waits for the Linux build to pass
