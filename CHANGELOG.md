@@ -10,6 +10,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **`GET /snapshot/diff/visualize`** (#53) — the A/B visual diff. Paired
+  waveform/spectrum/loudness visualizations of a snapshot's audio target vs.
+  current (or another snapshot), plus a digest delta. `POST /snapshot` gains
+  an optional `audio: {item|file}` field to freeze an audio reference at
+  capture time. Reuses the same decode+FFT pipeline as
+  `GET /analysis/file/visualize` and the same `jsondiff` as `/snapshot/diff`.
 - **CI: headless offline-render E2E smoke test** (#36) — installs a throwaway,
   unlicensed REAPER under Xvfb + a dummy JACK backend, loads the just-built
   extension, builds a tiny composition via the API, renders it, and asserts

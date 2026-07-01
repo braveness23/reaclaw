@@ -328,11 +328,12 @@ heavier feedback opt-in (`measures=` filter, `start`/`end` windowing).
   probes are a `/analysis/.../probe` sub-resource returning tagged data. A
   registerable, user-authored probe *library* (the "compounding" aspiration) is
   deferred until there's demand — building the registry now would be speculative.
-- **A/B visual diff is deferred to the shared snapshot/state-diff layer.** Both
-  Epic #19's A/B diff and Epic #20's correction-mining need session snapshots over
-  time; that layer is built once and shared (ROADMAP §4), so the diff lands with
-  it rather than inside #19. #19 ships visualization, screenshot ergonomics, and
-  probes; the diff is the one carried sliver.
+- **A/B visual diff is deferred to the shared snapshot/state-diff layer. ✅ Shipped
+  (issue #53, §24).** Both Epic #19's A/B diff and Epic #20's correction-mining
+  needed session snapshots over time; that layer was built once and shared
+  (ROADMAP §4), so the diff landed with it rather than inside #19. #19 shipped
+  visualization, screenshot ergonomics, and probes; the diff was the one carried
+  sliver — now done via `GET /snapshot/diff/visualize`.
 
 ---
 
@@ -596,6 +597,50 @@ first action and skips `Main_OnCommand` entirely — never touches REAPER's rend
 `DELETE` on a `"running"` job returns `409` — REAPER's SDK offers no safe way to abort an
 in-flight offline render (no cancel API, no way to synthesize the render dialog's Cancel
 button non-invasively). This is a real, documented v1 limitation, not an oversight.
+
+---
+
+## 24. A/B Visual Diff: frozen file reference, not a stored digest (issue #53)
+
+**Decision:** `POST /snapshot` gains an optional `audio: {item: <index>} | {file: <path>}`
+field (plus `start`/`end`). At capture time, an `item` reference is resolved to its **active
+take's source file path** and frozen into the snapshot's JSON as `audio: {item, file, start,
+end}` — not stored as a digest or PNG. `GET /snapshot/diff/visualize?from=&to=&type=` then
+reuses the exact same decode+FFT pipeline as `GET /analysis/file/visualize` on both sides
+(the `from` snapshot's frozen file, and the `to` side — current or another snapshot) and
+diffs the two digests with the same `jsondiff` used by `/snapshot/diff`.
+
+**Why a frozen file path, not a frozen digest/PNG.** The obvious alternative — compute and
+store the digest (or even the PNG) at snapshot time — was rejected: it would require
+decoding audio on every `POST /snapshot` (expensive, and wasted for the common case of a
+snapshot nobody ever diffs), and would need three digests stored per snapshot (one per
+visualization type) to support "paired visualizations (waveform/spectrum/loudness)" without
+guessing which type will be requested later. A frozen **file path** costs nothing to store
+and defers the (cheap, ~ms) decode to diff time, exactly once, for whichever type is asked
+for — and it's the literal reuse the issue asked for ("reuse the existing
+`/analysis/*/visualize` machinery"), not a parallel storage format.
+
+**Why `item` is re-resolved live for `to=current` but `from` never is.** The `from` side is
+explicitly historical — it always decodes the frozen path exactly as captured. The `to` side,
+when `current`/omitted and the `from` audio was `item`-based, re-resolves that **same item
+index** at diff time (a fresh `GetMediaItemTake_Source` lookup) — so if the item's take was
+swapped to a different file since the snapshot, the diff picks that up. A `file`-based audio
+target (no `item`) always redecodes the same literal path — meaningful when an agent
+deliberately re-renders to the same output path between snapshots.
+
+**Known limitation, stated plainly (not hidden):** `/analysis/*/visualize` — and therefore
+this diff — analyses an item's **source file**, not the post-fader/FX/mix signal (same scope
+as the rest of the analysis surface, §17). Track-level edits (volume, mute, FX, pan) that
+don't touch the underlying source file produce **no diff** here, even though they'd change
+what you hear. A true "did my mix edit change the sound" diff would need to render the master
+at each snapshot — deliberately out of scope for v1 (turns every snapshot into a render,
+which contradicts the layer's job of being cheap and always-on); revisit if this becomes a
+real pain point, same pattern as other "revisit if it becomes common" deferrals in this doc.
+
+**Index-based addressing accepts the same limitation as `/snapshot/diff`'s track diffs.** If
+items are reordered/deleted between snapshot and diff, "item N" may no longer mean the same
+physical item at `to=current` resolution time — an existing, already-accepted class of
+limitation (track diff paths are also positional), not a new one introduced here.
 
 ---
 

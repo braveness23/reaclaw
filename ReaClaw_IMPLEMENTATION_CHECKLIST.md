@@ -432,9 +432,12 @@ shared header-only FFT `src/util/dsp.h` (factored out of `analysis.cpp`).
       truth source. Pure math in header-only `util/music.h` (7 unit tests; 57/57).
       Verified live on REAPER 7.74: 440 Hz→A4 (0.95), 261.6 Hz→C4. Probe modelled as
       a flavour of the analysis surface, not a separate registry (TECH_DECISIONS §17).
-- [ ] **A/B diff** against an earlier snapshot — deferred to the shared
-      snapshot/state-diff layer (cross-cutting; also used by Epic #20). This is the
-      one remaining #19 sliver; it lands with that shared layer, not inside #19.
+- [x] **A/B diff** against an earlier snapshot — `GET /snapshot/diff/visualize`
+      (issue #53, done). `POST /snapshot` gains an optional `audio:{item|file}`
+      to freeze a file reference at capture time (no digest/PNG stored — decode
+      is deferred to diff time, reusing `/analysis/file/visualize`'s pipeline
+      via `build_file_visualization`). See `ReaClaw_TECH_DECISIONS.md` §24 for
+      the design rationale and the documented source-vs-mix scope limitation.
 
 ### Stage 6 / Epic #20 — Learns over time (Q8)
 **Snapshot / state-diff layer (cross-cutting prep).** New `src/handlers/snapshot.{h,cpp}`
@@ -442,7 +445,7 @@ shared header-only FFT `src/util/dsp.h` (factored out of `analysis.cpp`).
 - [x] Capture a canonical, diff-stable project-state snapshot; store in
       `state_snapshots`. `POST /snapshot`, `GET /snapshot[/{id}]`, `DELETE`.
 - [x] `GET /snapshot/diff?from=<id>&to=<id|current>` → flat `[{path,op,from,to}]`.
-      Backs the deferred #19 A/B visual diff too.
+      Also backs the #19 A/B visual diff (`GET /snapshot/diff/visualize`, #53, done).
 
 **Learned suggestions (the moat).** New `src/handlers/learning.{h,cpp}` + `learn_events`
 / `learn_pairs` tables + `learning` config block.
@@ -560,9 +563,12 @@ Phase 2 (real architecture/risk decisions, done one at a time with a check-in):
       `GET /render/jobs`. Reuses the existing `Executor::post` path from a
       detached worker thread (no new SetTimer trigger needed); single-flight
       comes free from Executor's FIFO drain. See `ReaClaw_TECH_DECISIONS.md` §23.
+- [x] **#36** CI E2E headless render smoke test — `e2e-render-smoke` job +
+      `demos/scripts/ci_smoke_test.py`. Closes Epic #32.
+- [x] **#53** `GET /snapshot/diff/visualize` — A/B visual diff. See
+      `ReaClaw_TECH_DECISIONS.md` §24.
 
-Still deferred: CI E2E smoke test (#36), external-change event feed (#31),
-A/B visual diff (#53).
+Still deferred: external-change event feed (#31).
 
 ---
 

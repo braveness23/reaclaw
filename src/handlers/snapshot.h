@@ -28,4 +28,10 @@ void handle_snapshot_delete(const httplib::Request& req,
 void handle_snapshot_diff(const httplib::Request& req,
                           httplib::Response& res);  // GET /snapshot/diff?from=&to=
 
+// Issue #53 — A/B visual diff. Both snapshots need an `audio` target
+// (POST /snapshot's optional audio:{item|file}). Reuses build_file_visualization
+// (visualize.h) for both sides and jsondiff for the digest delta.
+//   GET /snapshot/diff/visualize?from=&to=&type=spectrum|waveform|loudness&width=&height=&image=
+void handle_snapshot_diff_visualize(const httplib::Request& req, httplib::Response& res);
+
 }  // namespace ReaClaw::Handlers

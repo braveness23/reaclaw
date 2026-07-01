@@ -1134,7 +1134,8 @@ Digest by `type`:
   `min_db`/`max_db`/`mean_db`. `estimated_dsp`, confidence 0.85.
 
 The PNG (teal signal on a labelled grid) is one the agent can `Read` directly.
-A/B diff against an earlier snapshot is deferred to the shared snapshot layer.
+A/B diff against an earlier snapshot is `GET /snapshot/diff/visualize` (#53),
+in the snapshot section below.
 
 ### GET /analysis/file/visualize?path=…
 
@@ -1245,6 +1246,13 @@ corrected?"). A snapshot is a focused, diff-stable slice — project (name, bpm,
 Capture the current state. Optional body `{ "label": "before mixdown" }`. Returns
 `{ id, taken_at, label, summary: { track_count } }`.
 
+**Optional audio target (issue #53)** — pass `audio: { "item": <index> }` or
+`audio: { "file": "<path>" }` (plus optional `start`/`end`, source-relative
+seconds) to also freeze a reference to a piece of audio for later A/B visual
+diffing. `item` is resolved to its active take's source file path *at capture
+time* — 400 if the item has no audio source. The response echoes back
+`audio: { item?, file, start, end }` when set.
+
 ### GET /snapshot · GET /snapshot/{id} · DELETE /snapshot/{id}
 
 List stored snapshots (newest first), fetch one (`{ id, taken_at, state }`), or
@@ -1267,6 +1275,47 @@ against a fresh live capture. Returns a flat change list:
 
 `op` is `changed` (scalar differs; carries `from`+`to`), `added` (in `to` only),
 or `removed` (in `from` only). Objects diff by key, arrays by index.
+
+### GET /snapshot/diff/visualize?from=&to=&type=&width=&height=&image=
+
+The A/B **visual** diff (issue #53) — paired visualizations of a snapshot's
+audio target vs. current (or another snapshot), plus a digest delta. Both the
+`from` and (when `to` is another snapshot id) `to` snapshots must have been
+captured with an `audio` target — `400` if not (`"capture one with
+audio:{item|file} in POST /snapshot"`).
+
+- `from=<id>` *(required)* — always uses its frozen file + window.
+- `to=<id>|current|live` *(default current)* — when `current`/omitted and the
+  `from` audio was `item`-based, re-resolves that **same item index** live
+  (picks up a changed take/source); when `from` audio was `file`-based, reuses
+  the same literal path, re-decoded fresh. When `to` is another snapshot id,
+  uses *its* frozen reference.
+- `type=spectrum|waveform|loudness` (default `spectrum`), `width=`, `height=`,
+  `image=none` — same params/semantics as `/analysis/*/visualize`.
+
+```json
+{
+  "from": 1, "to": "current", "type": "spectrum",
+  "images": {
+    "from": { "item_index": null, "source": {...}, "window": {...}, "digest": {...}, "image": {...} },
+    "to":   { "source": {...}, "window": {...}, "digest": {...}, "image": {...} }
+  },
+  "digest_delta": [
+    { "path": "centroid_hz", "op": "changed", "from": 478.1, "to": 922.2 },
+    { "path": "bands/14/db", "op": "changed", "from": 0.0, "to": -80.0 }
+  ]
+}
+```
+
+`images.from` / `images.to` are each the exact same shape as
+`GET /analysis/file/visualize`'s response. `digest_delta` is the same
+`jsondiff` shape as `/snapshot/diff`'s `changes`.
+
+**Scope limitation, by design:** like the rest of the analysis surface (see
+§17 of `ReaClaw_TECH_DECISIONS.md`), this analyses an item's *source file*,
+not the post-fader/FX/mix signal — track-level edits (volume, mute, FX, pan)
+that don't touch the source file produce no diff here. A frozen `file`-based
+target is the way to diff two actual renders written to disk.
 
 ---
 

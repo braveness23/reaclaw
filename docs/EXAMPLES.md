@@ -430,6 +430,29 @@ curl -sk "$BASE/snapshot/$ID"    -H "$AUTH"   # full stored state
 curl -sk -X DELETE "$BASE/snapshot/$ID" -H "$AUTH"
 ```
 
+### A/B visual diff — did that edit actually change the sound? (#53)
+
+```bash
+# Snapshot with an audio target (freezes item 0's source file path)
+ID=$(curl -sk -X POST "$BASE/snapshot" -H "$AUTH" \
+  -d '{"label":"before mix", "audio": {"item": 0}}' | jq .id)
+
+# ... swap the item's audio, adjust EQ, whatever ...
+
+# Paired spectrum images + a digest delta, vs. current
+curl -sk "$BASE/snapshot/diff/visualize?from=$ID&type=spectrum" -H "$AUTH" \
+  | jq '.digest_delta'
+# → [ { "path": "centroid_hz", "op": "changed", "from": 478.1, "to": 922.2 }, ... ]
+
+# Grab the "before" and "after" PNGs
+curl -sk "$BASE/snapshot/diff/visualize?from=$ID&type=spectrum" -H "$AUTH" \
+  | jq -r '.images.from.image.base64' | base64 -d > before.png
+```
+
+Note: this diffs the item's *source file*, not the post-fader/FX mix — a
+volume/mute/FX-only edit won't show up here (see `ReaClaw_TECH_DECISIONS.md`
+§24). Use `audio: {"file": "/path/to/render.wav"}` to diff two actual renders.
+
 ---
 
 ## Learned Suggestions (#20 — local-first, opt-in)

@@ -391,6 +391,8 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     svr.Post("/snapshot", auth_wrap(cfg, Handlers::handle_snapshot_create));
     svr.Get("/snapshot", auth_wrap(cfg, Handlers::handle_snapshot_list));
     svr.Get("/snapshot/diff", auth_wrap(cfg, Handlers::handle_snapshot_diff));
+    svr.Get("/snapshot/diff/visualize",
+            auth_wrap(cfg, Handlers::handle_snapshot_diff_visualize));  // issue #53
     svr.Get(R"(/snapshot/(\d+))",
             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                 const_cast<httplib::Request&>(req).path_params["id"] = req.matches[1];
