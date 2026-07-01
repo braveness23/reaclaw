@@ -132,6 +132,17 @@ jobs:
             "logging": { "level": "warn", "file": "/tmp/reaclaw_ci.log", "format": "text" }
           }
           JSON
+          # Pre-seed the "last version check" timestamp so REAPER believes it
+          # just checked and skips its own outbound update check on first
+          # launch. Confirmed live (via an instrumented Executor::tick() build
+          # on a throwaway debug pod) that skipping this pre-seed lets REAPER
+          # pop a modal "New Version Notification" dialog on a truly virgin
+          # config — with no window manager to ever dismiss it, that dialog's
+          # modal loop blocks REAPER's main thread forever, starving the timer
+          # callback that drives every Executor::post-backed endpoint. A
+          # long-lived local install never hits this because its config
+          # already has a real cached check timestamp.
+          printf '[verchk]\nlastt=%s\n' "$(date +%s)" > ~/.config/REAPER/reaper.ini
 
       - name: Start Xvfb + dummy JACK + REAPER
         run: |
