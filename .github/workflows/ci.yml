@@ -28,11 +28,10 @@ jobs:
   # reaclaw-ci-runner image (.github/runner-image/Dockerfile), so jobs don't pay
   # the apt-get cost on every run.
   #
-  # macOS and Windows builds were removed (2026-06) — ReaClaw is developed and
-  # released for Linux from this self-hosted infra. Re-add them with
-  # GitHub-hosted runners if cross-platform releases are needed again; the prior
-  # macOS (macos-14/Clang) and Windows (MinGW-w64 cross-compile) jobs are in git
-  # history.
+  # The Windows build was re-added (issue #84) as a MinGW-w64 cross-compile on
+  # this same x86_64 runner — see the build-windows job below. macOS remains
+  # dropped (needs a GitHub-hosted macos runner); the prior macOS (macos-14/
+  # Clang) job is in git history if it's ever wanted again.
   # ---------------------------------------------------------------------------
   build-linux:
     name: Build (Linux, GCC)
@@ -72,6 +71,86 @@ jobs:
         with:
           name: reaper_reaclaw-linux-x86_64
           path: reaper_reaclaw-linux-x86_64.so
+
+  # ---------------------------------------------------------------------------
+  # Windows — MinGW-w64 cross-compile on the Linux runner (issue #84).
+  #
+  # Re-added from git history (commit 4865ed4); the self-hosted runner is
+  # x86_64, so the x86_64-w64-mingw32 cross-toolchain installs from apt like on
+  # any x86_64 host. OpenSSL is cross-compiled statically and cached. The source
+  # is cross-platform (reaper_plugin.h / swell.h guard the SWELL layer out under
+  # _WIN32 and use real Win32 instead); verified locally that all TUs compile
+  # under mingw. No Test step — can't run a Windows .dll on Linux; the unit
+  # tests run in build-linux. This is the agreed "ship on CI-green" bar.
+  # ---------------------------------------------------------------------------
+  build-windows:
+    name: Build (Windows, MinGW cross-compile)
+    runs-on: arc-runner-reaclaw
+    env:
+      OPENSSL_VERSION: 3.3.2
+      OPENSSL_INSTALL: /opt/openssl-mingw64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 cmake unzip
+
+      - name: Cache cross-compiled OpenSSL
+        id: cache-openssl
+        uses: actions/cache@v4
+        with:
+          path: /opt/openssl-mingw64
+          key: openssl-mingw64-${{ env.OPENSSL_VERSION }}
+
+      - name: Cross-compile OpenSSL for Windows
+        if: steps.cache-openssl.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz | tar xz
+          cd openssl-$OPENSSL_VERSION
+          ./Configure mingw64 \
+            --cross-compile-prefix=x86_64-w64-mingw32- \
+            --prefix=$OPENSSL_INSTALL \
+            no-shared no-tests
+          make -j$(nproc)
+          sudo make install_sw
+
+      - name: Fetch vendor deps
+        run: |
+          curl -fsSL $HTTPLIB_URL   -o vendor/httplib.h
+          curl -fsSL $JSON_HPP_URL  -o vendor/json.hpp
+          curl -fsSL $SQLITE_ZIP_URL -o /tmp/sqlite.zip
+          unzip -j /tmp/sqlite.zip "*/sqlite3.c" "*/sqlite3.h" -d vendor/
+          git clone --depth=1 $REAPER_SDK_URL vendor/reaper-sdk
+          cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
+          mkdir -p /tmp/wdl-dl
+          curl -fsSL https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz | tar xz -C /tmp/wdl-dl
+          WDL_DIR=$(ls /tmp/wdl-dl | head -1)
+          mkdir -p $GITHUB_WORKSPACE/vendor/WDL
+          cp -r /tmp/wdl-dl/$WDL_DIR/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
+          rm -rf /tmp/wdl-dl
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-mingw64.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOPENSSL_ROOT_DIR=$OPENSSL_INSTALL \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DREACLAW_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Rename artifact
+        run: cp build/reaper_reaclaw.dll reaper_reaclaw-windows-x86_64.dll
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reaper_reaclaw-windows-x86_64
+          path: reaper_reaclaw-windows-x86_64.dll
 
   # ---------------------------------------------------------------------------
   # E2E: headless offline render smoke test (issue #36, part of Epic #32).
@@ -194,7 +273,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: Publish GitHub Release
-    needs: [build-linux]
+    needs: [build-linux, build-windows]
     runs-on: arc-runner-reaclaw
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -229,3 +308,4 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/reaper_reaclaw-linux-x86_64/reaper_reaclaw-linux-x86_64.so
+            dist/reaper_reaclaw-windows-x86_64/reaper_reaclaw-windows-x86_64.dll

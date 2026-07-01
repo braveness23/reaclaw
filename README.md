@@ -113,10 +113,12 @@ first-class verb vs. what needs an action or a script.
 ## 🚀 Quick start
 
 ```bash
-# 1. Build it (see CONTRIBUTING.md) and drop the result in REAPER's UserPlugins:
-#    Windows:  %APPDATA%\REAPER\UserPlugins\
-#    macOS:    ~/Library/Application Support/REAPER/UserPlugins/
-#    Linux:    ~/.config/REAPER/UserPlugins/
+# 1. Grab a prebuilt binary from the latest GitHub Release (Linux .so + Windows
+#    .dll), or build it yourself (see CONTRIBUTING.md), and drop it in REAPER's
+#    UserPlugins:
+#    Windows:  %APPDATA%\REAPER\UserPlugins\      (reaper_reaclaw-windows-x86_64.dll → reaper_reaclaw.dll)
+#    Linux:    ~/.config/REAPER/UserPlugins/      (reaper_reaclaw-linux-x86_64.so  → reaper_reaclaw.so)
+#    macOS:    ~/Library/Application Support/REAPER/UserPlugins/   (build from source)
 
 # 2. Minimal config at {REAPER_RESOURCE_PATH}/reaclaw/config.json
 cat > config.json <<'JSON'

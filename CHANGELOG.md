@@ -9,6 +9,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Windows release binary** (#84) — `reaper_reaclaw-windows-x86_64.dll`,
+  cross-compiled via MinGW-w64 on the same self-hosted CI runner, published
+  alongside the Linux `.so` on every tagged release. Re-added from git
+  history (the job existed pre-Linux-only-CI) and fully verified with a local
+  mingw cross-compile before landing — the source itself needed no changes,
+  only the CI job and vendor-dep fetch (WDL/swell, which the source now
+  includes directly). Not yet load-tested on a physical Windows REAPER
+  install — flagged in the docs.
+
 ## [1.15.0] - 2026-07-01
 
 ### Added
