@@ -66,12 +66,32 @@ Or see `vendor/README.md` for manual fetch commands. OpenSSL is a system/vcpkg d
 
 ---
 
-## Code Style
-
-All C++ is formatted with clang-format. Run before committing:
+## Git Hooks (do this once)
 
 ```bash
-clang-format -i src/**/*.{cpp,h}
+scripts/install-git-hooks.sh
+```
+
+This points git at `.githooks/` and installs two hooks that call the exact same scripts CI runs, so a commit that passes locally passes in CI:
+
+| Hook | Runs | Backed by |
+|---|---|---|
+| `pre-commit` | clang-format check (fast, every commit) | `scripts/checks/format.sh --check` |
+| `pre-push` | full configure + build + ctest | `scripts/checks/build.sh`, `scripts/checks/test.sh` |
+
+Bypass a one-off with `--no-verify` on either command. CI is still the actual merge gate and re-runs the same checks regardless — the hooks exist to fail fast, locally, before a broken commit ever reaches CI.
+
+If you're changing a lint rule, compiler flag, or test invocation, edit the shared script under `scripts/checks/`, not the CI workflow or a hook directly — both call the same file, so editing only one side reintroduces drift.
+
+---
+
+## Code Style
+
+All C++ is formatted with clang-format. Check or fix with the same script CI uses:
+
+```bash
+scripts/checks/format.sh --check   # what CI runs; exits nonzero on any diff
+scripts/checks/format.sh --fix     # apply formatting in place
 ```
 
 The `.clang-format` config at the repo root governs style (Google base, 4-space indent, 100 column limit). See `.editorconfig` for editor settings.
@@ -80,14 +100,15 @@ The `.clang-format` config at the repo root governs style (Google base, 4-space 
 
 ## Testing
 
-- Unit tests live in `tests/`. Run with `ctest` after building.
-- Integration tests require a running REAPER instance with ReaClaw loaded. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for headless Linux setup instructions.
-- All tests must pass before a PR is merged.
+- Unit tests live in `tests/`. Build and run with the shared scripts (same ones CI and the `pre-push` hook use):
 
 ```bash
-cmake --build build --config Release
-cd build && ctest -C Release --output-on-failure
+scripts/checks/build.sh
+scripts/checks/test.sh
 ```
+
+- Integration tests require a running REAPER instance with ReaClaw loaded. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for headless Linux setup instructions.
+- All tests must pass before a PR is merged.
 
 ---
 

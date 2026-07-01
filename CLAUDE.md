@@ -20,6 +20,22 @@ After completing each checklist item, mark it done in `ReaClaw_IMPLEMENTATION_CH
 
 ---
 
+## Developer Workflow & CI
+
+Local checks and CI call the *same* scripts, on purpose — a commit that passes locally deterministically passes CI:
+
+- `scripts/checks/format.sh` — clang-format check/fix. Used by CI's `format-check` job and the `pre-commit` git hook.
+- `scripts/checks/build.sh` + `test.sh` — configure+build / ctest. Used by CI's `build-linux` job and the `pre-push` git hook.
+- `scripts/fetch-vendor-deps.sh` — pins and fetches vendor headers/SDKs (SQLite, json.hpp, httplib, reaper-sdk, WDL). Single source of truth for those versions; CI caches its output keyed on this script's hash.
+
+**Rule: when changing a lint rule, compiler flag, test invocation, or vendor version, edit the shared script — never `.github/workflows/ci.yml` or a `.githooks/*` hook directly.** Both sides call the same file by construction; editing only one reintroduces drift (this happened before: vendor versions were duplicated in both `ci.yml` and `fetch-vendor-deps.sh`, "kept in sync" only by a comment).
+
+Git hooks (`scripts/install-git-hooks.sh`, one-time local setup) are the fast/local signal, not the enforcement boundary — CI is the merge gate and can't be skipped with `--no-verify`. `pre-commit` is format-only (fast, every commit); `pre-push` runs the full build+test (slower, before code leaves the machine).
+
+CI itself: self-hosted k3s runner (`arc-runner-reaclaw`, config in `deploy/runner/values.yaml`), image built by `.github/workflows/build-runner-image.yml` from `.github/runner-image/Dockerfile`. That image bakes in everything static across runs (build toolchain, ccache, e2e's Xvfb/audio/X11 deps) so jobs don't pay setup cost every run — only genuinely per-run state (vendor deps, ccache objects, the pinned REAPER binary) is fetched/restored per job. `ci.yml` cancels superseded runs on the same ref (`concurrency` block) so a quick follow-up push doesn't waste runner capacity finishing a stale commit.
+
+---
+
 ## Project Overview
 
 ReaClaw is a native C++ REAPER extension (`.dll`/`.dylib`/`.so`) that embeds an HTTPS server inside REAPER's process and exposes a REST/JSON API for AI agents to control REAPER.
