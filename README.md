@@ -256,7 +256,7 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.15.0** — the A/B visual diff: `POST /snapshot` gains an
+Latest release: **v1.16.0** — the A/B visual diff: `POST /snapshot` gains an
 optional `audio: {item|file}` field that freezes a reference to a piece of
 audio at capture time, and `GET /snapshot/diff/visualize` produces paired
 waveform/spectrum/loudness images (a snapshot's audio vs. current, or another

@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-07-01
+
 ### Added
 - **External-change event feed** (#31) — `GET /events?since=&limit=` (poll) and
   `GET /events/stream` (Server-Sent Events) push granular, attributed change
