@@ -407,6 +407,17 @@ a `composition spec → mastered file` function — and that production path is
 API contracts are designed when Epic #32 is picked up (children #33–#36); multi-
 project handling for `/project/open` touches the deferred Tier-C area (§16).
 
+**CI E2E render smoke test (#36) needs no REAPER license.** Confirmed live: a
+completely fresh, never-before-run REAPER install (`~/opt/REAPER` inside a
+throwaway CI container) launches cleanly with `-nosplash` and renders correctly
+with no blocking evaluation/nag dialog — REAPER's eval mode is fully functional
+for offline rendering, and an ephemeral CI container never accumulates the
+30/60-day eval clock a persistent install would. This is why the smoke test
+(`.github/workflows/ci.yml`'s `e2e-render-smoke` job, `demos/scripts/
+ci_smoke_test.py`) downloads and installs REAPER fresh per run rather than
+needing Dave's personal license baked into the runner image — avoiding both a
+licensing concern and a shared-runner-image change.
+
 ---
 
 ## 20. Dependency Policy: Deliberate & Tiered (issue #37)

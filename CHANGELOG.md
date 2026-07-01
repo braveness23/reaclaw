@@ -9,6 +9,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **CI: headless offline-render E2E smoke test** (#36) — installs a throwaway,
+  unlicensed REAPER under Xvfb + a dummy JACK backend, loads the just-built
+  extension, builds a tiny composition via the API, renders it, and asserts
+  the output is non-silent via `GET /analysis/file` (no ffmpeg dependency).
+  Runs on every PR; closes out Epic #32 (programmatic audio production).
+
 ## [1.14.0] - 2026-07-01
 
 ### Added
