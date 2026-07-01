@@ -254,9 +254,11 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.11.2** — Project lifecycle endpoints: `POST /project/new`, `/open`,
-`/save`, and `/reset` so an agent can manage the full blank-slate → build → save → reload
-→ render loop without any GUI modal. See the [CHANGELOG](CHANGELOG.md) for the full story.
+Latest release: **v1.12.0** — Agent-friendliness fixes from a live friction-test session:
+live `GET /transport` + play/stop/pause/record aliases, one-shot `POST /execute/script`,
+`POST /queue/flush` for stuck-queue recovery, paginated FX/MIDI reads for large plugins
+and note counts, and `context.schema` hints on the most commonly-guessed-wrong `400`s.
+See the [CHANGELOG](CHANGELOG.md) for the full story.
 
 | Phase | Scope | Tag |
 |---|---|---|

@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-06-30
+
 ### Added
 - **`GET /transport`** — live transport position, bypassing the 1s `/state`
   cache so playhead polling during playback isn't up to a second stale (#67).
