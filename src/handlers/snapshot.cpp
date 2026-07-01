@@ -404,7 +404,7 @@ void handle_snapshot_diff_visualize(const httplib::Request& req, httplib::Respon
 
     auto result = Executor::post(
             [from_audio, to_audio, resolve_to_live_item, type_str, width, height, image]() mutable
-                    -> nlohmann::json {
+            -> nlohmann::json {
                 if (resolve_to_live_item) {
                     nlohmann::json item_ref = {{"item", from_audio["item"]}};
                     nlohmann::json resolved = resolve_audio_ref(
