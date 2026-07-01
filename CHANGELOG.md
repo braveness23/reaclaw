@@ -9,6 +9,17 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`async: true` on `POST /render`** — returns `{job_id, status: "queued"}`
+  immediately instead of blocking the HTTP connection for the render's
+  duration. `GET /render/jobs/{id}` polls status/result, `GET /render/jobs`
+  lists tracked jobs, `DELETE /render/jobs/{id}` cancels a not-yet-started
+  job (409 if already running — no safe SDK abort exists). Confirmed live
+  that this does not make other endpoints stay responsive during an active
+  render (REAPER's main thread pumps no message loop during an offline
+  render) — documented as a known v1 limitation rather than silently
+  overstating what async fixes (#35).
+
 ## [1.13.0] - 2026-07-01
 
 ### Added

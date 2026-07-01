@@ -503,6 +503,71 @@ mutating endpoint.
 
 ---
 
+## 23. Async Render Jobs: explicit flag, in-memory registry, honest limitations (issue #35)
+
+**Decision:** `POST /render` gains an `async: true` field — not an automatic short-render-
+inline heuristic. When set, the endpoint returns `{job_id, status: "queued"}` immediately;
+`GET /render/jobs/{id}` polls it, `GET /render/jobs` lists all tracked jobs, `DELETE
+/render/jobs/{id}` cancels one. The default (no `async`, or `async: false`) is unchanged —
+still fully synchronous, same response shape, same 300s timeout.
+
+**Why an explicit flag over a heuristic:** mirrors the `async` field `POST /execute/action`
+already has (`handlers/execute.cpp`). A caller-supplied flag is deterministic; guessing a
+"short vs. long" threshold from project length is fragile and surprises callers near the
+boundary. Consistency with an existing, working convention beats inventing a new one.
+
+**Execution model — reuses `Executor::post`, doesn't reinvent it.** The async path does NOT
+trigger the render via SWELL `SetTimer` (the mechanism `/execute/action`'s async mode uses).
+It calls the exact same `Executor::post` path the synchronous render already used, just from
+a detached worker thread instead of the HTTP thread — only the *waiting* moves off the HTTP
+thread. This gets single-flight serialization for free: `Executor::tick()` drains its FIFO
+queue one command at a time, so a second async render request simply sits `"queued"` behind
+the first without any additional locking. (`SetTimer` was necessary for `/execute/action`
+because that feature needed to survive being called from inside a nested modal loop; render
+jobs have no such requirement — they're one atomic unit of work like any other Executor
+command.)
+
+**Confirmed live: async does NOT fix cross-endpoint starvation, only the HTTP-timeout
+problem.** Built a project with a 1500s item (~200× realtime), fired `POST /execute/action`
+5s into a 37s render — it timed out at 15s, never running, well before the render finished.
+REAPER's main thread pumps **no message loop at all** during an offline render (`Main_OnCommand
+(41824, 0)` is a tight, uninterruptible decode/encode loop) — not even the "timer" plugin hook
+that drives `Executor::tick()`. So while a render is actually executing:
+- Every other `Executor::post`-based endpoint (most of the API — state writes, sync actions,
+  project ops) queues up and can time out, exactly as it did before async jobs existed.
+- The async job model's real, honest value is narrower than it sounds: the calling HTTP
+  connection doesn't have to stay open for the render's duration, and the caller gets a
+  pollable handle instead of guessing a timeout. It does **not** make REAPER's API surface
+  stay responsive during a render.
+- Fixing that for real means chunking a render into segments with breathing room between
+  them for `Executor::tick()` to drain other commands — a much larger change, deferred.
+  Revisit if this becomes a real pain point (same "revisit if it becomes common" pattern as
+  §17's DSP-locus tradeoff).
+
+**Job storage — in-memory, bounded, not persisted.** A single global mutex guards a bounded
+vector of jobs (`kMaxJobs = 200`, oldest *terminal* jobs evicted first — queued/running jobs
+are never evicted), matching Executor's own single-mutex, in-memory style. Jobs don't survive
+a ReaClaw/REAPER restart any more than Executor's own pending-command queue does; that's an
+acceptable loss since the underlying render itself wouldn't survive a restart either.
+
+**No numeric progress.** The REAPER SDK exposes no render-progress primitive (confirmed by
+inspecting `reaper_plugin_functions.h` — no progress callback, no percent-complete query for
+an in-flight `Main_OnCommand(41824)` render). A running job reports `elapsed_seconds` (honest,
+measured) but no percentage (would have to be a guess). Consistent with §17's confidence-
+tagging ethos: report what's actually known, don't manufacture a number that isn't.
+
+**Cancellation — only before the render actually starts.** A job's status stays `"queued"`
+for as long as it sits in Executor's FIFO queue (even if its worker thread has already called
+`Executor::post` and is blocked waiting) and only flips to `"running"` at the instant
+`Executor::tick()` dequeues it and starts `do_render` on the main thread. `DELETE` on a
+`"queued"` job cancels it cleanly (the render lambda checks a `"cancelled"` sentinel as its
+first action and skips `Main_OnCommand` entirely — never touches REAPER's render settings).
+`DELETE` on a `"running"` job returns `409` — REAPER's SDK offers no safe way to abort an
+in-flight offline render (no cancel API, no way to synthesize the render dialog's Cancel
+button non-invasively). This is a real, documented v1 limitation, not an oversight.
+
+---
+
 ## Summary
 
 | Concern | Decision |

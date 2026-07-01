@@ -439,8 +439,19 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     // Capability manifest.
     svr.Get("/capabilities", auth_wrap(cfg, Handlers::handle_capabilities));
 
-    // --- Render (Epic #32 / issue #33) ---
+    // --- Render (Epic #32 / issue #33; async job model issue #35) ---
     svr.Post("/render", auth_wrap(cfg, Handlers::handle_render));
+    svr.Get("/render/jobs", auth_wrap(cfg, Handlers::handle_render_jobs_list));
+    svr.Get(R"(/render/jobs/([^/]+))",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["id"] = req.matches[1];
+                Handlers::handle_render_job_get(req, res);
+            }));
+    svr.Delete(R"(/render/jobs/([^/]+))",
+               auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                   const_cast<httplib::Request&>(req).path_params["id"] = req.matches[1];
+                   Handlers::handle_render_job_cancel(req, res);
+               }));
 
     // --- Transport verbs (issue #49) ---
     svr.Get("/transport", auth_wrap(cfg, Handlers::handle_transport_get));  // issue #67

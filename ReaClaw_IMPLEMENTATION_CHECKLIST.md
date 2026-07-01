@@ -507,11 +507,14 @@ The epic makes it first-class.
 - [x] `GET /state/changes` → `{change_count}` via `GetProjectStateChangeCount()`. **Done v1.10.0.**
 - [ ] Event feed (IReaperControlSurface hook) + attribution — deferred.
 
-**Async render-job model ([#35](https://github.com/braveness23/reaclaw/issues/35)).**
+**Async render-job model ([#35](https://github.com/braveness23/reaclaw/issues/35)). Done — see Phase 2 below.**
 - [x] `async: true` flag on `POST /execute/action` — schedules via SWELL `SetTimer`. **Done v1.10.0.**
-- [ ] Long renders return `{job_id, status}`; `GET /render/jobs/{id}` polls
-      status/progress/output; list + cancel. Must not starve the main-thread
-      command queue (§8). Owns the "long-render UX" open question.
+- [x] `async: true` flag on `POST /render` returns `{job_id, status}`;
+      `GET /render/jobs/{id}` polls status/output; `GET /render/jobs` lists;
+      `DELETE /render/jobs/{id}` cancels a not-yet-started job. Does **not**
+      solve main-thread starvation during an active render — confirmed live
+      that REAPER pumps no message loop during an offline render, documented
+      as an honest v1 limitation. See `ReaClaw_TECH_DECISIONS.md` §23.
 
 **CI / pipeline integration ([#36](https://github.com/braveness23/reaclaw/issues/36)).**
 - [ ] E2E smoke test: build a tiny composition → offline render → assert valid +
@@ -549,9 +552,13 @@ Phase 2 (real architecture/risk decisions, done one at a time with a check-in):
       `/proc/self/{cmdline,environ}` argv/environment replay (no `Executor::post`
       dependency, no REAPER SDK calls on the critical path). Linux only. See
       `ReaClaw_TECH_DECISIONS.md` §22.
+- [x] **#35** `async: true` on `POST /render` + `GET/DELETE /render/jobs/{id}`,
+      `GET /render/jobs`. Reuses the existing `Executor::post` path from a
+      detached worker thread (no new SetTimer trigger needed); single-flight
+      comes free from Executor's FIFO drain. See `ReaClaw_TECH_DECISIONS.md` §23.
 
-Still deferred: async render-job model (#35), CI E2E smoke test (#36),
-external-change event feed (#31), A/B visual diff (#53).
+Still deferred: CI E2E smoke test (#36), external-change event feed (#31),
+A/B visual diff (#53).
 
 ---
 

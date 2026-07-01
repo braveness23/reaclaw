@@ -330,7 +330,8 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
              dom("structured", "loudness/spectral/meters/visualize/probe/screenshot")},
             {"snapshot", dom("structured", "capture/list/get/diff/delete")},
             {"learning", dom("structured", "suggestions/stats (local-first, opt-in)")},
-            {"render", dom("structured", "offline render; async jobs pending #35")},
+            {"render",
+             dom("structured", "offline render; async:true + /render/jobs for job polling")},
             {"transport",
              dom("structured",
                  "POST /transport {action:play|stop|pause|record}, "
