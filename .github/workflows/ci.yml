@@ -135,7 +135,7 @@ jobs:
 
       - name: Start Xvfb + dummy JACK + REAPER
         run: |
-          Xvfb :99 -screen 0 1280x800x24 > /tmp/xvfb.log 2>&1 &
+          Xvfb :99 -screen 0 1280x800x24 -ac +extension RANDR > /tmp/xvfb.log 2>&1 &
           disown
           jackd -d dummy -r 48000 > /tmp/jackd.log 2>&1 &
           disown
