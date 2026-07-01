@@ -23,6 +23,11 @@ REAPER and carry no stability guarantee beyond "the call is accepted." Full poli
 HTTP status codes: `200 OK`, `400 Bad Request`, `401 Unauthorized`, `404 Not Found`,
 `408 Request Timeout`, `500 Internal Server Error`, `501 Not Implemented`
 
+Issue #72: the most commonly-guessed-wrong `400`s (`POST /render`, `/execute/action`,
+`/execute/script`, `/scripts/register`, `/project/open`, `/project/save`) include a
+`context.schema` describing every accepted field, so a wrong guess doesn't cost a
+second round trip to discover the right one.
+
 Optional request header on all endpoints:
 ```
 X-Agent-Id: <string>
@@ -58,8 +63,11 @@ Returns server status.
 ```
 
 When the main thread is stuck (queue non-empty for >10s), `status` changes to
-`"degraded"` and a `degraded_reason` field is added. Only recovery is restarting
-REAPER.
+`"degraded"` and a `degraded_reason` field is added. `POST /queue/flush`
+(issue #64) drops every *pending* (not-yet-executing) command so callers
+blocked behind the backlog return immediately instead of waiting out their
+timeout — it does not itself unwedge whatever call is actually stuck
+executing on the main thread; only restarting REAPER recovers that.
 
 ```json
 {
@@ -73,6 +81,12 @@ REAPER.
 - `queue_depth` — commands currently waiting for the REAPER main thread
 - `db_ok` — SQLite connection is open
 - `server_running` — HTTPS listener thread is active
+
+### POST /queue/flush
+
+Drains the pending command backlog (issue #64). Resolves every queued-but-
+not-yet-executing command with `{"_flushed": true}` so its caller unblocks
+immediately. Returns `{ "flushed": N }`.
 
 ---
 
@@ -196,9 +210,13 @@ file, the response includes an `icon_not_found` hint in `hints[]`.
 
 ### POST /state/tracks
 
-Create and/or batch-update tracks in one call. `create` appends tracks in order;
-`update` patches existing tracks by `index`. Each spec accepts the same writable
-fields as `POST /state/tracks/{index}`.
+Create and/or batch-update tracks in one call — this array *is* the "bulk
+create" endpoint (issue #79: no separate `/tracks/bulk` resource — pass N
+specs in `create`). `create` appends tracks in order; `update` patches
+existing tracks by `index`. Each spec accepts the same writable fields as
+`POST /state/tracks/{index}`, plus an optional `instrument` (string, VSTi/CLAP
+name) added via `TrackFX_AddByName` right after creation — one call instead
+of a separate follow-up `POST .../fx`.
 
 ```json
 // Request
@@ -230,11 +248,14 @@ Add an FX by name (e.g. `"ReaComp"`, `"ReaGate"`, or a full `"VST: ..."`).
 `params` values are **normalized 0..1**, referenced by `index` or `name`.
 Returns 400 (`FX not found: ...`) if the plugin can't be resolved.
 
-### GET /state/tracks/{index}/fx/{slot}
+### GET /state/tracks/{index}/fx/{slot}[?limit=&offset=&q=]
 
-FX slot detail incl. parameter list. Each param: `index`, `name`, normalized
-`value` (0..1), `formatted` (display string), and the real-unit range `raw`
-(current value), `min`, `max`, `mid` — so an agent can reason in real units.
+FX slot detail incl. parameter list (`param_count` reports the true total).
+Each param: `index`, `name`, normalized `value` (0..1), `formatted` (display
+string), and the real-unit range `raw` (current value), `min`, `max`, `mid` —
+so an agent can reason in real units. Issue #74: `limit`/`offset` paginate
+(default: all params, no limit), `q` filters by case-insensitive name
+substring — needed for big plugins (Surge XT: 2147 params).
 
 ### POST /state/tracks/{index}/fx/{slot}
 
@@ -369,6 +390,32 @@ omitted only when the id is unknown). Sequence step results include `action_name
 per step the same way.
 
 Returns 408 if the REAPER main thread doesn't respond within the timeout (default 15s).
+
+### POST /execute/script
+
+One-shot script execution (issue #69): register + run (+ by default,
+deregister) in a single call, for short throw-away scripts that don't earn a
+place in the script library. Skips the `/scripts/register` → `/execute/action`
+round trip.
+
+```json
+// Request
+{ "script": "reaper.SetTempoTimeSigMarker(0,-1,0,-1,-1,95,4,4,false)" }
+
+// Response
+{ "status": "success", "executed_at": "2026-06-30T18:00:00Z" }
+```
+
+**Fields:**
+- `script` *(required, string)* — Lua body (same rules as `/scripts/register`: no `ShowConsoleMsg`, syntax-checked with `luac` if available)
+- `name` *(optional, string)* — default: auto-generated, unique per call
+- `ephemeral` *(optional, bool, default `true`)* — deregister immediately after running; pass `false` to keep it in the library (response then includes `action_id`), equivalent to the two-step register+execute flow
+- `feedback` *(optional, bool)* — same as `/execute/action`
+- `timeout_ms` *(optional, int)* — same as `/execute/action`
+
+A syntax error returns the same `{"registered": false, "syntax_error": {...}}`
+shape as `/scripts/register`. A Lua runtime error returns `{"status":
+"lua_error", "lua_error": "..."}`, same as `/execute/action`.
 
 ---
 
@@ -566,7 +613,10 @@ beat, bpm, timesig_num, timesig_denom, linear } ] }`.
 
 ### POST /state/tempo
 
-Add a tempo/time-sig marker. `{ time, bpm, timesig_num?, timesig_denom?, linear? }`.
+Set/add a tempo/time-sig marker. `{ time?, bpm, timesig_num?, timesig_denom?, time_signature?, linear? }`.
+`time` defaults to `0.0` (issue #70) — `{"bpm": 95}` alone sets the project's
+starting tempo, updating the marker at that position rather than duplicating
+it. `time_signature` accepts a `"4/4"` string as sugar for `timesig_num`/`timesig_denom`.
 
 ### GET /time
 
@@ -672,6 +722,12 @@ Track reads and writes gain: `phase` (bool), `n_channels` (int, 2–128 even),
 - FX reads (`GET /state/tracks/{index}/fx/{slot}` and the `fx[]` in track reads)
   include `offline` (bool). `POST .../fx/{slot}` and `POST .../fx` accept
   `offline` to take an FX online/offline.
+- Each `fx[]` entry also carries `is_inline_eq` (bool) and, when `false`,
+  `agent_slot` (int) — issue #66: REAPER auto-adds a disabled inline ReaEQ to
+  every new track as raw slot 0, shifting the first real plugin to slot 1.
+  `agent_slot` numbers only the non-inline-EQ entries (0, 1, 2, ...) so an
+  agent that ignores `is_inline_eq: true` entries never hits the off-by-one.
+  The raw REAPER `slot` (used by all `{slot}` path params) is unchanged.
 - **POST /state/tracks/{index}/fx/{slot}/copy** — copy or move this FX to another
   track. `{ "to_track": j, "to_slot": -1, "move": false }` (`to_slot` −1 appends).
   Returns `{ from_track, from_slot, to_track, moved, dest_fx_count }`.
@@ -707,6 +763,14 @@ Open a blank project from REAPER's default template, replacing the current proje
 ```
 
 Returns `{ "ok": true }`.
+
+> **Issue #80 — use this, not action `40023`.** Firing REAPER's native
+> "File: New project" action (id `40023`) via `/execute/action` opens a
+> "Save current project?" modal when a project is already loaded — headless
+> REAPER has no one to dismiss it, so the call blocks the main thread forever
+> and wedges the command queue (recover with `POST /queue/flush` +, if the
+> main thread itself is stuck, a REAPER restart). `POST /project/new` calls
+> `Main_openProject("")` directly and never shows that dialog.
 
 ### POST /project/open
 
@@ -748,14 +812,64 @@ Returns `{ "ok": true, "tracks": 0, "markers": 0, "tempo_markers": 1 }`.
 
 ---
 
+## Transport verbs (issue #49, #67, #71)
+
+Backed by `CSurf_On*` rather than `Main_OnCommand` action IDs, so state-change
+semantics are unambiguous and version-stable.
+
+### GET /transport
+
+Live transport position (issue #67) — bypasses the 1s `/state` cache
+entirely, safe to poll during playback for accurate `position`.
+
+```json
+{ "playing": true, "paused": false, "recording": false, "position": 4.231,
+  "loop_enabled": true, "loop_start": 0.0, "loop_end": 10.105 }
+```
+
+### POST /transport
+
+```json
+{ "action": "play" }   // "play" | "stop" | "pause" | "record"
+```
+
+Returns `{ "action": "play", "transport": { "playing": true, "recording": false, "paused": false, "position": 0.0 } }`.
+
+### POST /transport/play · /transport/stop · /transport/pause · /transport/record
+
+Aliases for `POST /transport` with the action baked into the route (issue #71
+— a guessed `POST /transport/play` no longer 404s). Same response shape.
+
+### POST /transport/cursor
+
+```json
+{ "position": 4.0, "moveview": false, "seekplay": false }
+```
+
+Returns `{ "position": 4.0 }`.
+
+### POST /transport/loop
+
+```json
+{ "start": 0.0, "end": 8.0, "enabled": true }   // all fields optional; provide start+end and/or enabled
+```
+
+Returns `{ "start": 0.0, "end": 8.0, "enabled": true }`.
+
+---
+
 ## MIDI verbs (issue #51)
 
 Structured read/write for the MIDI content of a media item's active take. Items are
 addressed by the same project-wide index as `GET /state/items`.
 
-### GET /state/items/{index}/midi
+### GET /state/items/{index}/midi[?limit=&offset=]
 
-Returns all MIDI notes and CC events from the active MIDI take.
+Returns MIDI notes and CC events from the active MIDI take. `limit` (default
+200, max 5000) and `offset` (default 0) paginate both `notes` and `cc`
+independently (issue #75 — items with thousands of notes need this rather
+than dumping everything on every call); `note_count`/`cc_count` always report
+the item's true totals regardless of pagination.
 
 Returns 404 when the item index is out of range. Returns 400 when the active take is
 not a MIDI source.
@@ -765,6 +879,8 @@ not a MIDI source.
   "item_index": 0,
   "note_count": 3,
   "cc_count": 1,
+  "limit": 200,
+  "offset": 0,
   "notes": [
     {
       "index": 0,

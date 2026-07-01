@@ -35,7 +35,10 @@ bool exec_error(httplib::Response& res, const nlohmann::json& result) {
         return true;
     }
     if (result.contains("_bad_request")) {
-        json_error(res, 400, result.value("_message", "Bad request"), "BAD_REQUEST");
+        nlohmann::json ctx = result.contains("_schema")
+                                     ? nlohmann::json{{"schema", result["_schema"]}}
+                                     : nlohmann::json::object();
+        json_error(res, 400, result.value("_message", "Bad request"), "BAD_REQUEST", ctx);
         return true;
     }
     return false;
@@ -240,8 +243,13 @@ void handle_tempo_get(const httplib::Request& req, httplib::Response& res) {
     json_ok(res, {{"markers", markers}, {"count", n}});
 }
 
-// POST /state/tempo — add a tempo / time-signature marker.
-// Body: { time, bpm, timesig_num?, timesig_denom?, linear? }
+// POST /state/tempo — set/add a tempo / time-signature marker.
+// Body: { time?, bpm, timesig_num?, timesig_denom?, time_signature?, linear? }
+//
+// `time` defaults to 0.0 (issue #70) so the common "just set the project
+// tempo" case is a one-field call — AddTempoTimeSigMarker updates the marker
+// already at that position in place rather than inserting a duplicate.
+// `time_signature` accepts a "N/D" string as sugar for timesig_num/timesig_denom.
 void handle_tempo_post(const httplib::Request& req, httplib::Response& res) {
     nlohmann::json body;
     try {
@@ -250,22 +258,32 @@ void handle_tempo_post(const httplib::Request& req, httplib::Response& res) {
         json_error(res, 400, "Invalid JSON body", "BAD_REQUEST");
         return;
     }
-    if (!body.contains("time") || !body["time"].is_number() || !body.contains("bpm") ||
-        !body["bpm"].is_number()) {
-        json_error(res, 400, "Required fields: time, bpm", "BAD_REQUEST");
+    if (!body.contains("bpm") || !body["bpm"].is_number()) {
+        json_error(res, 400, "Required field: bpm", "BAD_REQUEST");
         return;
     }
-    auto result = Executor::post([body]() -> nlohmann::json {
+    int num = body.value("timesig_num", 0);
+    int denom = body.value("timesig_denom", 0);
+    if (body.contains("time_signature") && body["time_signature"].is_string()) {
+        std::string ts = body["time_signature"].get<std::string>();
+        size_t slash = ts.find('/');
+        if (slash != std::string::npos) {
+            try {
+                num = std::stoi(ts.substr(0, slash));
+                denom = std::stoi(ts.substr(slash + 1));
+            } catch (...) {
+            }
+        }
+    }
+    auto result = Executor::post([body, num, denom]() -> nlohmann::json {
         Undo_BeginBlock2(nullptr);
-        double time = body["time"].get<double>();
+        double time = body.value("time", 0.0);
         double bpm = body["bpm"].get<double>();
-        int num = body.value("timesig_num", 0);
-        int denom = body.value("timesig_denom", 0);
         bool linear = body.value("linear", false);
         bool ok = AddTempoTimeSigMarker(nullptr, time, bpm, num, denom, linear);
-        Undo_EndBlock2(nullptr, "ReaClaw: add tempo marker", ok ? -1 : 0);
+        Undo_EndBlock2(nullptr, "ReaClaw: set tempo marker", ok ? -1 : 0);
         if (!ok)
-            return {{"_bad_request", true}, {"_message", "Failed to add tempo marker"}};
+            return {{"_bad_request", true}, {"_message", "Failed to set tempo marker"}};
         return {{"ok", true}, {"time", time}, {"bpm", bpm}};
     });
     if (exec_error(res, result))
@@ -535,7 +553,13 @@ void handle_project_open(const httplib::Request& req, httplib::Response& res) {
     }
     if (!body.contains("path") || !body["path"].is_string() ||
         body["path"].get<std::string>().empty()) {
-        json_error(res, 400, "Missing required field: path", "BAD_REQUEST");
+        json_error(res,
+                   400,
+                   "Missing required field: path",
+                   "BAD_REQUEST",
+                   {{"schema",
+                     {{"required", {"path"}},
+                      {"optional", {{"discard_changes", "boolean, default false"}}}}}});
         return;
     }
     std::string path = body["path"].get<std::string>();
@@ -594,7 +618,12 @@ void handle_project_save(const httplib::Request& req, httplib::Response& res) {
             std::string cur = project_filename();
             if (cur.empty())
                 return {{"_bad_request", true},
-                        {"_message", "Project has never been saved; provide a path field"}};
+                        {"_message", "Project has never been saved; provide a path field"},
+                        {"_schema",
+                         {{"required", {"path"}},
+                          {"note",
+                           "no path was given and the project has no filename yet (never "
+                           "saved) — subsequent saves may omit path once one is set"}}}};
             if (Main_SaveProjectEx)
                 Main_SaveProjectEx(nullptr, nullptr, 0);
             return {{"ok", true}, {"path", cur}};

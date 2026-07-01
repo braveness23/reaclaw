@@ -15,32 +15,14 @@
 
 namespace ReaClaw::Handlers {
 
-// POST /transport
-// Body: { "action": "play" | "stop" | "pause" | "record" }
-//
-// Backed by CSurf_On* rather than Main_OnCommand action IDs so the state-change
-// semantics are unambiguous and version-stable. All four verbs are main-thread
-// only and dispatched through the executor.
-void handle_transport_action(const httplib::Request& req, httplib::Response& res) {
-    nlohmann::json body;
-    try {
-        body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
-    } catch (...) {
-        json_error(res, 400, "Invalid JSON body", "BAD_REQUEST");
-        return;
-    }
-    if (!body.contains("action") || !body["action"].is_string()) {
-        json_error(
-                res, 400, "Missing required field: action (play|stop|pause|record)", "BAD_REQUEST");
-        return;
-    }
-    std::string action = body["action"].get<std::string>();
-    if (action != "play" && action != "stop" && action != "pause" && action != "record") {
-        json_error(res, 400, "action must be one of: play, stop, pause, record", "BAD_REQUEST");
-        return;
-    }
+namespace {
 
-    auto result = Executor::post([action]() -> nlohmann::json {
+// Shared core of POST /transport and its /transport/{play,stop,pause,record}
+// aliases (issue #71). Backed by CSurf_On* rather than Main_OnCommand action
+// IDs so the state-change semantics are unambiguous and version-stable.
+// Main-thread only, dispatched through the executor.
+nlohmann::json dispatch_transport(const std::string& action) {
+    return Executor::post([action]() -> nlohmann::json {
         if (action == "play") {
             if (CSurf_OnPlay)
                 CSurf_OnPlay();
@@ -63,7 +45,13 @@ void handle_transport_action(const httplib::Request& req, httplib::Response& res
                   {"paused", (ps & 2) != 0},
                   {"position", pos}}}};
     });
+}
 
+// Format+send the result of dispatch_transport(), shared by /transport and
+// its aliases.
+void respond_transport(httplib::Response& res,
+                       const std::string& action,
+                       const nlohmann::json& result) {
     if (result.contains("_timeout")) {
         json_error(res, 408, "Main thread timeout", "TIMEOUT");
         return;
@@ -72,8 +60,83 @@ void handle_transport_action(const httplib::Request& req, httplib::Response& res
         json_error(res, 500, result["_error"].get<std::string>(), "INTERNAL_ERROR");
         return;
     }
-
     Log::info("Transport: " + action);
+    json_ok(res, result);
+}
+
+}  // namespace
+
+// POST /transport
+// Body: { "action": "play" | "stop" | "pause" | "record" }
+void handle_transport_action(const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+        body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+    } catch (...) {
+        json_error(res, 400, "Invalid JSON body", "BAD_REQUEST");
+        return;
+    }
+    if (!body.contains("action") || !body["action"].is_string()) {
+        json_error(res,
+                   400,
+                   "Missing required field: action (play|stop|pause|record)",
+                   "BAD_REQUEST",
+                   {{"hint",
+                     "POST /transport {\"action\": \"play\"} — or use the alias routes "
+                     "POST /transport/play|stop|pause|record"}});
+        return;
+    }
+    std::string action = body["action"].get<std::string>();
+    if (action != "play" && action != "stop" && action != "pause" && action != "record") {
+        json_error(res, 400, "action must be one of: play, stop, pause, record", "BAD_REQUEST");
+        return;
+    }
+    respond_transport(res, action, dispatch_transport(action));
+}
+
+// POST /transport/play|stop|pause|record — agent-friendly aliases (issue #71).
+// Equivalent to POST /transport with the action baked into the route, so a
+// guessed sub-resource route works instead of 404ing.
+void handle_transport_play(const httplib::Request&, httplib::Response& res) {
+    respond_transport(res, "play", dispatch_transport("play"));
+}
+void handle_transport_stop(const httplib::Request&, httplib::Response& res) {
+    respond_transport(res, "stop", dispatch_transport("stop"));
+}
+void handle_transport_pause(const httplib::Request&, httplib::Response& res) {
+    respond_transport(res, "pause", dispatch_transport("pause"));
+}
+void handle_transport_record(const httplib::Request&, httplib::Response& res) {
+    respond_transport(res, "record", dispatch_transport("record"));
+}
+
+// GET /transport — live transport position (issue #67). Bypasses the 1s
+// /state TTL cache entirely (this handler never touches it) so playhead
+// polling during playback isn't up to a second stale.
+void handle_transport_get(const httplib::Request&, httplib::Response& res) {
+    auto result = Executor::post([]() -> nlohmann::json {
+        int ps = GetPlayState ? GetPlayState() : 0;
+        double pos = GetPlayPosition ? GetPlayPosition() : 0.0;
+        double lo = 0.0, hi = 0.0;
+        if (GetSet_LoopTimeRange2)
+            GetSet_LoopTimeRange2(nullptr, false, false, &lo, &hi, false);
+        int rep = GetSetRepeatEx ? GetSetRepeatEx(nullptr, -1) : 0;
+        return {{"playing", (ps & 1) != 0},
+                {"paused", (ps & 2) != 0},
+                {"recording", (ps & 4) != 0},
+                {"position", pos},
+                {"loop_enabled", rep != 0},
+                {"loop_start", lo},
+                {"loop_end", hi}};
+    });
+    if (result.contains("_timeout")) {
+        json_error(res, 408, "Main thread timeout", "TIMEOUT");
+        return;
+    }
+    if (result.contains("_error")) {
+        json_error(res, 500, result["_error"].get<std::string>(), "INTERNAL_ERROR");
+        return;
+    }
     json_ok(res, result);
 }
 

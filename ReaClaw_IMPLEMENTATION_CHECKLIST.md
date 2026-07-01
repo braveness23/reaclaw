@@ -522,6 +522,33 @@ The epic makes it first-class.
 
 ---
 
+## Friction-test fixes (2026-06-30 dogfooding session, issues #63-#80) — Phase 1 batch
+
+Most items came pre-fixed or already covered by existing code (verified live
+before writing anything new) — see `ReaClaw_ROADMAP.md` for full triage.
+Code-changing items landed:
+
+- [x] **#66** ReaEQ ghost FX — `is_inline_eq`/`agent_slot` flags on track `fx[]`
+- [x] **#67** `GET /transport` — live position, bypasses the 1s state cache
+- [x] **#69** `POST /execute/script` — one-shot register+run(+deregister)
+- [x] **#70** `POST /state/tempo` — `time` optional (defaults 0.0), `time_signature` string sugar
+- [x] **#71** `POST /transport/play|stop|pause|record` — agent-friendly aliases
+- [x] **#72** `context.schema` on 5 named 400 responses
+- [x] **#73** `docs/SCRIPTING.md` — Lua cheat sheet
+- [x] **#74** FX param pagination/search (`?limit=&offset=&q=`)
+- [x] **#75** MIDI readback pagination (`?limit=&offset=`)
+- [x] **#64** `POST /queue/flush` — drains pending backlog (short-term health/timeout fix already shipped v1.11.2)
+- [x] **#79** `instrument` field on `POST /state/tracks` create specs (bulk creation already existed via `create: [...]`)
+- [x] **#80** confirmed already fixed (`Main_openProject`, not `40023`) — added doc warning only
+- [x] **#68** confirmed already fixed (startup script reconciliation + `GET /scripts/cache` both predate this batch) — verify-only
+- [x] **#76** confirmed already fixed (track color read/write both predate this batch) — verify-only
+
+Deferred to a later phase (real architecture/risk decisions, not busywork):
+`POST /reaper/restart` (#77), async render-job model (#35), CI E2E smoke test
+(#36), external-change event feed (#31), A/B visual diff (#53).
+
+---
+
 ## Ongoing (All Phases)
 
 - [x] Keep unit and integration tests passing before each commit — 38/38 unit tests pass; verified live against REAPER 7.74 (aarch64)

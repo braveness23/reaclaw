@@ -133,6 +133,16 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                 Handlers::json_ok(res, health);
             }));
 
+    // POST /queue/flush — issue #64 medium-term recovery: drain the pending
+    // command backlog so callers blocked behind a wedged main thread return
+    // immediately instead of waiting out their timeout. Does not itself
+    // unwedge the main thread — see POST /reaper/restart (future work) for
+    // that; this only stops the queue from silently growing behind it.
+    svr.Post("/queue/flush", auth_wrap(cfg, [](const httplib::Request&, httplib::Response& res) {
+                 size_t n = Executor::flush();
+                 Handlers::json_ok(res, {{"flushed", n}});
+             }));
+
     // --- Catalog ---
     svr.Get("/catalog/search", auth_wrap(cfg, Handlers::handle_catalog_search));
     svr.Get("/catalog/categories", auth_wrap(cfg, Handlers::handle_catalog_categories));
@@ -427,13 +437,20 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     svr.Post("/render", auth_wrap(cfg, Handlers::handle_render));
 
     // --- Transport verbs (issue #49) ---
+    svr.Get("/transport", auth_wrap(cfg, Handlers::handle_transport_get));  // issue #67
     svr.Post("/transport", auth_wrap(cfg, Handlers::handle_transport_action));
     svr.Post("/transport/cursor", auth_wrap(cfg, Handlers::handle_transport_cursor));
     svr.Post("/transport/loop", auth_wrap(cfg, Handlers::handle_transport_loop));
+    // Agent-friendly aliases for the common verbs (issue #71).
+    svr.Post("/transport/play", auth_wrap(cfg, Handlers::handle_transport_play));
+    svr.Post("/transport/stop", auth_wrap(cfg, Handlers::handle_transport_stop));
+    svr.Post("/transport/pause", auth_wrap(cfg, Handlers::handle_transport_pause));
+    svr.Post("/transport/record", auth_wrap(cfg, Handlers::handle_transport_record));
 
     // --- Execute ---
     svr.Post("/execute/action", auth_wrap(cfg, Handlers::handle_execute_action));
     svr.Post("/execute/sequence", auth_wrap(cfg, Handlers::handle_execute_sequence));
+    svr.Post("/execute/script", auth_wrap(cfg, Handlers::handle_execute_script));  // issue #69
 
     // --- Scripts (Phase 1) ---
     svr.Post("/scripts/register", auth_wrap(cfg, Handlers::handle_scripts_register));

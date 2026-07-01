@@ -27,7 +27,13 @@ void handle_scripts_register(const httplib::Request& req, httplib::Response& res
 
     if (!body.contains("name") || !body["name"].is_string() || !body.contains("script") ||
         !body["script"].is_string()) {
-        json_error(res, 400, "Missing required fields: name, script", "BAD_REQUEST");
+        json_error(res,
+                   400,
+                   "Missing required fields: name, script",
+                   "BAD_REQUEST",
+                   {{"schema",
+                     {{"required", {"name", "script"}},
+                      {"optional", {{"tags", "array of strings"}}}}}});
         return;
     }
 

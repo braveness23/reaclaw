@@ -226,16 +226,38 @@ bool parse_cc_spec(const nlohmann::json& spec,
 
 }  // namespace
 
-// GET /state/items/{index}/midi
+// GET /state/items/{index}/midi[?limit=&offset=]
 //
-// Returns all MIDI notes and CC events from the item's active take.
-// Notes carry both PPQ positions (take-relative) and project times (seconds).
-// Returns 400 when the active take is not a MIDI source.
+// Returns MIDI notes and CC events from the item's active take. Notes carry
+// both PPQ positions (take-relative) and project times (seconds). Returns
+// 400 when the active take is not a MIDI source.
+//
+// Issue #75: items with thousands of notes need pagination rather than
+// returning everything on every call. limit/offset apply independently to
+// notes and cc (both default to limit=200, offset=0); note_count/cc_count
+// always report the item's true totals regardless of pagination.
 void handle_midi_get(const httplib::Request& req, httplib::Response& res) {
     int index = 0;
     if (!path_int(req, res, "index", index))
         return;
-    auto result = Executor::post([index]() -> nlohmann::json {
+    int limit = 200;
+    if (req.has_param("limit"))
+        try {
+            limit = std::stoi(req.get_param_value("limit"));
+        } catch (...) {
+        }
+    if (limit < 1)
+        limit = 1;
+    if (limit > 5000)
+        limit = 5000;
+    int offset = 0;
+    if (req.has_param("offset"))
+        try {
+            offset = std::max(0, std::stoi(req.get_param_value("offset")));
+        } catch (...) {
+        }
+
+    auto result = Executor::post([index, limit, offset]() -> nlohmann::json {
         bool is_midi = false;
         MediaItem_Take* take = midi_take_at(index, is_midi);
         if (!take)
@@ -247,14 +269,14 @@ void handle_midi_get(const httplib::Request& req, httplib::Response& res) {
         MIDI_CountEvts(take, &notecnt, &cccnt, &textsyxcnt);
 
         nlohmann::json notes = nlohmann::json::array();
-        for (int i = 0; i < notecnt; i++) {
+        for (int i = offset; i < notecnt && static_cast<int>(notes.size()) < limit; i++) {
             auto n = note_to_json(take, i);
             if (!n.is_null())
                 notes.push_back(std::move(n));
         }
 
         nlohmann::json cc = nlohmann::json::array();
-        for (int i = 0; i < cccnt; i++) {
+        for (int i = offset; i < cccnt && static_cast<int>(cc.size()) < limit; i++) {
             auto c = cc_to_json(take, i);
             if (!c.is_null())
                 cc.push_back(std::move(c));
@@ -263,6 +285,8 @@ void handle_midi_get(const httplib::Request& req, httplib::Response& res) {
         return {{"item_index", index},
                 {"note_count", notecnt},
                 {"cc_count", cccnt},
+                {"limit", limit},
+                {"offset", offset},
                 {"notes", notes},
                 {"cc", cc}};
     });

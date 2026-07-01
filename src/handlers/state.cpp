@@ -245,16 +245,44 @@ void apply_fx_params(MediaTrack* track, int fx, const nlohmann::json& params) {
     }
 }
 
+// Case-insensitive substring match, used by fx_params_json's ?q= search.
+bool ci_contains(const std::string& haystack, const std::string& needle) {
+    auto it = std::search(haystack.begin(),
+                          haystack.end(),
+                          needle.begin(),
+                          needle.end(),
+                          [](unsigned char a, unsigned char b) {
+                              return std::tolower(a) == std::tolower(b);
+                          });
+    return it != haystack.end();
+}
+
 // JSON snapshot of one FX slot's parameters: index, name, normalized value,
 // formatted display string, and the real-unit range (min/max/mid + current raw
 // value from TrackFX_GetParamEx) so an agent can reason in real units instead
 // of guessing what a normalized 0..1 maps to.
-nlohmann::json fx_params_json(MediaTrack* track, int fx) {
+//
+// Issue #74: large plugins (e.g. Surge XT: 2147 params) need pagination and
+// name search rather than dumping every param on every GET. limit<0 (the
+// default, used by the mutating POST /fx response) means unlimited — only
+// the GET route passes real limit/offset/q values.
+nlohmann::json fx_params_json(MediaTrack* track,
+                              int fx,
+                              int limit = -1,
+                              int offset = 0,
+                              const std::string& q = "") {
     nlohmann::json arr = nlohmann::json::array();
     int n = TrackFX_GetNumParams(track, fx);
+    int matched = 0;
     for (int i = 0; i < n; i++) {
         char nm[256] = {};
         TrackFX_GetParamName(track, fx, i, nm, sizeof(nm));
+        if (!q.empty() && !ci_contains(nm, q))
+            continue;
+        if (matched++ < offset)
+            continue;
+        if (limit >= 0 && static_cast<int>(arr.size()) >= limit)
+            continue;
         double norm = TrackFX_GetParamNormalized(track, fx, i);
         char fmt[256] = {};
         TrackFX_FormatParamValue(track, fx, i, norm, fmt, sizeof(fmt));
@@ -295,15 +323,30 @@ nlohmann::json track_to_json(MediaTrack* track, int index) {
     if (auto* a = static_cast<int*>(GetSetMediaTrackInfo(track, "I_RECARM", nullptr)))
         armed = *a != 0;
 
+    // Issue #66: REAPER auto-adds a disabled inline ReaEQ to every new track
+    // (a UI convenience, not an agent-controllable signal-chain plugin). Flag
+    // it rather than hiding it — an agent that only counts "agent_slot" never
+    // hits the off-by-one, but the raw REAPER slot/state stays inspectable.
     nlohmann::json fx_arr = nlohmann::json::array();
     int fx_count = TrackFX_GetCount(track);
+    int agent_slot = 0;
     for (int fx = 0; fx < fx_count; fx++) {
         char fx_name[256] = {};
         TrackFX_GetFXName(track, fx, fx_name, sizeof(fx_name));
         bool enabled = TrackFX_GetEnabled(track, fx);
         bool offline = TrackFX_GetOffline(track, fx);
-        fx_arr.push_back(
-                {{"slot", fx}, {"name", fx_name}, {"enabled", enabled}, {"offline", offline}});
+        std::string name_str(fx_name);
+        bool is_inline_eq = !enabled && name_str.find("ReaEQ") != std::string::npos;
+        nlohmann::json entry = {{"slot", fx},
+                                {"name", fx_name},
+                                {"enabled", enabled},
+                                {"offline", offline},
+                                {"is_inline_eq", is_inline_eq}};
+        if (!is_inline_eq) {
+            entry["agent_slot"] = agent_slot;
+            agent_slot++;
+        }
+        fx_arr.push_back(std::move(entry));
     }
 
     std::string guid_str;
@@ -760,6 +803,16 @@ void handle_state_tracks_post(const httplib::Request& req, httplib::Response& re
                     MediaTrack* t = GetTrack(nullptr, idx);
                     if (t) {
                         apply_track_props(t, spec);
+                        // Issue #79: optional instrument in the same call —
+                        // avoids a separate POST .../fx round trip per track
+                        // when scaffolding a session. {"create":[{...}, ...]}
+                        // already IS the "bulk create" the issue also asked
+                        // for; no separate /tracks/bulk resource is needed.
+                        if (spec.contains("instrument") && spec["instrument"].is_string()) {
+                            std::string instr = spec["instrument"].get<std::string>();
+                            if (!instr.empty())
+                                TrackFX_AddByName(t, instr.c_str(), false, -1);
+                        }
                         auto tj = track_to_json(t, idx);
                         maybe_add_icon_hint(tj, spec);
                         created.push_back(tj);
@@ -881,12 +934,28 @@ void handle_state_add_fx(const httplib::Request& req, httplib::Response& res) {
     json_ok(res, result);
 }
 
-// GET /state/tracks/{index}/fx/{slot} — list an FX slot's parameters.
+// GET /state/tracks/{index}/fx/{slot}[?limit=&offset=&q=] — list an FX
+// slot's parameters. Issue #74: large plugins (Surge XT: 2147 params) need
+// pagination/search rather than dumping everything on every call.
 void handle_state_get_fx(const httplib::Request& req, httplib::Response& res) {
     int index = 0, slot = 0;
     if (!path_int(req, res, "index", index) || !path_int(req, res, "slot", slot))
         return;
-    auto result = Executor::post([index, slot]() -> nlohmann::json {
+    int limit = -1;
+    if (req.has_param("limit"))
+        try {
+            limit = std::max(0, std::stoi(req.get_param_value("limit")));
+        } catch (...) {
+        }
+    int offset = 0;
+    if (req.has_param("offset"))
+        try {
+            offset = std::max(0, std::stoi(req.get_param_value("offset")));
+        } catch (...) {
+        }
+    std::string q = req.has_param("q") ? req.get_param_value("q") : "";
+
+    auto result = Executor::post([index, slot, limit, offset, q]() -> nlohmann::json {
         if (index < 0 || index >= CountTracks(nullptr))
             return {{"_not_found", true}};
         MediaTrack* t = GetTrack(nullptr, index);
@@ -901,7 +970,8 @@ void handle_state_get_fx(const httplib::Request& req, httplib::Response& res) {
                 {"name", nm},
                 {"enabled", TrackFX_GetEnabled(t, slot)},
                 {"offline", TrackFX_GetOffline(t, slot)},
-                {"params", fx_params_json(t, slot)}};
+                {"param_count", TrackFX_GetNumParams(t, slot)},
+                {"params", fx_params_json(t, slot, limit, offset, q)}};
     });
     if (executor_error(res, result))
         return;

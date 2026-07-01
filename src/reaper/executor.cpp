@@ -93,6 +93,23 @@ void tick() {
     }
 }
 
+size_t flush() {
+    std::queue<Command> drained;
+    {
+        std::lock_guard<std::mutex> lk(s_mutex);
+        std::swap(drained, s_queue);
+        s_queue_nonempty_since_ms.store(0);
+    }
+    size_t n = drained.size();
+    while (!drained.empty()) {
+        drained.front().result.set_value(nlohmann::json{{"_flushed", true}});
+        drained.pop();
+    }
+    if (n > 0)
+        Log::warn("Executor: flushed " + std::to_string(n) + " pending command(s)");
+    return n;
+}
+
 bool is_stuck() {
     if (queue_depth() == 0)
         return false;
