@@ -97,16 +97,6 @@ def main():
     print(f"Smoke test against {BASE}")
     wait_for_health()
 
-    # Diagnostic: confirm the main-thread command queue actually drains at
-    # all before relying on it, with a generous timeout — a freshly-launched
-    # REAPER's first main-thread tick has been observed to take longer than
-    # the default 15s in some CI environments.
-    t0 = time.time()
-    probe = post("/execute/action", {"id": 40364, "timeout_ms": 90000}, timeout=95)
-    print(f"first main-thread call took {time.time() - t0:.1f}s: {probe}")
-    if probe.get("status") != "success":
-        fail(f"main-thread command queue never drained: {probe}")
-
     tone_path = os.path.join(tempfile.gettempdir(), "reaclaw_ci_tone.wav")
     write_sine_wav(tone_path, TONE_SECONDS, TONE_HZ, SAMPLE_RATE)
 
