@@ -4,6 +4,7 @@
 #include "handlers/common.h"
 #include "reaper/catalog.h"
 #include "reaper/executor.h"
+#include "reaper/scripts.h"
 #include "util/logging.h"
 
 #include <httplib.h>
@@ -135,7 +136,15 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
         return;
     }
     if (!body.contains("id")) {
-        json_error(res, 400, "Missing required field: id", "BAD_REQUEST");
+        json_error(res,
+                   400,
+                   "Missing required field: id",
+                   "BAD_REQUEST",
+                   {{"schema",
+                     {{"required", {"id"}},
+                      {"optional",
+                       {{"feedback", "boolean, default false — return before/after state snapshot"},
+                        {"timeout_ms", "integer 1000-120000, default 15000"}}}}}});
         return;
     }
 
@@ -272,6 +281,136 @@ void handle_execute_action(const httplib::Request& req, httplib::Response& res) 
     if (want_feedback)
         resp["feedback"] = build_feedback();
     json_ok(res, resp);
+}
+
+// POST /execute/script — issue #69: register + run (+ deregister) in one
+// call, for short throw-away scripts that don't earn a place in the script
+// library. Body: { script, name?, ephemeral?, feedback?, timeout_ms? }.
+// `ephemeral` defaults to true (matching the endpoint's "one-shot" purpose —
+// pass ephemeral:false for register+execute semantics identical to the
+// two-step /scripts/register + /execute/action flow, kept in the library).
+void handle_execute_script(const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(req.body);
+    } catch (...) {
+        json_error(res, 400, "Invalid JSON body", "BAD_REQUEST");
+        return;
+    }
+    if (!body.contains("script") || !body["script"].is_string()) {
+        json_error(res,
+                   400,
+                   "Missing required field: script",
+                   "BAD_REQUEST",
+                   {{"schema",
+                     {{"required", {"script"}},
+                      {"optional",
+                       {{"name", "string, default auto-generated"},
+                        {"ephemeral", "boolean, default true — deregister after running"},
+                        {"feedback", "boolean, default false"},
+                        {"timeout_ms", "integer 1000-120000, default 15000"}}}}}});
+        return;
+    }
+    std::string script = body["script"].get<std::string>();
+    bool ephemeral = body.value("ephemeral", true);
+    bool want_feedback = body.value("feedback", false);
+    std::string ag = agent_id(req);
+
+    int timeout_seconds = 15;
+    if (body.contains("timeout_ms") && body["timeout_ms"].is_number_integer()) {
+        int ms = body["timeout_ms"].get<int>();
+        ms = std::max(1000, std::min(120000, ms));
+        timeout_seconds = (ms + 999) / 1000;
+    }
+
+    // Auto-generate a unique name when none is given so ephemeral calls never
+    // collide with each other or with library scripts under register_script's
+    // by-name idempotency check.
+    std::string name = body.value("name", std::string());
+    if (name.empty()) {
+        auto now_ns = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+        name = "ephemeral_" + std::to_string(now_ns);
+    }
+
+    Scripts::RegisterResult reg = Scripts::register_script(name, script, {});
+    if (!reg.registered) {
+        if (reg.syntax_error_line > 0 || !reg.syntax_error_message.empty()) {
+            json_ok(res,
+                    {{"registered", false},
+                     {"syntax_error",
+                      {{"line", reg.syntax_error_line}, {"message", reg.syntax_error_message}}}});
+            return;
+        }
+        json_error(res,
+                   500,
+                   reg.internal_error.empty() ? "Script registration failed" : reg.internal_error,
+                   "INTERNAL_ERROR");
+        return;
+    }
+
+    const char* rp = GetResourcePath ? GetResourcePath() : nullptr;
+    std::string lua_err_path = rp ? std::string(rp) + "/reaclaw_last_error.txt" : "";
+    if (!lua_err_path.empty())
+        std::remove(lua_err_path.c_str());
+
+    nlohmann::json id_val = reg.action_id;
+    auto result = Executor::post(
+            [id_val]() -> nlohmann::json {
+                int cmd_id = resolve_cmd_id(id_val);
+                if (cmd_id == 0)
+                    return {{"_not_found", true}};
+                Main_OnCommand(cmd_id, 0);
+                return {{"ok", true}, {"cmd_id", cmd_id}};
+            },
+            timeout_seconds);
+
+    Log::info("Execute script: " + name + (ag.empty() ? "" : " (agent: " + ag + ")"));
+
+    nlohmann::json resp;
+    bool had_error = false;
+    if (result.contains("_timeout")) {
+        log_history("script", reg.action_id, ag, "timeout", "", name);
+        json_error(res, 408, "Main thread timeout", "TIMEOUT");
+        had_error = true;
+    } else if (result.contains("_error")) {
+        std::string err = result["_error"].get<std::string>();
+        log_history("script", reg.action_id, ag, "failed", err, name);
+        json_error(res, 500, err, "INTERNAL_ERROR");
+        had_error = true;
+    } else if (result.contains("_not_found")) {
+        json_error(res,
+                   404,
+                   "Registered script could not be resolved to a REAPER command",
+                   "NOT_FOUND");
+        had_error = true;
+    } else {
+        log_history("script", reg.action_id, ag, "success", "", name);
+        resp = {{"status", "success"}, {"executed_at", now_iso()}};
+        if (!ephemeral)
+            resp["action_id"] = reg.action_id;
+
+        if (!lua_err_path.empty()) {
+            std::ifstream ef(lua_err_path);
+            if (ef.good()) {
+                std::string lua_err((std::istreambuf_iterator<char>(ef)),
+                                    std::istreambuf_iterator<char>());
+                ef.close();
+                std::remove(lua_err_path.c_str());
+                if (!lua_err.empty()) {
+                    resp["status"] = "lua_error";
+                    resp["lua_error"] = lua_err;
+                }
+            }
+        }
+        if (want_feedback)
+            resp["feedback"] = build_feedback();
+    }
+
+    if (ephemeral)
+        Scripts::unregister_script(reg.action_id);
+
+    if (!had_error)
+        json_ok(res, resp);
 }
 
 // POST /execute/sequence

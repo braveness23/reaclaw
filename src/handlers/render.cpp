@@ -154,7 +154,21 @@ void handle_render(const httplib::Request& req, httplib::Response& res) {
     }
 
     if (!body.contains("output") || !body["output"].is_string()) {
-        json_error(res, 400, "Missing required field: output", "BAD_REQUEST");
+        json_error(res,
+                   400,
+                   "Missing required field: output",
+                   "BAD_REQUEST",
+                   {{"schema",
+                     {{"required", {"output"}},
+                      {"optional",
+                       {{"format", "string: wav|flac|mp3|ogg, default wav"},
+                        {"srate", "integer, default 44100"},
+                        {"channels", "integer 1-64, default 2"},
+                        {"bit_depth", "integer: 16|24|32, default 24"},
+                        {"bounds",
+                         "string: project|time_selection|all_regions|custom, default project"},
+                        {"start", "number (seconds), required when bounds=custom"},
+                        {"end", "number (seconds), required when bounds=custom"}}}}}});
         return;
     }
 

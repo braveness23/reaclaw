@@ -9,6 +9,44 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`GET /transport`** — live transport position, bypassing the 1s `/state`
+  cache so playhead polling during playback isn't up to a second stale (#67).
+- **`POST /transport/play|stop|pause|record`** — agent-friendly aliases for
+  `POST /transport {"action": ...}` so a guessed sub-resource route no longer
+  404s (#71).
+- **`POST /execute/script`** — one-shot Lua execution: register + run + (by
+  default) deregister in a single call, for throw-away scripts that don't
+  need a place in the script library (#69).
+- **`POST /queue/flush`** — drains the pending command backlog so callers
+  blocked behind a stuck main thread return immediately instead of waiting
+  out their timeout (#64).
+- **`instrument` field on `POST /state/tracks` create specs** — add a
+  VSTi/CLAP by name in the same call that creates the track, instead of a
+  separate follow-up `POST .../fx` (#79). (Bulk creation was already covered
+  by the existing `create: [...]` array — no separate `/tracks/bulk` route.)
+- **`is_inline_eq` / `agent_slot` on track `fx[]` entries** — flags REAPER's
+  auto-added disabled inline ReaEQ (always at raw slot 0 on new tracks) so an
+  agent counting FX by `agent_slot` never hits the off-by-one (#66).
+- **Pagination/search on `GET /state/tracks/{n}/fx/{slot}`** — `?limit=&offset=&q=`
+  for plugins with hundreds/thousands of params (e.g. Surge XT: 2147) (#74).
+- **Pagination on `GET /state/items/{n}/midi`** — `?limit=&offset=` (default
+  200/0) for items with large note counts; `note_count`/`cc_count` always
+  report true totals (#75).
+- **`context.schema` on the most commonly-guessed-wrong 400 responses** —
+  `/render`, `/execute/action`, `/execute/script`, `/scripts/register`,
+  `/project/open`, `/project/save` now list every accepted field on the
+  first missing-field error (#72).
+- **`docs/SCRIPTING.md`** — Lua call-signature gotchas, the `SetExtState`
+  return pattern, the `SetTempoTimeSigMarker` idiom, headless-safety rules,
+  and a worked MIDI-build example (#73).
+
+### Changed
+- **`POST /state/tempo`** — `time` is now optional (defaults to `0.0`), and
+  `time_signature` accepts a `"4/4"` string as sugar for
+  `timesig_num`/`timesig_denom` — setting the project's starting tempo is now
+  a one-field call: `{"bpm": 95}` (#70).
+
 ## [1.11.2] - 2026-06-30
 
 ### Fixed

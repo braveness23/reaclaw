@@ -20,4 +20,12 @@ size_t queue_depth();
 // indicating the main thread is stuck (e.g. blocked by ShowConsoleMsg).
 bool is_stuck();
 
+// Issue #64 — drain the pending command backlog without waiting for the main
+// thread. Resolves every queued (not-yet-executing) command's promise with
+// {"_flushed": true} so its blocked HTTP caller returns immediately instead of
+// waiting out its timeout. Does not affect a command already mid-execute() on
+// the main thread (if the main thread itself is wedged, only a REAPER restart
+// recovers that one). Returns the number of commands flushed.
+size_t flush();
+
 }  // namespace ReaClaw::Executor
