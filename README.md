@@ -254,7 +254,7 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.14.0** — async render jobs: `POST /render` gains an
+Latest release: **v1.15.0** — async render jobs: `POST /render` gains an
 `async: true` field, returning `{job_id, status: "queued"}` immediately instead
 of blocking the HTTP connection for the render's duration. `GET
 /render/jobs/{id}` polls status/result, `GET /render/jobs` lists tracked jobs,

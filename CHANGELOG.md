@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-07-01
+
 ### Added
 - **`GET /snapshot/diff/visualize`** (#53) — the A/B visual diff. Paired
   waveform/spectrum/loudness visualizations of a snapshot's audio target vs.
