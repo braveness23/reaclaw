@@ -141,13 +141,18 @@ void handle_reaper_restart(const httplib::Request& req, httplib::Response& res) 
     if (want_save) {
         auto result = Executor::post(
                 []() -> nlohmann::json {
+                    // EnumProjects(-1, ...), not GetSetProjectInfo_String(...,
+                    // "PROJECT_FILENAME", ...) — see project.cpp's
+                    // project_filename() for why.
                     std::vector<char> fn(4096, 0);
-                    if (GetSetProjectInfo_String)
-                        GetSetProjectInfo_String(nullptr, "PROJECT_FILENAME", fn.data(), false);
+                    if (EnumProjects)
+                        EnumProjects(-1, fn.data(), static_cast<int>(fn.size()));
                     if (fn[0] == '\0')
                         return {{"skipped", "project has never been saved"}};
+                    // Main_SaveProjectEx needs an actual filename — nullptr
+                    // silently no-ops rather than meaning "current file".
                     if (Main_SaveProjectEx)
-                        Main_SaveProjectEx(nullptr, nullptr, 0);
+                        Main_SaveProjectEx(nullptr, fn.data(), 0);
                     return {{"ok", true}};
                 },
                 5);

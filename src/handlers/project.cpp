@@ -428,11 +428,18 @@ namespace {
 
 // Return the project's current filename (empty string if never saved).
 // Must be called from the main thread.
+//
+// Uses EnumProjects(-1, ...), not GetSetProjectInfo_String(..., "PROJECT_FILENAME",
+// ...) — "PROJECT_FILENAME" is not a real parmname (the SDK only documents
+// PROJECT_NAME, which returns the bare basename, not the full path); passing
+// an unrecognized parmname silently no-ops, which made this always report
+// "never saved" even right after a successful save-as (confirmed live while
+// building issue #77's restart endpoint, which shares this helper's logic).
 std::string project_filename() {
-    if (!GetSetProjectInfo_String)
+    if (!EnumProjects)
         return "";
     std::vector<char> buf(4096, 0);
-    GetSetProjectInfo_String(nullptr, "PROJECT_FILENAME", buf.data(), false);
+    EnumProjects(-1, buf.data(), static_cast<int>(buf.size()));
     return std::string(buf.data());
 }
 
@@ -624,8 +631,12 @@ void handle_project_save(const httplib::Request& req, httplib::Response& res) {
                           {"note",
                            "no path was given and the project has no filename yet (never "
                            "saved) — subsequent saves may omit path once one is set"}}}};
+            // Main_SaveProjectEx requires an actual filename — nullptr does NOT
+            // mean "use the current filename" (confirmed live while building
+            // issue #77's restart endpoint: it silently no-ops, no error, no
+            // write). Pass the filename we just read back explicitly.
             if (Main_SaveProjectEx)
-                Main_SaveProjectEx(nullptr, nullptr, 0);
+                Main_SaveProjectEx(nullptr, cur.c_str(), 0);
             return {{"ok", true}, {"path", cur}};
         }
 
