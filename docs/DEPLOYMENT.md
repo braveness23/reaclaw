@@ -12,7 +12,27 @@
 
 ---
 
-## Build
+## Install a prebuilt binary (fastest)
+
+Each [GitHub Release](https://github.com/braveness23/reaclaw/releases/latest) ships
+prebuilt binaries — no toolchain needed:
+
+| Platform | Asset | Install to |
+|----------|-------|------------|
+| Linux x86_64 | `reaper_reaclaw-linux-x86_64.so` | `~/.config/REAPER/UserPlugins/reaper_reaclaw.so` |
+| Windows x86_64 | `reaper_reaclaw-windows-x86_64.dll` | `%APPDATA%\REAPER\UserPlugins\reaper_reaclaw.dll` |
+
+Download the asset, rename it to `reaper_reaclaw.{so,dll}` (drop the platform
+suffix), drop it in `UserPlugins`, and restart REAPER. macOS has no prebuilt
+binary yet — build from source below.
+
+> The Windows `.dll` is a MinGW-w64 cross-compiled, CI-verified build. It is
+> not yet load-tested on a physical Windows REAPER install in CI — if you hit an
+> issue, please file it.
+
+---
+
+## Build from source
 
 ### Linux / macOS
 

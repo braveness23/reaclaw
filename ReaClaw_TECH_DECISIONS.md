@@ -28,14 +28,29 @@ Key architectural decisions and rationale. Read this before modifying the design
 
 **Rationale:**
 - REAPER itself is C++. The SDK headers and WDL use C++.
-- On Windows, MSVC is required because REAPER uses pure virtual interface classes with a specific ABI; other compilers are incompatible on Windows.
 - C++17 gives us `std::filesystem`, `std::optional`, `std::string_view`, structured bindings — reduces boilerplate without extra libraries.
 - All chosen vendor libraries (cpp-httplib, nlohmann/json) work with C++17.
 
 **Platform compilers:**
-- Windows: MSVC (required — ABI compatibility)
+- Windows: MinGW-w64 GCC, cross-compiled from Linux CI (issue #84) — see the
+  ABI note below. MSVC also works if building natively.
 - macOS: Clang (Xcode)
 - Linux: GCC or Clang
+
+**Windows ABI note (revised — the original claim here was overbroad).**
+The bulk of the REAPER SDK surface — `reaper_plugin_functions.h`'s `GetFunc()`-loaded
+function-pointer table, which is what ~all of ReaClaw's handlers use — is plain C
+calling convention, not C++ name-mangled/vtable-dependent. It is compiler-ABI-neutral:
+confirmed live by #84's MinGW-w64 cross-compile, which links and produces a working
+`.dll` with the full handler surface, no MSVC involved. **The one place true C++ ABI
+compatibility genuinely matters is a *virtual-interface* boundary REAPER calls
+*into*** — e.g. `IReaperControlSurface` (issue #31's event feed): REAPER's own binary
+(commonly MSVC-built on Windows) must agree with the extension's binary on vtable
+layout and calling convention to dispatch virtual calls into a subclass correctly. This
+is unverified for a MinGW-built `IReaperControlSurface` on Windows specifically — there
+is no Windows REAPER install in this environment to test against. Flagged as a known
+risk when #31 lands; the mitigation is the same "ship on CI-green, no load-test
+available" posture already accepted for the whole Windows binary (#84).
 
 ---
 
