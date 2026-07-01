@@ -11,6 +11,7 @@
 #include "db/db.h"
 #include "panel/menu.h"
 #include "reaper/catalog.h"
+#include "reaper/csurf.h"
 #include "reaper/executor.h"
 #include "server/server.h"
 #include "util/logging.h"
@@ -115,6 +116,9 @@ bool init(reaper_plugin_info_t* rec, void* hInstance) {
         plugin_register("timer", reinterpret_cast<void*>(&ReaClaw::timer_callback));
     }
 
+    // Register the event-feed control surface (issue #31)
+    Csurf::init();
+
     // Start HTTPS server
     if (!Server::start(g_config)) {
         Log::error("Failed to start HTTPS server");
@@ -138,6 +142,9 @@ void shutdown() {
     if (plugin_register) {
         plugin_register("-timer", reinterpret_cast<void*>(&ReaClaw::timer_callback));
     }
+
+    // Unregister the event-feed control surface (issue #31)
+    Csurf::shutdown();
 
     // Stop server (blocks until thread joins)
     Server::stop();

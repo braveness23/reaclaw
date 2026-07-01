@@ -70,8 +70,10 @@ add_library(reaper_reaclaw SHARED
     src/handlers/restart.cpp
     src/handlers/history.cpp
     src/handlers/recipes.cpp
+    src/handlers/events.cpp
     src/reaper/api.cpp
     src/reaper/catalog.cpp
+    src/reaper/csurf.cpp
     src/reaper/executor.cpp
     src/reaper/scripts.cpp
     src/db/db.cpp

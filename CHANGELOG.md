@@ -10,6 +10,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **External-change event feed** (#31) — `GET /events?since=&limit=` (poll) and
+  `GET /events/stream` (Server-Sent Events) push granular, attributed change
+  events via a new `IReaperControlSurface` hook: track list/volume/pan/mute/
+  selected/solo/recarm/title and play/repeat state, from any source — GUI,
+  control surface, another API client, or ReaClaw's own edits. Each event
+  carries `source: "reaclaw"|"external"` via a new `Executor::EditingGuard`
+  RAII attribution mechanism covering both direct mutations and action
+  dispatch (sync and async). Verified live including SSE over the existing
+  TLS server. Complements the existing `GET /state/changes` poll token and
+  `GET /snapshot/diff`. See `ReaClaw_TECH_DECISIONS.md` §26 for the honest
+  account of attribution's confirmed-live limits (best-effort, not airtight)
+  and the deliberate v1 scope boundary (FX/marker changes not yet covered).
 - **Server-side semantic catalog search + `/recipes`** (#10) —
   `GET /catalog/search?semantic=true` ranks by embedding similarity via a
   local Ollama instance instead of keywords. Opt-in twice over

@@ -28,7 +28,22 @@ std::atomic<int64_t> s_last_tick_ms{0};
 // backlog (reset to 0 when the queue empties).
 std::atomic<int64_t> s_queue_nonempty_since_ms{0};
 
+// Issue #31 attribution — main-thread only, plain int (not atomic).
+int s_reaclaw_editing_depth = 0;
+
 }  // namespace
+
+bool is_reaclaw_editing() {
+    return s_reaclaw_editing_depth > 0;
+}
+
+EditingGuard::EditingGuard() {
+    s_reaclaw_editing_depth++;
+}
+
+EditingGuard::~EditingGuard() {
+    s_reaclaw_editing_depth--;
+}
 
 nlohmann::json post(std::function<nlohmann::json()> fn, int timeout_seconds) {
     Command cmd;
@@ -86,6 +101,7 @@ void tick() {
             s_queue.pop();
         }
         try {
+            EditingGuard guard;
             cmd.result.set_value(cmd.execute());
         } catch (...) {
             cmd.result.set_exception(std::current_exception());
