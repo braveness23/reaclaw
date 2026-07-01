@@ -9,6 +9,25 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`POST /reaper/restart`** — full main-thread-wedge recovery: kills and
+  relaunches the REAPER process ReaClaw is embedded in, replaying its own
+  current argv/environment (`/proc/self/cmdline`/`environ`) byte-for-byte so
+  DISPLAY/XAUTHORITY are exactly what's already working. Best-effort
+  in-place project save (default on, short timeout) before restarting.
+  Linux only. Goes beyond `POST /queue/flush` (#64), which only drains the
+  pending backlog and can't unstick a call already stuck mid-execute (#77).
+
+### Fixed
+- **In-place project save silently no-op'd.** `POST /project/save` (no
+  `path`) and `POST /reaper/restart`'s pre-restart save both relied on
+  `GetSetProjectInfo_String(nullptr, "PROJECT_FILENAME", ...)` to detect the
+  current filename — not a real REAPER parmname, so it always read back
+  empty — and on `Main_SaveProjectEx(nullptr, nullptr, 0)` to save in place,
+  which also silently no-ops instead of saving to the current filename.
+  Found live while testing #77; both now use `EnumProjects(-1, ...)` and
+  pass the filename explicitly.
+
 ## [1.12.0] - 2026-06-30
 
 ### Added

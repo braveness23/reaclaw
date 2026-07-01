@@ -543,9 +543,15 @@ Code-changing items landed:
 - [x] **#68** confirmed already fixed (startup script reconciliation + `GET /scripts/cache` both predate this batch) — verify-only
 - [x] **#76** confirmed already fixed (track color read/write both predate this batch) — verify-only
 
-Deferred to a later phase (real architecture/risk decisions, not busywork):
-`POST /reaper/restart` (#77), async render-job model (#35), CI E2E smoke test
-(#36), external-change event feed (#31), A/B visual diff (#53).
+Phase 2 (real architecture/risk decisions, done one at a time with a check-in):
+
+- [x] **#77** `POST /reaper/restart` — full main-thread-wedge recovery via
+      `/proc/self/{cmdline,environ}` argv/environment replay (no `Executor::post`
+      dependency, no REAPER SDK calls on the critical path). Linux only. See
+      `ReaClaw_TECH_DECISIONS.md` §22.
+
+Still deferred: async render-job model (#35), CI E2E smoke test (#36),
+external-change event feed (#31), A/B visual diff (#53).
 
 ---
 

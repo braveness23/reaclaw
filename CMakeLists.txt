@@ -67,6 +67,7 @@ add_library(reaper_reaclaw SHARED
     src/handlers/execute.cpp
     src/handlers/transport.cpp
     src/handlers/scripts.cpp
+    src/handlers/restart.cpp
     src/handlers/history.cpp
     src/reaper/api.cpp
     src/reaper/catalog.cpp
