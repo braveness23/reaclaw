@@ -452,9 +452,7 @@ nlohmann::json render_spectrum(const Decoded& d, Image::Canvas* c, const Plot& p
 // ---- shared driver ----------------------------------------------------------
 
 // type: 0=spectrum, 1=waveform, 2=loudness. Returns -1 on unknown.
-int parse_type(const httplib::Request& req) {
-    auto it = req.params.find("type");
-    std::string t = it != req.params.end() ? it->second : "spectrum";
+int parse_type_string(const std::string& t) {
     if (t == "spectrum" || t == "eq" || t == "spectrum_curve")
         return 0;
     if (t == "waveform" || t == "wave")
@@ -462,6 +460,11 @@ int parse_type(const httplib::Request& req) {
     if (t == "loudness" || t == "contour")
         return 2;
     return -1;
+}
+
+int parse_type(const httplib::Request& req) {
+    auto it = req.params.find("type");
+    return parse_type_string(it != req.params.end() ? it->second : "spectrum");
 }
 
 nlohmann::json build_visual(PCM_source* src,
@@ -540,6 +543,34 @@ void parse_common(const httplib::Request& req,
 
 }  // namespace
 
+// Shared core behind handle_visualize_file — see visualize.h. Main-thread
+// only; caller must invoke from inside Executor::post.
+nlohmann::json build_file_visualization(const std::string& path,
+                                        const std::string& type_str,
+                                        double start,
+                                        double end,
+                                        int width,
+                                        int height,
+                                        bool image) {
+    int type = parse_type_string(type_str);
+    if (type < 0)
+        return {{"_bad_request", true},
+                {"_message", "type must be spectrum, waveform, or loudness"}};
+
+    PCM_source* src = PCM_Source_CreateFromFile(path.c_str());
+    if (!src)
+        return {{"_not_found", true}, {"_message", "Could not open audio file: " + path}};
+    nlohmann::json a;
+    try {
+        a = build_visual(src, type, start, end, width, height, image);
+    } catch (...) {
+        PCM_Source_Destroy(src);
+        throw;
+    }
+    PCM_Source_Destroy(src);
+    return a;
+}
+
 // GET /analysis/item/{index}/visualize
 void handle_visualize_item(const httplib::Request& req, httplib::Response& res) {
     int index = 0;
@@ -596,22 +627,11 @@ void handle_visualize_file(const httplib::Request& req, httplib::Response& res) 
         json_error(res, 400, "type must be spectrum, waveform, or loudness", "BAD_REQUEST");
         return;
     }
+    std::string type_str = req.params.count("type") ? req.params.find("type")->second : "spectrum";
 
     auto result = Executor::post(
-            [path, type, start, end, width, height, image]() -> nlohmann::json {
-                PCM_source* src = PCM_Source_CreateFromFile(path.c_str());
-                if (!src)
-                    return {{"_not_found", true},
-                            {"_message", "Could not open audio file: " + path}};
-                nlohmann::json a;
-                try {
-                    a = build_visual(src, type, start, end, width, height, image);
-                } catch (...) {
-                    PCM_Source_Destroy(src);
-                    throw;
-                }
-                PCM_Source_Destroy(src);
-                return a;
+            [path, type_str, start, end, width, height, image]() -> nlohmann::json {
+                return build_file_visualization(path, type_str, start, end, width, height, image);
             },
             30);
     if (exec_error(res, result))
