@@ -254,7 +254,7 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.13.0** — `POST /reaper/restart` for full main-thread-wedge
+Latest release: **v1.14.0** — `POST /reaper/restart` for full main-thread-wedge
 recovery: kills and relaunches the REAPER process ReaClaw is embedded in,
 replaying its own current argv/environment byte-for-byte so DISPLAY/XAUTHORITY
 stay exactly what's already working, with a best-effort in-place project save

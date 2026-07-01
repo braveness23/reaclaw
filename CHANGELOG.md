@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-07-01
+
 ### Added
 - **`async: true` on `POST /render`** — returns `{job_id, status: "queued"}`
   immediately instead of blocking the HTTP connection for the render's
