@@ -254,14 +254,15 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.15.0** — async render jobs: `POST /render` gains an
-`async: true` field, returning `{job_id, status: "queued"}` immediately instead
-of blocking the HTTP connection for the render's duration. `GET
-/render/jobs/{id}` polls status/result, `GET /render/jobs` lists tracked jobs,
-`DELETE /render/jobs/{id}` cancels a not-yet-started job (409 if already
-running). Solves the HTTP-timeout/long-poll problem for long renders — honestly
-does **not** fix cross-endpoint starvation, since REAPER's main thread pumps no
-message loop at all during an offline render. See the
+Latest release: **v1.15.0** — the A/B visual diff: `POST /snapshot` gains an
+optional `audio: {item|file}` field that freezes a reference to a piece of
+audio at capture time, and `GET /snapshot/diff/visualize` produces paired
+waveform/spectrum/loudness images (a snapshot's audio vs. current, or another
+snapshot) plus a machine-readable digest delta — "did this edit actually
+change the sound?" as one call. Also ships the CI E2E render smoke test that
+closes out the programmatic-production epic: every PR now builds a tiny
+composition, renders it, and asserts the output is non-silent against a real
+(throwaway, unlicensed) REAPER instance. See the
 [CHANGELOG](CHANGELOG.md) for the full story.
 
 | Phase | Scope | Tag |
