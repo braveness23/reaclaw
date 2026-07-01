@@ -185,6 +185,11 @@ The REAPER SDK distinguishes threadsafe from non-threadsafe API functions. `Main
 - Removing the LLM client eliminates: outbound HTTP code, API key management in the extension, provider abstraction (Anthropic/OpenAI/etc.), and the associated config section.
 - The correct flow: agent generates Lua → `POST /scripts/register` → ReaClaw validates syntax and calls `AddRemoveReaScript`.
 
+**Narrow exception: §25 (issue #10).** Optional, off-by-default, loopback-only embedding
+calls to a local Ollama for catalog *search ranking* — not a generative LLM, not agent-facing
+generation, opt-in twice over. See §25 for the full reasoning on why this doesn't reopen the
+door this decision closes.
+
 ---
 
 ## 12. Authentication: Two Modes Only
@@ -659,6 +664,49 @@ limitation (track diff paths are also positional), not a new one introduced here
 
 ---
 
+## 25. Server-Side Semantic Search: a narrow, opt-in carve-out of §11 (issue #10)
+
+**Decision:** `GET /catalog/search?semantic=true` ranks by embedding similarity via a local
+Ollama instance, instead of (or as well as) the existing FTS5 keyword path. **Opt-in twice
+over** — `config.semantic_search.enabled` must be `true` *and* the request must pass
+`semantic=true` — and **loopback-only**: `ollama_url` is checked against an allowlist
+(`127.0.0.1`/`localhost`/`::1`) before every call, rejecting instantly (no network attempt,
+no timeout wait) if it isn't. Off by default, so a fresh install makes zero outbound calls.
+
+**Why this doesn't contradict §11 ("No LLM Client in the Extension").** §11's rationale is
+specifically about *generative* redundancy — "the agent calling ReaClaw is already an LLM,
+calling another LLM on its behalf is architectural redundancy." An embedding model is a
+different kind of tool entirely: it doesn't generate text, it produces a vector for *ranking
+ReaClaw's own catalog* — a retrieval primitive the calling agent has no way to substitute for
+locally without doing the exact same kind of call itself. This project already ships that
+exact call — the MCP client (`mcp/reaclaw_mcp/client.py`, `_semantic_search`) has embedded
+and ranked the action catalog via local Ollama since before this issue. This just makes the
+same capability available server-side, for plain REST/MCP-less callers, reusing the MCP
+client's approach (embed, L2-normalize, cosine-rank, cache) as the reference implementation.
+
+**Why cache the embeddings as comma-separated text, not a BLOB.** `DB` (`src/db/db.h`) only
+binds text params — adding blob-binding for one caller was more invasive than the storage
+cost of plain-text floats (~77 MB for the full ~6700-action catalog at 768 dimensions,
+trivial for a local SQLite file). Cached in a new `action_embeddings` table, keyed by
+`(action id, section, model)`, invalidated automatically (rebuilt on next use) when the
+catalog size or model changes — piggybacking on the same signature-comparison pattern
+`reaper/catalog.cpp` already uses for its own rebuild-marker.
+
+**Why build lazily, not at catalog-build time.** Semantic search is opt-in and most
+installs will never enable it; embedding the full catalog on every REAPER startup (or every
+catalog rebuild) would pay that cost for users who never call `semantic=true`. Built once,
+on first semantic search, and reused until the catalog or model changes.
+
+**Result flags (`interactive`, `mutates_state`, `requires_selection`) are name/category
+heuristics, not guarantees** — `interactive` already existed (ellipsis/prompt/known-modal-id);
+`mutates_state` defaults `true` except for REAPER's own `View:`/`Options:` prefixes (the
+safer assumption when an agent is deciding whether an edit needs care); `requires_selection`
+keys off REAPER's own "selected" naming convention. Consistent with this project's existing
+"honest heuristic, not ML classifier" pattern (§17's confidence-tagging, catalog.cpp's modal
+detection) — cheap, explainable, wrong at the margins, and documented as such.
+
+---
+
 ## Summary
 
 | Concern | Decision |
@@ -680,5 +728,6 @@ limitation (track diff paths are also positional), not a new one introduced here
 | Plugin name | reaper_reaclaw.{dll,dylib,so} |
 | API coverage | Tiered: structured verbs + action-runner + Lua escape hatch |
 | Production/render | Offline-first headless render engine (Epic #32); `/render` hides RENDER_FORMAT; long renders are jobs; local-first |
-| Dependencies | Tiered (0–3): vendored core required; SWS/external tools optional + feature-detected; network forbidden |
+| Dependencies | Tiered (0–3): vendored core required; SWS/external tools optional + feature-detected; network forbidden except one narrow, opt-in, loopback-only exception (§25) |
 | Versioning | SemVer — additive = MINOR, breaking = MAJOR; documented+advertised endpoints are stable; no 2.0 for additive growth |
+| Magic wand (Epic-adjacent, issue #10) | Three layers: Skill (`skill/reaclaw/`) + MCP server (`mcp/`, 17 tools) + server-side intent verbs/capabilities/recipes/semantic search |

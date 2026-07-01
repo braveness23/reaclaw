@@ -28,7 +28,11 @@ json default_config() {
              {{"validate_syntax", true},
               {"log_all_executions", true},
               {"max_script_size_kb", 512}}},
-            {"logging", {{"level", "info"}, {"file", ""}, {"format", "text"}}}};
+            {"logging", {{"level", "info"}, {"file", ""}, {"format", "text"}}},
+            {"semantic_search",
+             {{"enabled", false},
+              {"ollama_url", "http://127.0.0.1:11434"},
+              {"model", "nomic-embed-text"}}}};
 }
 
 template <typename T>
@@ -116,6 +120,11 @@ bool Config::load(Config& cfg, const std::string& resource_path) {
     cfg.learning_min_support = jval<int>(learn, "min_support", 3);
     cfg.learning_min_confidence = jval<double>(learn, "min_confidence", 0.3);
 
+    auto& sem = j["semantic_search"];
+    cfg.semantic_search_enabled = jval<bool>(sem, "enabled", false);
+    cfg.semantic_search_ollama_url = jval<std::string>(sem, "ollama_url", "http://127.0.0.1:11434");
+    cfg.semantic_search_model = jval<std::string>(sem, "model", "nomic-embed-text");
+
     // Resolve TLS cert/key paths (user-supplied or derived from certs_dir)
     if (!cfg.tls_cert_file.empty()) {
         cfg.resolved_cert_path = cfg.tls_cert_file;
@@ -146,7 +155,11 @@ bool Config::save() const {
                {{"enabled", learning_enabled},
                 {"window_seconds", learning_window_seconds},
                 {"min_support", learning_min_support},
-                {"min_confidence", learning_min_confidence}}}};
+                {"min_confidence", learning_min_confidence}}},
+              {"semantic_search",
+               {{"enabled", semantic_search_enabled},
+                {"ollama_url", semantic_search_ollama_url},
+                {"model", semantic_search_model}}}};
 
     std::ofstream f(resource_dir + "config.json");
     if (!f)

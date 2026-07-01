@@ -40,6 +40,16 @@ struct Config {
     int learning_min_support = 3;          // min observations before a pattern surfaces
     double learning_min_confidence = 0.3;  // min P(consequent | antecedent) to surface
 
+    // semantic_search (issue #10) — opt-in, localhost-only embedding-based
+    // catalog search via a local Ollama instance. Off by default: zero network
+    // egress out of the box. See ReaClaw_TECH_DECISIONS.md §25 for why this is
+    // a narrow, explicit carve-out of §11's no-LLM-client stance (an embedding
+    // model, not a generative one, and this project already ships the same
+    // call from the MCP client — this just makes it available server-side).
+    bool semantic_search_enabled = false;
+    std::string semantic_search_ollama_url = "http://127.0.0.1:11434";
+    std::string semantic_search_model = "nomic-embed-text";
+
     // Derived paths (filled in by load())
     std::string resource_dir;  // {GetResourcePath()}/reaclaw/
     std::string certs_dir;     // {resource_dir}/certs/

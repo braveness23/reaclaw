@@ -339,8 +339,16 @@ stages, smallest/lowest-risk first.
       live: 18 tools registered; create/set/fx/send/selection round-trip.
 - [x] Semantic catalog search — in the MCP layer (`search_actions`): embeds the
       ~6700-action catalog via local Ollama (`nomic-embed-text`), caches by
-      catalog signature, cosine ranking; graceful keyword fallback. (Recipes
-      surface is covered by the Skill.)
+      catalog signature, cosine ranking; graceful keyword fallback.
+- [x] **Server-side semantic search + `GET /recipes`** — the two pieces that were
+      MCP-client-only or Skill-only now also exist server-side for plain
+      REST/MCP-less callers: `GET /catalog/search?semantic=true` (opt-in twice
+      over, loopback-only, graceful keyword fallback — `ReaClaw_TECH_DECISIONS.md`
+      §25) and `GET /recipes[/{id}]` (the Skill's snippets as structured JSON).
+      Catalog results also gained `mutates_state`/`requires_selection` flags.
+      Verified live: semantic search against the 1411-action MIDI-editor catalog
+      (real cosine scores, cache builds once then sub-second), loopback safety
+      rail rejects a non-loopback `ollama_url` instantly and falls back cleanly.
 
 ### Epic #16 — Tier-A control verbs (v1.3.0) — **complete**
 Extends tiered coverage with the high-value SDK gaps from

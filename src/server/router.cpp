@@ -15,6 +15,7 @@
 #include "handlers/midi.h"
 #include "handlers/probe.h"
 #include "handlers/project.h"
+#include "handlers/recipes.h"
 #include "handlers/render.h"
 #include "handlers/restart.h"
 #include "handlers/screenshot.h"
@@ -159,6 +160,14 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                 Handlers::handle_catalog_by_id(req, res);
             }));
     svr.Get("/catalog", auth_wrap(cfg, Handlers::handle_catalog_list));
+
+    // --- Recipes (issue #10) ---
+    svr.Get("/recipes", auth_wrap(cfg, Handlers::handle_recipes_list));
+    svr.Get(R"(/recipes/([^/]+))",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["id"] = req.matches[1];
+                Handlers::handle_recipes_get(req, res);
+            }));
 
     // --- State ---
     // Track icon discovery — registered before the parameterised track routes so

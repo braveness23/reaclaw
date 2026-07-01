@@ -10,6 +10,19 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Server-side semantic catalog search + `/recipes`** (#10) —
+  `GET /catalog/search?semantic=true` ranks by embedding similarity via a
+  local Ollama instance instead of keywords. Opt-in twice over
+  (`config.semantic_search.enabled` AND the request's `semantic=true`),
+  loopback-only (a non-loopback `ollama_url` is rejected instantly, no
+  network attempt), and silently falls back to keyword search on any
+  failure. Catalog results also gain `mutates_state` and
+  `requires_selection` heuristic flags (alongside the existing
+  `interactive`). New `GET /recipes[/{id}]` exposes the Skill's vetted
+  snippets as structured JSON for callers without the Skill loaded. See
+  `ReaClaw_TECH_DECISIONS.md` §25 for why this is a narrow, deliberate
+  exception to the "no network egress" stance (§11) — an embedding model,
+  not a generative one, and the same call the MCP client already makes.
 - **Windows release binary** (#84) — `reaper_reaclaw-windows-x86_64.dll`,
   cross-compiled via MinGW-w64 on the same self-hosted CI runner, published
   alongside the Linux `.so` on every tagged release. Re-added from git

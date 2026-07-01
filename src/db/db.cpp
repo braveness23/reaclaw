@@ -95,6 +95,21 @@ CREATE TABLE IF NOT EXISTS learn_pairs (
     n          INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (antecedent, consequent)
 );
+
+-- Issue #10 — server-side semantic catalog search (opt-in, off by default;
+-- see config.semantic_search_enabled). Caches L2-normalized embedding vectors
+-- (so cosine similarity is a plain dot product) as comma-separated decimal
+-- text rather than a BLOB, to avoid adding blob-param binding to the DB
+-- wrapper for a single caller. Built lazily on first semantic search, keyed
+-- by (catalog snapshot, model) via meta.action_embeddings_sig so a catalog
+-- rebuild or model change invalidates the cache automatically.
+CREATE TABLE IF NOT EXISTS action_embeddings (
+    id      INTEGER NOT NULL,
+    section TEXT NOT NULL DEFAULT 'main',
+    model   TEXT NOT NULL,
+    vector  TEXT NOT NULL,
+    PRIMARY KEY (id, section, model)
+);
 )SQL";
 
 }  // namespace

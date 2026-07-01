@@ -682,7 +682,19 @@ If missing, ReaClaw writes defaults on startup.
   },
   "logging": {
     "level": "info",
-    "file": ""
+    "file": "",
+    "format": "text"
+  },
+  "learning": {
+    "enabled": false,
+    "window_seconds": 180,
+    "min_support": 3,
+    "min_confidence": 0.3
+  },
+  "semantic_search": {
+    "enabled": false,
+    "ollama_url": "http://127.0.0.1:11434",
+    "model": "nomic-embed-text"
   }
 }
 ```
@@ -691,6 +703,9 @@ Notes:
 - `database.path`: Defaults to `{ResourcePath}/reaclaw/reaclawdb.sqlite`
 - `auth.type`: `"none"` or `"api_key"`
 - `logging.file`: If empty, logs to REAPER console via `ShowConsoleMsg`
+- `learning`: Epic #20 opt-in correction mining, local-only. Off by default.
+- `semantic_search`: issue #10 opt-in embedding-based catalog search, loopback-only.
+  Off by default — see `ReaClaw_TECH_DECISIONS.md` §25.
 
 ---
 
