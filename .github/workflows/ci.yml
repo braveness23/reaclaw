@@ -104,7 +104,16 @@ jobs:
         run: |
           echo "jackd jackd/tweak_rt_limits boolean false" | sudo debconf-set-selections
           sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends xvfb jackd2 python3
+          # xvfb/jackd2 host the headless display + dummy audio backend;
+          # the rest are REAPER's own runtime shared-lib deps (its Linux
+          # build links against X11/GL/ALSA even for offline, display-less
+          # rendering) — confirmed missing live: REAPER failed to load
+          # libSwell.so with "libXi.so.6: cannot open shared object file"
+          # on a bare runner image that only has the build toolchain.
+          sudo apt-get install -y --no-install-recommends \
+            xvfb jackd2 python3 \
+            libx11-6 libxi6 libxext6 libxcb1 libfontconfig1 libfreetype6 \
+            libgl1 libasound2t64
           curl -fsSL "https://www.reaper.fm/files/7.x/reaper${REAPER_VERSION}_linux_x86_64.tar.xz" -o /tmp/reaper.tar.xz
           tar -xf /tmp/reaper.tar.xz -C /tmp
           /tmp/reaper_linux_x86_64/install-reaper.sh --install "$HOME/opt" --quiet
