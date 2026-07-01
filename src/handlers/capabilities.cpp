@@ -258,9 +258,25 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                "GetProjectStateChangeCount; increments on any project edit regardless of source. "
                "Cache the value; re-read state only when it advances. "
                "Pair with GET /snapshot/diff to find what changed."},
+              {"events",
+               "GET /events?since=<cursor>&limit= → {cursor, events:[...]} — granular, "
+               "attributed push feed via an IReaperControlSurface hook (issue #31). Covers "
+               "track list/volume/pan/mute/solo/recarm/selected/title and play/repeat state; "
+               "each event carries source: reaclaw|external, so an agent can tell 'a track I "
+               "didn't touch just changed' apart from its own edits (including via "
+               "POST /execute/action, sync or async). FX/marker/etc. changes (reachable via "
+               "Extended()) are not yet covered — a deliberate v1 boundary, see "
+               "ReaClaw_TECH_DECISIONS.md §26."},
+              {"events_stream",
+               "GET /events/stream[?since=] — the same feed as Server-Sent Events "
+               "(text/event-stream, one 'data: {...}' frame per event), for a caller that "
+               "wants push instead of polling. Bounded to 10 minutes per connection — "
+               "reconnect with since set to the last seq seen."},
               {"note",
-               "counter resets on REAPER restart; event-feed (control-surface hook) is out of "
-               "scope for now — snapshot diff is the recommended 'what changed' path"}}},
+               "counter resets on REAPER restart, as does the event ring (in-memory, not "
+               "persisted — an event feed for the current session, not a durable log); "
+               "snapshot diff remains the recommended path for 'what changed while I wasn't "
+               "watching', independent of session boundaries"}}},
             {"actions",
              {{"run", "POST /execute/action {id}"},
               {"sequence", "POST /execute/sequence {steps:[...]}"},

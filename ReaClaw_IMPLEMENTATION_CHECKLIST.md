@@ -514,9 +514,16 @@ The epic makes it first-class.
 **Take-FX verbs ([#50](https://github.com/braveness23/reaclaw/issues/50)).**
 - [x] Full `TakeFX_*` surface at `/state/items/{i}/takes/{t}/fx/...`: add, read, set, delete, copy, preset. **Done v1.10.0.**
 
-**Change-token polling ([#31](https://github.com/braveness23/reaclaw/issues/31), partial).**
+**Change-token polling + event feed ([#31](https://github.com/braveness23/reaclaw/issues/31)). Complete.**
 - [x] `GET /state/changes` → `{change_count}` via `GetProjectStateChangeCount()`. **Done v1.10.0.**
-- [ ] Event feed (IReaperControlSurface hook) + attribution — deferred.
+- [x] Event feed (`IReaperControlSurface` hook) — `GET /events?since=&limit=`,
+      `GET /events/stream` (SSE), full attribution (`source: reaclaw|external`) via
+      `Executor::EditingGuard`. Verified live: real events with correct GUIDs/kinds;
+      API-driven edits tagged `reaclaw`; REAPER's own startup activity tagged
+      `external`; SSE streams real-time over the existing `SSLServer`. Attribution
+      confirmed best-effort (not airtight for every notification — see
+      `ReaClaw_TECH_DECISIONS.md` §26 for what was actually observed). FX/marker
+      changes not yet covered (`Extended()` tail) — a documented v1 boundary.
 
 **Async render-job model ([#35](https://github.com/braveness23/reaclaw/issues/35)). Done — see Phase 2 below.**
 - [x] `async: true` flag on `POST /execute/action` — schedules via SWELL `SetTimer`. **Done v1.10.0.**
@@ -575,8 +582,15 @@ Phase 2 (real architecture/risk decisions, done one at a time with a check-in):
       `demos/scripts/ci_smoke_test.py`. Closes Epic #32.
 - [x] **#53** `GET /snapshot/diff/visualize` — A/B visual diff. See
       `ReaClaw_TECH_DECISIONS.md` §24.
+- [x] **#10** Server-side semantic catalog search + `GET /recipes` — the two
+      remaining slivers of the magic-wand issue. See `ReaClaw_TECH_DECISIONS.md` §25.
+- [x] **#84** Windows release binary (`.dll`), cross-compiled via CI. See
+      `ReaClaw_TECH_DECISIONS.md`'s Windows ABI note (§2).
+- [x] **#31** External-change event feed + SSE + attribution. See
+      `ReaClaw_TECH_DECISIONS.md` §26.
 
-Still deferred: external-change event feed (#31).
+Still deferred: Pi plugin curation (#62) — manual devops + subjective creative
+work, deliberately left for the user, not this marathon.
 
 ---
 

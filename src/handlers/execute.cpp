@@ -36,8 +36,13 @@ static void async_action_timer_proc(HWND hwnd, UINT, UINT_PTR id, DWORD) {
     KillTimer(hwnd, id);
     int cmd = s_async_pending_cmd.exchange(0);
     Log::info("Async timer fired: cmd=" + std::to_string(cmd));
-    if (cmd != 0 && Main_OnCommand)
+    if (cmd != 0 && Main_OnCommand) {
+        // Issue #31 — this path bypasses Executor::tick() (see the comment
+        // above), so it needs its own attribution guard; tick()'s own guard
+        // only covers commands that actually go through the command queue.
+        Executor::EditingGuard guard;
         Main_OnCommand(cmd, 0);
+    }
     Log::info("Async timer done: cmd=" + std::to_string(cmd));
 }
 

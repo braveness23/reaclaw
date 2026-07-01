@@ -8,6 +8,7 @@
 #include "handlers/catalog.h"
 #include "handlers/chunk.h"
 #include "handlers/common.h"
+#include "handlers/events.h"
 #include "handlers/execute.h"
 #include "handlers/history.h"
 #include "handlers/items.h"
@@ -183,6 +184,10 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     svr.Post("/state/chunk", auth_wrap(cfg, Handlers::handle_chunk_post));
     svr.Get("/state/changes", auth_wrap(cfg, Handlers::handle_state_changes));
     svr.Get("/state", auth_wrap(cfg, Handlers::handle_state));
+
+    // --- Event feed (issue #31) ---
+    svr.Get("/events/stream", auth_wrap(cfg, Handlers::handle_events_stream));
+    svr.Get("/events", auth_wrap(cfg, Handlers::handle_events_list));
 
     // Create + batch update tracks.
     svr.Post("/state/tracks", auth_wrap(cfg, Handlers::handle_state_tracks_post));

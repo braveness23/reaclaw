@@ -28,4 +28,25 @@ bool is_stuck();
 // recovers that one). Returns the number of commands flushed.
 size_t flush();
 
+// Issue #31 — attribution for the event feed. True while main-thread code is
+// running on ReaClaw's behalf, false otherwise. A control-surface callback
+// firing synchronously inside that call stack (REAPER dispatches state-change
+// notifications inline, before the triggering SDK call returns) reads this to
+// tag its event source "reaclaw" vs. "external". Main-thread only, so a plain
+// depth counter (not atomic) is enough — set/read on the same thread.
+bool is_reaclaw_editing();
+
+// RAII guard marking a block of main-thread code as reaclaw-originated.
+// tick() wraps every command's execute() with one; execute.cpp's async path
+// (which fires via SWELL SetTimer, not the command queue — see execute.cpp)
+// wraps its own Main_OnCommand call with a second. Nest-safe (depth-counted),
+// so nothing needs to know whether it's already inside one.
+class EditingGuard {
+   public:
+    EditingGuard();
+    ~EditingGuard();
+    EditingGuard(const EditingGuard&) = delete;
+    EditingGuard& operator=(const EditingGuard&) = delete;
+};
+
 }  // namespace ReaClaw::Executor

@@ -1393,6 +1393,79 @@ target is the way to diff two actual renders written to disk.
 
 ---
 
+## Change Detection (issue #31)
+
+Know that a human at the GUI, a control surface, or another API client changed the project
+— not just what *you* changed. Three complementary paths, cheapest first:
+
+### GET /state/changes
+
+A monotonic counter (`GetProjectStateChangeCount`) — increments on essentially any project
+edit, from any source. Cache the value; re-read state only when it advances.
+
+```json
+{ "change_count": 42 }
+```
+
+Resets on REAPER restart. Cheapest possible check; tells you *that* something changed, not
+what — pair with `GET /snapshot/diff` or `GET /events` to find out.
+
+### GET /events?since=&limit=
+
+Granular, attributed events via an `IReaperControlSurface` hook — the real push feed, polled.
+Covers track list/volume/pan/mute/selected/solo/recarm/title and play/repeat state.
+
+- `since` *(optional, default 0)* — return events with `seq` greater than this (the response's
+  `cursor`, from your last poll).
+- `limit` *(optional, default 100, max 500)*.
+
+```json
+{
+  "cursor": 187,
+  "events": [
+    { "seq": 186, "ts": "2026-07-01T22:52:25Z", "kind": "track_mute",
+      "track_index": 0, "track_guid": "{EC1C5501-...}",
+      "value": { "muted": false }, "source": "external" }
+  ]
+}
+```
+
+`kind` is one of `track_list_change`, `track_volume`, `track_pan`, `track_mute`,
+`track_selected`, `track_solo`, `track_recarm`, `track_title`, `play_state`,
+`repeat_state`. `track_index`/`track_guid` are present for track-scoped events (absent for
+`track_list_change`/`play_state`/`repeat_state`). `source` is `"reaclaw"` or `"external"` —
+**best-effort, not a guarantee**: REAPER doesn't promise every notification fires
+synchronously within the triggering call, so a small fraction of ReaClaw's own edits can be
+misattributed `"external"` (confirmed live — see `ReaClaw_TECH_DECISIONS.md` §26 for what
+was actually observed). For an edit where attribution certainty matters, corroborate with
+`GET /snapshot/diff` rather than trusting a single event in isolation.
+
+The event ring is in-memory, bounded (last 1000), and resets on REAPER restart — an event
+feed for the current session, not a durable log. FX/marker/other changes not in the `kind`
+list above aren't covered yet (a deliberate v1 boundary, §26) — they still show up via
+`GET /state/changes` and `GET /snapshot/diff`.
+
+### GET /events/stream?since=
+
+The same feed as Server-Sent Events (`text/event-stream`) — one `data: {...}\n\n` frame per
+event, for a caller that wants push instead of polling:
+
+```bash
+curl -sk -N "$BASE/events/stream" -H "$AUTH"
+```
+
+Each connection is capped at 10 minutes; reconnect with `since` set to the last `seq` you saw
+to pick up where you left off. No special client library needed — any SSE-aware HTTP client,
+or a plain line-buffered read, works.
+
+### GET /snapshot/diff?from=&to=
+
+The fallback for clients that don't want an event feed at all — see the Snapshot section
+above. Works regardless of session boundaries (a stored snapshot survives a REAPER restart;
+the event ring and change-count token don't).
+
+---
+
 ## Phase 4 — Learned suggestions (#20, Q8)
 
 **The compounding moat.** Locally and opt-in, ReaClaw mines the agent's own edit
