@@ -16,13 +16,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Pinned vendor versions — update here and in vendor/README.md together
+# Vendor header/SDK versions (SQLite, json.hpp, httplib, reaper-sdk, WDL) are
+# pinned in scripts/fetch-vendor-deps.sh, not here — that script is the single
+# source of truth for those versions (see the "Fetch vendor deps" step below,
+# and its cache key). Duplicating the pins in both places was the actual
+# footgun; don't reintroduce it.
 env:
-  SQLITE_ZIP_URL: https://www.sqlite.org/2024/sqlite-amalgamation-3470200.zip
-  JSON_HPP_URL:   https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp
-  HTTPLIB_URL:    https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.41.0/httplib.h
-  REAPER_SDK_URL: https://github.com/justinfrankel/reaper-sdk.git
-  WDL_COMMIT:     6aaf30c
   # Pinned REAPER *binary* (distinct from the header-only SDK above) — only
   # used to actually run the extension for the E2E smoke test below. Pinned
   # rather than "latest" so a new REAPER release can't silently break CI.
@@ -47,20 +46,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Keyed on the fetch script's own hash: the script is the single source
+      # of truth for vendor versions (including the pinned reaper-sdk commit),
+      # so a cache hit reproduces exactly what a cache miss would fetch.
+      - name: Cache vendor deps
+        id: cache-vendor
+        uses: actions/cache@v4
+        with:
+          path: vendor/
+          key: vendor-${{ hashFiles('scripts/fetch-vendor-deps.sh') }}
+
       - name: Fetch vendor deps
-        run: |
-          curl -fsSL $HTTPLIB_URL   -o vendor/httplib.h
-          curl -fsSL $JSON_HPP_URL  -o vendor/json.hpp
-          curl -fsSL $SQLITE_ZIP_URL -o /tmp/sqlite.zip
-          unzip -j /tmp/sqlite.zip "*/sqlite3.c" "*/sqlite3.h" -d vendor/
-          git clone --depth=1 $REAPER_SDK_URL vendor/reaper-sdk
-          cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
-          mkdir -p /tmp/wdl-dl
-          curl -fsSL https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz | tar xz -C /tmp/wdl-dl
-          WDL_DIR=$(ls /tmp/wdl-dl | head -1)
-          mkdir -p $GITHUB_WORKSPACE/vendor/WDL
-          cp -r /tmp/wdl-dl/$WDL_DIR/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
-          rm -rf /tmp/wdl-dl
+        if: steps.cache-vendor.outputs.cache-hit != 'true'
+        run: bash scripts/fetch-vendor-deps.sh
 
       - name: Build
         run: bash scripts/checks/build.sh
@@ -121,20 +119,19 @@ jobs:
           make -j$(nproc)
           sudo make install_sw
 
+      # Same cache entry build-linux populates — the vendor/ output (headers,
+      # SDK, WDL) is target-independent, so whichever job runs first primes
+      # it for the other.
+      - name: Cache vendor deps
+        id: cache-vendor
+        uses: actions/cache@v4
+        with:
+          path: vendor/
+          key: vendor-${{ hashFiles('scripts/fetch-vendor-deps.sh') }}
+
       - name: Fetch vendor deps
-        run: |
-          curl -fsSL $HTTPLIB_URL   -o vendor/httplib.h
-          curl -fsSL $JSON_HPP_URL  -o vendor/json.hpp
-          curl -fsSL $SQLITE_ZIP_URL -o /tmp/sqlite.zip
-          unzip -j /tmp/sqlite.zip "*/sqlite3.c" "*/sqlite3.h" -d vendor/
-          git clone --depth=1 $REAPER_SDK_URL vendor/reaper-sdk
-          cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/
-          mkdir -p /tmp/wdl-dl
-          curl -fsSL https://github.com/justinfrankel/WDL/archive/$WDL_COMMIT.tar.gz | tar xz -C /tmp/wdl-dl
-          WDL_DIR=$(ls /tmp/wdl-dl | head -1)
-          mkdir -p $GITHUB_WORKSPACE/vendor/WDL
-          cp -r /tmp/wdl-dl/$WDL_DIR/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
-          rm -rf /tmp/wdl-dl
+        if: steps.cache-vendor.outputs.cache-hit != 'true'
+        run: bash scripts/fetch-vendor-deps.sh
 
       - name: Configure
         run: |
