@@ -43,6 +43,10 @@ jobs:
   build-linux:
     name: Build (Linux, GCC)
     runs-on: arc-runner-reaclaw
+    env:
+      # Absolute path, not `~/.ccache` — GitHub Actions `env:` doesn't do
+      # shell tilde-expansion, so a literal `~` would silently break ccache.
+      CCACHE_DIR: /home/runner/.ccache
     steps:
       - uses: actions/checkout@v4
 
@@ -59,6 +63,20 @@ jobs:
       - name: Fetch vendor deps
         if: steps.cache-vendor.outputs.cache-hit != 'true'
         run: bash scripts/fetch-vendor-deps.sh
+
+      # Persists gcc's object cache across runs on the same branch so an
+      # incremental change (the common case) doesn't recompile the whole
+      # extension. scripts/checks/build.sh auto-detects ccache when present
+      # (it's baked into the runner image — see the runner-image stage) and
+      # no-ops otherwise, so this is inert until that lands.
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ github.ref }}-
+            ccache-
 
       - name: Build
         run: bash scripts/checks/build.sh
