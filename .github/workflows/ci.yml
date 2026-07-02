@@ -50,6 +50,8 @@ jobs:
   runner-image:
     name: Ensure CI runner image is current
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
