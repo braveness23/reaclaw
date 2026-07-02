@@ -379,14 +379,15 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
 
     // Honest SDK summary (reproducible — see ReaClaw_COVERAGE_REPORT.md §1).
     nlohmann::json sdk = {
-            {"functions_total", 865},
-            {"functions_called", 131},
-            {"raw_pct", 15.1},
+            {"functions_total", 868},
+            {"functions_called", 188},
+            {"raw_pct", 21.7},
             {"reachable", "100% via verbs + actions (~6700) + Lua + chunk backstop"},
             {"note",
-             "raw % understates coverage: ~16 of ~20 REST-relevant domains have typed verbs; "
-             "most uncalled functions are out-of-scope, redundant variants, or "
-             "action/Lua-reachable"}};
+             "raw % understates coverage: Epic #45 graduated all six planned gaps "
+             "(transport, MIDI, take-FX, project lifecycle, state-chunk, coverage matrix) "
+             "to typed verbs; remaining uncalled functions are out-of-scope, redundant "
+             "variants, or action/Lua-reachable (config vars deliberately deferred, #44)"}};
 
     // Optional-dependency / feature detection (folded from #37) so agents branch instead of
     // probe-and-fail. SWS via plugin_getapi; tools via a cheap PATH scan.
