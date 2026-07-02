@@ -33,6 +33,13 @@ template:
     containers:
       - name: runner
         image: ghcr.io/braveness23/reaclaw-ci-runner:latest
+        # Don't rely on the Helm chart's default pull policy for a :latest
+        # tag -- ci.yml's runner-image job pushes a fresh :latest whenever
+        # .github/runner-image/Dockerfile changes, gated (needs:) ahead of
+        # every job that depends on it. Without this explicit policy, a node
+        # with a cached image layer could still serve stale bits even after
+        # that push succeeds.
+        imagePullPolicy: Always
         command:
           - /home/runner/run.sh
         env:
