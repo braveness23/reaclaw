@@ -8,6 +8,14 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Cancel superseded runs on the same branch/PR — a quick follow-up push
+# shouldn't burn the (capacity-limited) self-hosted runner pool finishing a
+# now-stale commit. Each tag gets its own ref, so releases are never cancelled
+# by another tag's run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Pinned vendor versions — update here and in vendor/README.md together
 env:
   SQLITE_ZIP_URL: https://www.sqlite.org/2024/sqlite-amalgamation-3470200.zip
