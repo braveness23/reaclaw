@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Installed via scripts/install-git-hooks.sh.
+# Fast, format-only — mirrors the CI `format-check` job exactly by calling
+# the same shared script. Bypass with `git commit --no-verify`; CI still
+# enforces this regardless.
+set -euo pipefail
+exec "$(git rev-parse --show-toplevel)/scripts/checks/format.sh" --check
