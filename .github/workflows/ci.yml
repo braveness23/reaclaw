@@ -278,7 +278,17 @@ jobs:
       # apt-get cost every run. Only the REAPER *binary* itself is fetched
       # per-run, since REAPER_VERSION is pinned here rather than in the
       # Dockerfile (one place for that version, not two).
+      # The tarball is constant for a given REAPER_VERSION, same shape as the
+      # vendor/ccache caches above — just missed when those landed.
+      - name: Cache REAPER install
+        id: cache-reaper
+        uses: actions/cache@v4
+        with:
+          path: ~/opt/REAPER
+          key: reaper-${{ env.REAPER_VERSION }}
+
       - name: Install REAPER
+        if: steps.cache-reaper.outputs.cache-hit != 'true'
         run: |
           curl -fsSL "https://www.reaper.fm/files/7.x/reaper${REAPER_VERSION}_linux_x86_64.tar.xz" -o /tmp/reaper.tar.xz
           tar -xf /tmp/reaper.tar.xz -C /tmp
