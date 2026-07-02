@@ -7,6 +7,13 @@
 >
 > Generated 2026-06-27 against the vendored SDK (`vendor/reaper-sdk/`, REAPER v7.67 header)
 > and `src/` at HEAD.
+>
+> **STATUS (2026-07-02): Epic #45 complete.** All six §8 sequencing steps shipped (see
+> `ReaClaw_IMPLEMENTATION_CHECKLIST.md`); config vars (#44) deliberately deferred to the wish
+> list rather than delivered as a typed endpoint (still reachable via the action/Lua tiers, so
+> the 100%-reachability goal holds). The §2 headline numbers below are as-measured on the
+> generation date; re-run §1's commands for current figures (868 total / 188 called / 21.7% as
+> of 2026-07-02) — the live `/capabilities` `sdk` object is the source of truth going forward.
 
 ---
 
@@ -185,22 +192,23 @@ breaking cohesion fixes.
 
 ## 8. Sequencing
 
-Tracked under umbrella epic **#45** ("Full coverage — provable reachability + legible map"):
+Tracked under umbrella epic **#45** ("Full coverage — provable reachability + legible map").
+**Epic closed 2026-07-02 — all steps shipped except #44 (deliberately deferred):**
 
-| Step | Issue |
-|---|---|
-| `/capabilities` coverage matrix (+ optional-dep feature detection) | #46 |
-| Governance policies (deps + API stability/versioning) | #37 |
-| State-chunk endpoint (keystone) | #48 |
-| Transport verbs | #49 |
-| Take-FX verbs | #50 |
-| MIDI verbs | #51 |
-| Project lifecycle (new/open/save/load/reset) | #34 |
-| Config vars | #44 |
+| Step | Issue | Status |
+|---|---|---|
+| `/capabilities` coverage matrix (+ optional-dep feature detection) | #46 | done |
+| Governance policies (deps + API stability/versioning) | #37 | done |
+| State-chunk endpoint (keystone) | #48 | done |
+| Transport verbs | #49 | done |
+| Take-FX verbs | #50 | done |
+| MIDI verbs | #51 | done |
+| Project lifecycle (new/open/save/load/reset) | #34 | done |
+| Config vars | #44 | deferred (wish list — still action/Lua-reachable) |
 
 Order — deliver the "intentional & discoverable" story first, biggest/heaviest last:
 **matrix (#46) + policy (#37) + chunk (#48) → transport (#49) → project-lifecycle/config
-(#34/#44) → take-FX (#50) → MIDI (#51).** Each ships as its own additive minor release.
+(#34/#44) → take-FX (#50) → MIDI (#51).** Each shipped as its own additive minor release.
 
 ---
 

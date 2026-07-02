@@ -589,6 +589,18 @@ Phase 2 (real architecture/risk decisions, done one at a time with a check-in):
 - [x] **#31** External-change event feed + SSE + attribution. See
       `ReaClaw_TECH_DECISIONS.md` §26.
 
+---
+
+## Epic #45 — Full coverage: provable reachability + legible map — **complete**
+
+All six planned sub-issues shipped (#46 coverage matrix, #37 governance policy, #48
+state-chunk keystone, #49 transport verbs, #50 take-FX verbs, #51 MIDI verbs) plus
+project lifecycle (#34). Config vars (#44) deliberately deferred to the wish list —
+still reachable via action/Lua tiers, so the 100%-reachability goal holds without it.
+`ReaClaw_COVERAGE_REPORT.md` and the live `/capabilities` `sdk` object updated to
+current measured figures (868 total / 188 called / 21.7%, up from 865/131/15.1% at
+the report's original measurement). Epic closed 2026-07-02.
+
 Still deferred: Pi plugin curation (#62) — manual devops + subjective creative
 work, deliberately left for the user, not this marathon.
 
