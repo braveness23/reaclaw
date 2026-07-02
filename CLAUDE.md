@@ -32,6 +32,8 @@ Local checks and CI call the *same* scripts, on purpose — a commit that passes
 
 Git hooks (`scripts/install-git-hooks.sh`, one-time local setup) are the fast/local signal, not the enforcement boundary — CI is the merge gate and can't be skipped with `--no-verify`. `pre-commit` is format-only (fast, every commit); `pre-push` runs the full build+test (slower, before code leaves the machine).
 
+CI itself: self-hosted k3s runner (`arc-runner-reaclaw`, config in `deploy/runner/values.yaml`), image built by `ci.yml`'s own `runner-image` job (not a separate workflow — that was retired) from `.github/runner-image/Dockerfile`. That job runs first, `needs:`-gated ahead of every job that uses the self-hosted pool, and only rebuilds when the Dockerfile's content actually changed (content-hash tag, checked via `docker manifest inspect`) — this is what stops "the image the workflow assumes exists" from racing "the image that's actually been pushed." The image bakes in everything static across runs (build toolchain, ccache, e2e's Xvfb/audio/X11 deps) so jobs don't pay setup cost every run — only genuinely per-run state (vendor deps, ccache objects, the pinned REAPER binary) is fetched/restored per job. `ci.yml` also cancels superseded runs on the same ref (`concurrency` block) so a quick follow-up push doesn't waste runner capacity finishing a stale commit.
+
 ---
 
 ## Project Overview

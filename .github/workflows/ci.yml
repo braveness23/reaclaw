@@ -29,6 +29,73 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Ensure the self-hosted runner image (reaclaw-ci-runner) reflects the
+  # current Dockerfile before any job that depends on what it bakes in
+  # (ccache, Xvfb/jackd2/X11-GTK libs) runs. Every arc-runner-reaclaw job
+  # below needs: this one, so GitHub Actions' own DAG ordering guarantees the
+  # image is current before a self-hosted pod spins up and pulls :latest --
+  # closing a structural race that otherwise recurs on every future Dockerfile
+  # change (deploy/runner/values.yaml hardcodes :latest and the pool is
+  # ephemeral, minRunners: 0, so there's no "old pod" to worry about once the
+  # push below completes; the risk was purely ordering).
+  #
+  # Runs on GitHub-hosted ubuntu-latest, not arc-runner-reaclaw -- bootstrap:
+  # can't build the self-hosted pool's own image ON that pool before the
+  # image exists/updates. Content-hash-tagged (hashFiles(Dockerfile)) so the
+  # common case (Dockerfile unchanged) is one fast manifest-inspect call, not
+  # a rebuild. Replaces the old standalone build-runner-image.yml workflow,
+  # which had no ordering relationship with this one and is retired -- one
+  # place to build the image, not two.
+  # ---------------------------------------------------------------------------
+  runner-image:
+    name: Ensure CI runner image is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: tag
+        run: echo "tag=${{ hashFiles('.github/runner-image/Dockerfile') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Check if this Dockerfile content is already built
+        id: check
+        run: |
+          if docker manifest inspect "ghcr.io/${{ github.repository_owner }}/reaclaw-ci-runner:${{ steps.tag.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only when the Dockerfile's content actually changed. Pushes BOTH tags
+      # so :latest (what deploy/runner/values.yaml's pod spec references) is
+      # always current immediately after this job completes -- downstream
+      # jobs' needs: dependency on this one is what makes that safe to rely on.
+      #
+      # Accepted, documented residual gap: :latest is one mutable pointer
+      # shared across all concurrent runs, not scoped per-run. Two
+      # Dockerfile-touching PRs running concurrently (maxRunners: 2 allows
+      # this) could theoretically have one push overwrite :latest between the
+      # other's gate job finishing and its own downstream pod pulling it. A
+      # real per-run-scoped fix would require threading per-run image tags
+      # through the Helm-managed pod spec -- disproportionate at this
+      # project's single-maintainer-plus-agent scale. Not fixed; noted here on
+      # purpose rather than silently.
+      - name: Build and push (only if the content changed)
+        if: steps.check.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .github/runner-image
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/reaclaw-ci-runner:latest
+            ghcr.io/${{ github.repository_owner }}/reaclaw-ci-runner:${{ steps.tag.outputs.tag }}
+
+  # ---------------------------------------------------------------------------
   # Linux — the only supported CI target. Runs on the self-hosted k3s runner
   # scale set (arc-runner-reaclaw); the build toolchain (cmake, gcc/g++,
   # clang-format-18, libssl-dev, git, unzip, curl) is baked into the
@@ -42,6 +109,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-linux:
     name: Build (Linux, GCC)
+    needs: runner-image
     runs-on: arc-runner-reaclaw
     env:
       # Absolute path, not `~/.ccache` — GitHub Actions `env:` doesn't do
@@ -106,6 +174,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-windows:
     name: Build (Windows, MinGW cross-compile)
+    needs: runner-image
     runs-on: arc-runner-reaclaw
     env:
       OPENSSL_VERSION: 3.3.2
@@ -188,7 +257,7 @@ jobs:
   # ---------------------------------------------------------------------------
   e2e-render-smoke:
     name: E2E render smoke test
-    needs: [build-linux]
+    needs: [runner-image, build-linux]
     runs-on: arc-runner-reaclaw
     steps:
       - uses: actions/checkout@v4
@@ -199,20 +268,16 @@ jobs:
           name: reaper_reaclaw-linux-x86_64
           path: dist/
 
-      - name: Install REAPER + headless X/audio deps
+      # Xvfb/jackd2/python3 and REAPER's runtime shared-lib deps (X11/GL/ALSA —
+      # confirmed missing live: REAPER failed to load libSwell.so with
+      # "libXi.so.6: cannot open shared object file" on a bare toolchain image)
+      # are baked into the runner image (.github/runner-image/Dockerfile), kept
+      # current by the runner-image job above — this job doesn't pay the
+      # apt-get cost every run. Only the REAPER *binary* itself is fetched
+      # per-run, since REAPER_VERSION is pinned here rather than in the
+      # Dockerfile (one place for that version, not two).
+      - name: Install REAPER
         run: |
-          echo "jackd jackd/tweak_rt_limits boolean false" | sudo debconf-set-selections
-          sudo apt-get update -y
-          # xvfb/jackd2 host the headless display + dummy audio backend;
-          # the rest are REAPER's own runtime shared-lib deps (its Linux
-          # build links against X11/GL/ALSA even for offline, display-less
-          # rendering) — confirmed missing live: REAPER failed to load
-          # libSwell.so with "libXi.so.6: cannot open shared object file"
-          # on a bare runner image that only has the build toolchain.
-          sudo apt-get install -y --no-install-recommends \
-            xvfb jackd2 python3 \
-            libx11-6 libxi6 libxext6 libxcb1 libfontconfig1 libfreetype6 \
-            libgl1 libasound2t64 libgtk-3-0t64 libpulse0
           curl -fsSL "https://www.reaper.fm/files/7.x/reaper${REAPER_VERSION}_linux_x86_64.tar.xz" -o /tmp/reaper.tar.xz
           tar -xf /tmp/reaper.tar.xz -C /tmp
           /tmp/reaper_linux_x86_64/install-reaper.sh --install "$HOME/opt" --quiet
@@ -279,6 +344,7 @@ jobs:
   # ---------------------------------------------------------------------------
   format-check:
     name: clang-format
+    needs: runner-image
     runs-on: arc-runner-reaclaw
     steps:
       - uses: actions/checkout@v4
