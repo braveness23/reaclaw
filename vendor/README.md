@@ -8,7 +8,7 @@ no submodules, no package manager required for the C++ sources themselves.
 | `httplib.h` | cpp-httplib | latest | https://github.com/yhirose/cpp-httplib |
 | `json.hpp` | nlohmann/json | 3.x | https://github.com/nlohmann/json |
 | `sqlite3.c`, `sqlite3.h` | SQLite amalgamation | 3.x | https://www.sqlite.org/download.html |
-| `reaper-sdk/` | REAPER Extension SDK | current | https://github.com/justinfrankel/reaper-sdk |
+| `reaper-sdk/` | REAPER Extension SDK | pinned (`REAPER_SDK_COMMIT` in `scripts/fetch-vendor-deps.sh`) | https://github.com/justinfrankel/reaper-sdk |
 
 **OpenSSL** is a system dependency (not bundled). Install via:
 - Linux: `sudo apt-get install libssl-dev`
@@ -33,8 +33,11 @@ curl -L https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
 # e.g.: curl -L https://www.sqlite.org/2024/sqlite-amalgamation-3470200.zip -o /tmp/sq.zip
 #       unzip -j /tmp/sq.zip "*/sqlite3.c" "*/sqlite3.h" -d vendor/
 
-# REAPER SDK
+# REAPER SDK — pinned to a specific commit (see REAPER_SDK_COMMIT in
+# scripts/fetch-vendor-deps.sh), not the floating default branch, so CI's
+# vendor/ cache (keyed on that script's hash) means what it says.
 git clone https://github.com/justinfrankel/reaper-sdk.git vendor/reaper-sdk
+cd vendor/reaper-sdk && git checkout <REAPER_SDK_COMMIT> && cd -
 # Copy the sdk/ headers into vendor/reaper-sdk/ (the include path CMake uses):
 cp vendor/reaper-sdk/sdk/*.h vendor/reaper-sdk/   # if the clone lands in a subdir, adjust
 
