@@ -139,6 +139,57 @@ Neither?                          → /scripts/register (Lua)
 - FX names: `"ReaComp"`, `"ReaGate"`, `"ReaEQ"` resolve; full `"VST: ..."` also
   works. If add returns 400 "FX not found", the plugin isn't installed.
 
+## Instrument & FX plugin cheat sheet (Pi rig, linux-aarch64)
+
+Beyond the stock ReaSynth/JSFX, these free Linux-native plugins are installed
+and confirmed working via `POST /state/tracks/{i}/fx {"name": "..."}` — REAPER
+matches on substring, so the short name resolves the full plugin string
+(issue #62):
+
+| API `name` | What it is |
+|---|---|
+| `"Surge XT"` | Full hybrid VA/wavetable synth, 1000s of presets — the default choice over ReaSynth for anything melodic |
+| `"Nekobi"` | TB-303 acid bassline synth |
+| `"Kars"` | Karplus-Strong plucked string / mallet |
+| `"Cardinal Synth"` | VCV Rack modular synth (see below — **the default patch already makes sound**, no setup needed) |
+| `"Dragonfly Hall"` / `"Dragonfly Room"` / `"Dragonfly Plate"` | Big/tight/classic reverbs — a real upgrade over ReaVerbate |
+| `"MVerb"` | Studio algorithmic reverb |
+| `"LSP Compressor"` / `"Parametric Equalizer"` / `"Limiter"` | Pro-grade LSP suite |
+| `"sfizz"` (VST3i) / `"LV2i: sfizz"` | SFZ sample player — built from source (no aarch64 binary release exists; see `~/src/sfizz-ui`), confirmed loading real multi-sampled instruments via the CLI `sfizz_render` tool |
+
+**Cardinal Synth is not silent by default** — it ships with a basic VCO → ADSR
+→ VCA voice already patched, so `add fx` + MIDI notes + `/render` produces
+real audio with zero manual setup (confirmed: peak −10 dBFS on a 4-note
+render). For a richer sound, a human can open the FX floating window
+(`reaper.TrackFX_Show(track, slot, 1)` via `/execute/script`) and use
+**Cardinal's own `File > Open demo / example project` menu** — a dozen
+bundled patches (DRMR, falkTX, SpotlightKid, etc.) ship inside the plugin
+itself, no download needed. This is a GUI-only step (Cardinal's rack state
+isn't reachable through REAPER's own preset API), so it's for interactive
+sessions, not headless agent pipelines — the default patch is the
+headless-safe option.
+
+Cardinal requires its ~270MB resource bundle installed at
+`/usr/local/share/cardinal/` (system-wide, alongside the `.clap` binaries in
+`~/studio/plugins/linux-aarch64/`) — without it the plugin loads but shows a
+black window and an "system directory does not exist" error.
+
+**sfizz: loading an SFZ file into the REAPER plugin is not headless-safe on
+this rig.** The plugin's own file browser (VST3) needs `zenity`, which hangs
+at a 1×1 window on this Xvfb+xfwm4 test display — confirmed environment-wide
+(even `zenity --info` alone hangs; no compositor owns `_NET_WM_CM_S0`), not an
+sfizz bug. The LV2 variant's REAPER-native generic-param UI exposes an "SFZ
+file" control, but it has no enumerated values so nothing is clickable either.
+**sfizz itself is fully verified working** — built from source (`~/src/sfizz-ui`,
+no aarch64 binary release exists upstream past 0.5.1), installed as both
+`sfizz.lv2` and `sfizz.vst3` under `~/studio/plugins/linux-aarch64/`, and
+confirmed rendering real audio from two sample libraries
+(`~/studio/samples/sfz/SplendidGrandPiano/`, `~/studio/samples/sfz/Terkelsen.Marimba/`)
+via the standalone `sfizz_render --sfz ... --midi ... --wav ...` CLI tool
+(also built from the same source tree). On Dave's real desktop (not this
+Xvfb rig) the GUI file-load path should work normally — worth a one-time
+manual check there before assuming it's broken everywhere.
+
 ## Optional: smarter search via the MCP wrapper
 
 If the ReaClaw MCP server (`mcp/`) is running, its `search_actions` tool does
