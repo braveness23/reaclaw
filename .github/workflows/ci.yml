@@ -54,14 +54,11 @@ jobs:
           cp -r /tmp/wdl-dl/$WDL_DIR/WDL/swell $GITHUB_WORKSPACE/vendor/WDL/
           rm -rf /tmp/wdl-dl
 
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-
       - name: Build
-        run: cmake --build build --config Release -j$(nproc)
+        run: bash scripts/checks/build.sh
 
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: bash scripts/checks/test.sh
 
       - name: Rename artifact
         run: cp build/reaper_reaclaw.so reaper_reaclaw-linux-x86_64.so
@@ -264,9 +261,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check formatting
-        run: |
-          find src -name "*.cpp" -o -name "*.h" | \
-            xargs clang-format-18 --dry-run --Werror
+        run: bash scripts/checks/format.sh --check
 
   # ---------------------------------------------------------------------------
   # Release — runs only on version tags; waits for the Linux build to pass

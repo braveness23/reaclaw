@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Installed via scripts/install-git-hooks.sh.
+# Runs the same configure+build+test CI runs (build-linux job), so a push
+# that passes locally deterministically passes CI. Bypass with
+# `git push --no-verify`; CI still enforces this regardless.
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+"$ROOT/scripts/checks/build.sh"
+"$ROOT/scripts/checks/test.sh"
