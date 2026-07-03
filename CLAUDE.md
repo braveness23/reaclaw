@@ -20,6 +20,18 @@ After completing each checklist item, mark it done in `ReaClaw_IMPLEMENTATION_CH
 
 ---
 
+## Code Comments: Constraints, Not History
+
+A comment must state something the code can't — a live constraint, a non-obvious
+"why", a warning about what breaks if changed. Never write comments that narrate
+what the code replaced or how it used to work ("replaces the former X",
+"previously used Y", "(future work)" for things that shipped) — that's what
+commit messages, PR descriptions, and `CHANGELOG.md` are for, and in code it
+goes stale silently. If history *is* the constraint ("don't re-add X, it breaks
+because Y"), keep the constraint and drop the archaeology.
+
+---
+
 ## Developer Workflow & CI
 
 Local checks and CI call the *same* scripts, on purpose — a commit that passes locally deterministically passes CI:
