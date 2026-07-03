@@ -86,6 +86,11 @@ API key auth is the recommended default. The key is set in
 `{ResourcePath}/reaclaw/config.json`. There is no session, no cookie, no
 OAuth flow — just a shared secret per request.
 
+One deliberate exception: `GET /` (the landing page) is served without
+authentication. It returns orientation info only — what ReaClaw is, the
+version, a quick-start recipe — and never any project data. Every other
+endpoint requires the bearer token when `api_key` mode is on.
+
 ### Lua Script Execution
 
 ReaClaw can execute Lua scripts via the REAPER scripting API. Scripts are

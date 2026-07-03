@@ -51,37 +51,21 @@ ReaClaw is a native C++ REAPER extension (`.dll`/`.dylib`/`.so`) that embeds an 
 
 ## Phase Status
 
+All planned phases and all six roadmap epics are **complete** (see
+`ReaClaw_ROADMAP.md` §2 and `ReaClaw_IMPLEMENTATION_CHECKLIST.md` for the full
+record). Current release line: v1.16.0.
+
 | Phase | Tag | Status |
 |-------|-----|--------|
 | Phase 0 — Foundation | v0.1.0 | Complete |
 | Phase 1 — Scripts & Sequences | v0.2.0 | Complete |
-| Phase 2 — Integration & Hardening | v1.0.0 | **Complete** |
+| Phase 2 — Integration & Hardening | v1.0.0 | Complete |
+| Phase 3 — Extensions menu | v1.2.0 | Complete |
+| Phase 4 — Perception, ergonomics & learning (Epics #16–#20) | v1.3.0–v1.6.0 | Complete |
+| Epic #32 — Headless offline render engine | v1.8.0–v1.15.0 | Complete |
+| Epic #45 — Full coverage (transport/MIDI/take-FX/chunk/lifecycle) | v1.8.0–v1.10.0 | Complete |
 
-### Phase 2 Security Hardening — Task Breakdown
-
-**All Phase 2 items complete.** See `ReaClaw_IMPLEMENTATION_CHECKLIST.md` for full record.
-
-Key additions in Phase 2:
-- Security: HSTS header, path traversal guard, auth failure audit log
-- Performance: 1s TTL state cache (`/state`, `/state/tracks`, `/state/items`); SQLite indexes were already in schema
-- Observability: health endpoint gains `queue_depth`, `db_ok`, `server_running`; JSON log format option
-- Docs: `docs/MCP.md`, `docs/DEPLOYMENT.md`
-
-### Phase 2 Performance — Task Breakdown
-
-- [ ] SQLite indexes: `execution_history(executed_at)`, `scripts(name)`
-- [ ] Profile catalog search, state queries, action execution (targets: <50ms, <100ms, <200ms)
-- [ ] 1s TTL cache for frequent state reads
-
-### Phase 2 MCP Wrapper (Optional)
-
-- [ ] Design MCP tool definitions (see checklist for list)
-- [ ] Write `docs/MCP.md`
-
-### Phase 2 Observability
-
-- [ ] `GET /health` enhancements: queue depth, DB status, server thread alive
-- [ ] Structured log format option
+Forward work is tracked as GitHub issues (see `ReaClaw_IDEAS.md` for the backlog).
 
 ---
 
@@ -96,20 +80,45 @@ src/
 ├── db/db.{h,cpp}            # SQLite wrapper
 ├── handlers/                # HTTP route handlers
 │   ├── common.h             # json_ok, json_error, now_iso, agent_id, vol_to_db
+│   ├── analysis.{h,cpp}     # GET /analysis/item/{i}, /analysis/file, /state/meters
+│   ├── capabilities.{h,cpp} # GET /capabilities (coverage matrix, sdk stats, features)
 │   ├── catalog.{h,cpp}      # GET /catalog, /catalog/search, /catalog/categories, /catalog/{id}
-│   ├── execute.{h,cpp}      # POST /execute/action, /execute/sequence
+│   ├── chunk.{h,cpp}        # GET/POST /state/chunk (universal RPP backstop)
+│   ├── events.{h,cpp}       # GET /events, /events/stream (SSE)
+│   ├── execute.{h,cpp}      # POST /execute/action, /execute/sequence, /execute/script
+│   ├── hints.{h,cpp}        # Consequence-aware hints[] on mutating responses
 │   ├── history.{h,cpp}      # GET /history
+│   ├── items.{h,cpp}        # GET/POST/DELETE /state/items[/{i}], split
+│   ├── learning.{h,cpp}     # GET /suggestions, /learn/stats (opt-in mining)
+│   ├── midi.{h,cpp}         # GET/POST /state/items/{i}/midi
+│   ├── probe.{h,cpp}        # GET /analysis/*/probe (pitch/key/tempo)
+│   ├── project.{h,cpp}      # /project*, /undo, /redo, /state/markers, /state/tempo, /time
+│   ├── recipes.{h,cpp}      # GET /recipes[/{id}]
+│   ├── render.{h,cpp}       # POST /render, /render/jobs (async job model)
+│   ├── restart.{h,cpp}      # POST /reaper/restart (Linux)
+│   ├── screenshot.{h,cpp}   # GET /screenshot (named surfaces, X11)
 │   ├── scripts.{h,cpp}      # POST /scripts/register, GET/DELETE /scripts/{id}, GET /scripts/cache
-│   └── state.{h,cpp}        # GET /state/*, POST /state/tracks/{index}
+│   ├── snapshot.{h,cpp}     # POST/GET/DELETE /snapshot, /snapshot/diff[/visualize]
+│   ├── state.{h,cpp}        # GET /state*, track/FX/send/take-FX verbs, selection
+│   ├── transport.{h,cpp}    # GET/POST /transport[/*]
+│   └── visualize.{h,cpp}    # GET /analysis/*/visualize (PNG + digest)
+├── panel/                   # Extensions › ReaClaw menu + SWELL dialogs
 ├── reaper/                  # REAPER SDK integration
 │   ├── api.{h,cpp}          # init(), shutdown(), timer_callback(); REAPERAPI_IMPLEMENT
-│   ├── catalog.{h,cpp}      # Action catalog indexer (kbd_enumerateActions)
-│   ├── executor.{h,cpp}     # Command queue + main-thread dispatch
+│   ├── catalog.{h,cpp}      # Action catalog indexer (bundled table + live enumeration)
+│   ├── csurf.{h,cpp}        # IReaperControlSurface event feed (issue #31)
+│   ├── executor.{h,cpp}     # Command queue + main-thread dispatch + EditingGuard
+│   ├── native_actions.gen.h # Generated native action ID→name table
 │   └── scripts.{h,cpp}      # register_script(), unregister_script()
 ├── server/
 │   ├── router.{h,cpp}       # Route registration + auth_wrap
 │   └── server.{h,cpp}       # SSLServer lifecycle
 └── util/
+    ├── dsp.h                # Header-only FFT (analysis/visualization/probes)
+    ├── image.{h,cpp}        # Dependency-free PNG encoder + RGB canvas
+    ├── jsondiff.h           # Recursive JSON differ (snapshot diff)
     ├── logging.{h,cpp}      # Log::info/warn/error, level filter
+    ├── midi_util.h          # MIDI helpers (note names, PPQ)
+    ├── music.h              # Pitch/key math (probes)
     └── tls.{h,cpp}          # Self-signed cert generation
 ```

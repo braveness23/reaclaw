@@ -228,7 +228,7 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 ### Performance
 
 - [x] Add SQLite indexes: `execution_history(executed_at)`, `scripts(name)` — already in schema from Phase 1
-- [x] Cache frequent state reads in memory with 1s TTL — `/state`, `/state/tracks`, `/state/items` cached; invalidated on track writes
+- [x] Cache frequent state reads in memory with 1s TTL — `/state`, `/state/tracks` cached; invalidated on track writes. (`/state/items` was later moved to uncached main-thread reads when item CRUD landed, so item edits are always reflected — see `docs/API.md`.)
 - [x] Profile all Phase 0–1 endpoints (requires live REAPER; targets: catalog search <50ms, state queries <100ms, action execution <200ms excluding queue wait) — verified: catalog search ~47ms sequential, state queries ~47ms; action execution well under 200ms
 
 ### Optional MCP Wrapper
@@ -486,7 +486,12 @@ Adds `P_ICON` read/write to the track layer and a discovery endpoint.
 
 ---
 
-## Epic #32 — Programmatic production: headless offline render engine (Q9) — **in progress**
+## Epic #32 — Programmatic production: headless offline render engine (Q9) — **complete**
+
+> Closed by #36 (CI E2E render smoke test). The two unchecked items below —
+> stem rendering / batch presets and the release-triggered showcase render —
+> are deferred slivers, not blockers; region-bounds rendering shipped as
+> `bounds: "all_regions"` on `POST /render`.
 
 A new third half (production) beside control + perception. See
 `ReaClaw_ROADMAP.md` → Epic 6 and `ReaClaw_TECH_DECISIONS.md` §19. **Offline-first,
