@@ -10,6 +10,7 @@
 #include "handlers/common.h"
 #include "handlers/events.h"
 #include "handlers/execute.h"
+#include "handlers/fx.h"
 #include "handlers/history.h"
 #include "handlers/items.h"
 #include "handlers/learning.h"
