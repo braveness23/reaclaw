@@ -98,6 +98,8 @@ src/
 │   ├── chunk.{h,cpp}        # GET/POST /state/chunk (universal RPP backstop)
 │   ├── events.{h,cpp}       # GET /events, /events/stream (SSE)
 │   ├── execute.{h,cpp}      # POST /execute/action, /execute/sequence, /execute/script
+│   ├── fx.{h,cpp}           # Track/take-FX verbs: add/get/set/delete/copy, presets
+│   ├── handler_util.h       # Shared handler plumbing (path/body parsing, with_undo, etc.)
 │   ├── hints.{h,cpp}        # Consequence-aware hints[] on mutating responses
 │   ├── history.{h,cpp}      # GET /history
 │   ├── items.{h,cpp}        # GET/POST/DELETE /state/items[/{i}], split
@@ -111,7 +113,7 @@ src/
 │   ├── screenshot.{h,cpp}   # GET /screenshot (named surfaces, X11)
 │   ├── scripts.{h,cpp}      # POST /scripts/register, GET/DELETE /scripts/{id}, GET /scripts/cache
 │   ├── snapshot.{h,cpp}     # POST/GET/DELETE /snapshot, /snapshot/diff[/visualize]
-│   ├── state.{h,cpp}        # GET /state*, track/FX/send/take-FX verbs, selection
+│   ├── state.{h,cpp}        # GET /state*, track/send verbs, selection (FX verbs live in fx.{h,cpp})
 │   ├── transport.{h,cpp}    # GET/POST /transport[/*]
 │   └── visualize.{h,cpp}    # GET /analysis/*/visualize (PNG + digest)
 ├── panel/                   # Extensions › ReaClaw menu + SWELL dialogs
