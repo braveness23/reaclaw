@@ -531,12 +531,24 @@ nlohmann::json read_project_state() {
         proj_name = path_str;
     }
 
+    // GetProjectTimeSignature2 has no denominator; read the real time signature
+    // at project start from the tempo map (a "6/8" project must not report "6/4").
     int ts_n = static_cast<int>(ts_num);
+    int ts_d = 4;
+    if (TimeMap_GetTimeSigAtTime) {
+        int num = 0, den = 0;
+        double tempo = 0.0;
+        TimeMap_GetTimeSigAtTime(nullptr, 0.0, &num, &den, &tempo);
+        if (num > 0 && den > 0) {
+            ts_n = num;
+            ts_d = den;
+        }
+    }
     return {{"project",
              {{"name", proj_name},
               {"path", path_str},
               {"bpm", bpm},
-              {"time_signature", std::to_string(ts_n) + "/4"},
+              {"time_signature", std::to_string(ts_n) + "/" + std::to_string(ts_d)},
               {"cursor_position", cursor}}},
             {"transport",
              {{"playing", playing},

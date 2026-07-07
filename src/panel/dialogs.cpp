@@ -1,7 +1,5 @@
-// ReaClaw menu dialogs — Status, API key, Log.
-//
-// These replace the plain MessageBox popups previously used by the Extensions >
-// ReaClaw menu. Each dialog is modeless (created with CreateDialogParam, so it
+// ReaClaw menu dialogs — Status, API key, Log — for the Extensions > ReaClaw
+// menu. Each dialog is modeless (created with CreateDialogParam, so it
 // never blocks REAPER's main thread) and single-instance.
 //
 // The non-Windows dialog resources are defined inline via SWELL's dialog-gen

@@ -143,6 +143,17 @@ Written with defaults on first run. Edit and restart REAPER to apply changes.
     "level": "info",
     "file": "",
     "format": "text"
+  },
+  "learning": {
+    "enabled": false,
+    "window_seconds": 180,
+    "min_support": 3,
+    "min_confidence": 0.3
+  },
+  "semantic_search": {
+    "enabled": false,
+    "ollama_url": "http://127.0.0.1:11434",
+    "model": "nomic-embed-text"
   }
 }
 ```
@@ -160,6 +171,8 @@ Written with defaults on first run. Edit and restart REAPER to apply changes.
 | `script_security.max_script_size_kb` | Maximum Lua script body size (default 512 KB) |
 | `logging.format` | `"text"` (default) or `"json"` for structured log output |
 | `logging.file` | Append logs to this file path; empty = REAPER console only |
+| `learning.enabled` | Opt-in local correction mining (Epic #20); off by default, nothing recorded while off |
+| `semantic_search.enabled` | Opt-in embedding-ranked catalog search via local Ollama (issue #10); loopback-only, off by default |
 
 ---
 

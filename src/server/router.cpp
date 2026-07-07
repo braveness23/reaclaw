@@ -136,11 +136,11 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                 Handlers::json_ok(res, health);
             }));
 
-    // POST /queue/flush — issue #64 medium-term recovery: drain the pending
-    // command backlog so callers blocked behind a wedged main thread return
-    // immediately instead of waiting out their timeout. Does not itself
-    // unwedge the main thread — see POST /reaper/restart (future work) for
-    // that; this only stops the queue from silently growing behind it.
+    // POST /queue/flush — issue #64: drain the pending command backlog so
+    // callers blocked behind a wedged main thread return immediately instead
+    // of waiting out their timeout. Does not itself unwedge the main thread —
+    // POST /reaper/restart is the recovery for that; this only stops the
+    // queue from silently growing behind it.
     svr.Post("/queue/flush", auth_wrap(cfg, [](const httplib::Request&, httplib::Response& res) {
                  size_t n = Executor::flush();
                  Handlers::json_ok(res, {{"flushed", n}});
