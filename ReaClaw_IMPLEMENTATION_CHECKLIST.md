@@ -611,6 +611,37 @@ work, deliberately left for the user, not this marathon.
 
 ---
 
+## Issues #100–#102 — FX introspection: modulation, pin-routing, GUID addressing — **complete**
+
+Three related gaps in the FX control surface, all backed by `TrackFX_*`/`TakeFX_*`
+functions that had zero prior callers in the codebase.
+
+- [x] **#102 — GUID addressing.** Every FX response (`fx[]`, `GET`/`POST`/
+      `DELETE .../fx/{slot}`, `.../copy`, `.../preset`, `.../pins`, track and
+      take) carries `guid` (`Track`/`TakeFX_GetFXGUID`); `{slot}` in every one
+      of those routes accepts either the numeric chain index or the GUID
+      string via a shared `resolve_fx_slot()` helper. Router regexes for FX
+      slot segments changed from `(\d+)` to `([^/]+)`.
+- [x] **#101 — Pin-mapping / channel routing.** New `GET`/
+      `POST .../fx/{slot}/pins` (track and take) expose `TrackFX_GetIOSize`
+      and `Get/SetPinMappings`, decoding the 64-bit-per-pin channel bitmask
+      into a `channels[]` list.
+- [x] **#100 — Modulation / MIDI-CC-link visibility.** Every param in an FX
+      read/write response carries a `modulation` object (`lfo_active`,
+      `acs_active`, `plink_active`, plus `plink` detail when active) via
+      `TrackFX_GetNamedConfigParm`'s `param.X.{lfo,acs,plink}.*` keys; a
+      `plink` object in the existing param write array sets/clears the
+      binding via `SetNamedConfigParm`.
+- [x] **Docs** — `docs/API.md`, `CHANGELOG.md`, `/capabilities` manifest
+      (`src/handlers/capabilities.cpp`) updated.
+- [x] **Verified live** on the Pi rig (REAPER 7.74/aarch64): GUID and slot
+      addressing both resolve the same FX; a bad numeric slot or unknown GUID
+      both 400; ReaComp's sidechain pin layout (4 in / 2 out) read correctly
+      and a pin remap round-tripped; a MIDI-CC `plink` binding was written and
+      read back with matching fields.
+
+---
+
 ## Ongoing (All Phases)
 
 - [x] Keep unit and integration tests passing before each commit — 38/38 unit tests pass; verified live against REAPER 7.74 (aarch64)

@@ -383,7 +383,8 @@ Add an FX by name (e.g. `"ReaComp"`, `"ReaGate"`, or a full `"VST: ..."`).
   "params": [ { "name": "Threshold", "value": 0.25 } ] }
 
 // Response
-{ "track": 2, "slot": 0, "name": "VST: ReaComp (Cockos)", "enabled": true }
+{ "track": 2, "slot": 0, "guid": "{A1B2C3D4-...}",
+  "name": "VST: ReaComp (Cockos)", "enabled": true }
 ```
 
 `params` values are **normalized 0..1**, referenced by `index` or `name`.
@@ -398,14 +399,47 @@ so an agent can reason in real units. Issue #74: `limit`/`offset` paginate
 (default: all params, no limit), `q` filters by case-insensitive name
 substring — needed for big plugins (Surge XT: 2147 params).
 
+Each param also carries a `modulation` object (issue #100): `lfo_active`,
+`acs_active`, `plink_active` (bools) report whether the param is already
+wired to an LFO, audio-rate (ACS) modulation, or a parameter-link/MIDI-CC
+binding — so an agent doesn't set a value only to have it silently
+overridden. When `plink_active` is true, a `plink` object gives the binding
+detail: `effect` (`-100` = MIDI-CC link, per REAPER's own sentinel), `param`,
+`midi_bus`, `midi_chan`, `midi_msg`, `midi_msg2`, `scale`, `offset` — mirrors
+`TrackFX_GetNamedConfigParm`'s `param.X.plink.*` fields directly.
+
+`{slot}` accepts either the numeric chain index or the FX's `guid` string
+(issue #102, see "FX additions" below) — both resolve to the same FX.
+
 ### POST /state/tracks/{index}/fx/{slot}
 
-Set `enabled` (bool) and/or `params` (`[{index|name, value}]`). Returns the
-updated FX slot with its params.
+Set `enabled` (bool) and/or `params` (`[{index|name, value?, plink?}]`).
+`value` (normalized 0..1) and `plink` are independent — either, both, or
+neither may be present per entry. `plink` (issue #100) sets or clears a
+parameter-link/MIDI-CC binding, e.g.
+`{"index":0,"plink":{"active":true,"effect":-100,"midi_chan":0,"midi_msg":176,"midi_msg2":1}}`;
+`{"plink":{"active":false}}` clears it. Returns the updated FX slot with its
+params.
 
 ### DELETE /state/tracks/{index}/fx/{slot}
 
 Remove an FX slot.
+
+### GET /state/tracks/{index}/fx/{slot}/pins
+
+Issue #101 — the plugin's I/O pin count and channel routing, distinct from
+the track-level `sends` verbs (this is routing *within* the plugin's own
+pins). `{ track, slot, guid, supported, input_pins, output_pins, inputs: [
+{ pin, channels: [...] } ], outputs: [ ... ] }`. `channels` is the decoded
+0-based track-channel list each pin is wired to (from the raw 64-bit
+`TrackFX_GetPinMappings` bitmask). `supported: false` if the plugin doesn't
+expose pin data.
+
+### POST /state/tracks/{index}/fx/{slot}/pins
+
+Set one or more pins' channel mapping (replaces each pin's full mapping, not
+additive): `{ "pins": [ { "pin": 0, "output": false, "channels": [0,1] } ] }`.
+Returns the same shape as the GET.
 
 ### POST /state/tracks/{index}/sends
 
@@ -872,6 +906,14 @@ Track reads and writes gain: `phase` (bool), `n_channels` (int, 2–128 even),
 - **POST /state/tracks/{index}/fx/{slot}/copy** — copy or move this FX to another
   track. `{ "to_track": j, "to_slot": -1, "move": false }` (`to_slot` −1 appends).
   Returns `{ from_track, from_slot, to_track, moved, dest_fx_count }`.
+- **`guid` field** (issue #102) — every FX read/write response (`fx[]` entries,
+  `GET`/`POST`/`DELETE .../fx/{slot}`, `.../copy`, `.../preset`, `.../pins`)
+  carries a stable `guid` string (`TrackFX_GetFXGUID`, e.g.
+  `"{A1B2C3D4-...}"`). Unlike the chain-positional `slot`, the GUID identifies
+  *this plugin instance* regardless of later chain insertions/deletions/
+  reorders. `{slot}` in every one of those routes accepts either the numeric
+  index or the GUID string — resolved by trying an integer parse first, then
+  falling back to a GUID match against the chain.
 
 ### Project ext state — `/project/extstate`
 
@@ -1006,24 +1048,30 @@ The full `TakeFX_*` surface, mirroring the track-FX endpoints one-for-one at
 project-wide index as `GET /state/items`; `take` is the take index within the
 item (`0` = first take). All mutations are wrapped in undo blocks. 404 if the
 item or take index is out of range; 400 (`FX slot out of range`) for a bad slot.
+Like the track-FX surface, `{slot}` accepts either the numeric chain index or
+the FX's `guid` string (issue #102), and every response carries `guid`
+(`TakeFX_GetFXGUID`).
 
 ### POST /state/items/{index}/takes/{take}/fx
 
 Add an FX to a take by name — same body as `POST /state/tracks/{index}/fx`:
 `{ "name": "ReaComp", "enabled": true, "offline": false, "params": [...] }`.
-Returns `{ item, take, slot, name, enabled, offline }`. 400 (`FX not found: ...`)
-if the plugin can't be resolved.
+Returns `{ item, take, slot, guid, name, enabled, offline }`. 400
+(`FX not found: ...`) if the plugin can't be resolved.
 
 ### GET /state/items/{index}/takes/{take}/fx/{slot}
 
-Take-FX slot detail: `{ item, take, slot, name, enabled, offline, params }`.
+Take-FX slot detail: `{ item, take, slot, guid, name, enabled, offline, params }`.
 `params` is the full list (no pagination — unlike the track-FX read); each param
-carries the same `index`/`name`/`value`/`formatted`/real-unit fields.
+carries the same `index`/`name`/`value`/`formatted`/real-unit/`modulation`
+fields as the track-FX read (issue #100).
 
 ### POST /state/items/{index}/takes/{take}/fx/{slot}
 
-Set `enabled` (bool), `offline` (bool), and/or `params` (`[{index|name, value}]`,
-normalized 0..1). Returns the updated slot.
+Set `enabled` (bool), `offline` (bool), and/or `params`
+(`[{index|name, value?, plink?}]`, `value` normalized 0..1, `plink` sets/clears
+a MIDI-CC/param-link binding — issue #100, same semantics as the track-FX
+write). Returns the updated slot.
 
 ### DELETE /state/items/{index}/takes/{take}/fx/{slot}
 
@@ -1039,6 +1087,11 @@ appends; `to_item`/`to_take` required).
 
 Read the current preset, load one by `{ "name": "..." }`, or step with
 `{ "navigate": -1|1 }` — same semantics as the track-FX preset endpoints.
+
+### GET · POST /state/items/{index}/takes/{take}/fx/{slot}/pins
+
+Issue #101 — I/O pin count and channel routing for a take FX, same shape and
+semantics as the track-FX `.../pins` endpoints above.
 
 ---
 

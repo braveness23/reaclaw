@@ -9,6 +9,33 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Stable FX addressing via GUID** (#102) — every FX read/write response
+  (`GET`/`POST`/`DELETE .../fx/{slot}`, `.../copy`, `.../preset`, the new
+  `.../pins`) now carries a `guid` field (`TrackFX_GetFXGUID`/
+  `TakeFX_GetFXGUID`), and `{slot}` in every one of those routes accepts
+  either the numeric chain index (unchanged) or that GUID string — so an
+  agent that read a plugin's identity once can keep addressing it correctly
+  even after other FX are inserted/deleted/reordered in the chain. Backed by
+  a shared `resolve_fx_slot()` helper; router regexes for FX slot segments
+  changed from `(\d+)` to `([^/]+)` to accept both forms.
+- **FX channel routing / pin-mapping visibility** (#101) —
+  `GET`/`POST /state/tracks/{index}/fx/{slot}/pins` and the take-FX
+  equivalent expose a plugin's I/O pin count (`TrackFX_GetIOSize`) and how
+  each pin maps onto track/take channels (`TrackFX_GetPinMappings`/
+  `SetPinMappings`, decoded from the 64-bit channel bitmask into a
+  `channels[]` list per pin). Distinct control surface from the existing
+  `sends` verbs — this is routing *within* a plugin's own pins.
+- **FX parameter modulation / MIDI-CC-link visibility** (#100) — every
+  param in an FX read/write response now carries a `modulation` object
+  (`lfo_active`, `acs_active`, `plink_active`, and — only when a link is
+  active — a `plink` detail object) via `TrackFX_GetNamedConfigParm`'s
+  `param.X.{lfo,acs,plink}.*` keys, so an agent can tell whether a knob is
+  already wired to a hardware MIDI CC (or an LFO, or audio-rate modulation)
+  before setting it via the API. Write side: a per-param `plink` object in
+  the existing `params` write array sets or clears the binding via
+  `TrackFX_SetNamedConfigParm`.
+
 ### Fixed
 - **`GET /state` time signature denominator** — was hardcoded to `/4`
   (a 6/8 project reported `"6/4"`); now read from the tempo map via

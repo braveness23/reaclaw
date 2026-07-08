@@ -202,39 +202,55 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                  Handlers::handle_state_add_fx(req, res);
              }));
     // FX preset sub-resource (registered before the bare fx/{slot} routes).
-    svr.Get(R"(/state/tracks/(\d+)/fx/(\d+)/preset)",
+    // {slot} accepts a numeric chain index OR a GUID string (issue #102) —
+    // "([^/]+)" rather than "(\d+)" so resolve_fx_slot() can try both.
+    svr.Get(R"(/state/tracks/(\d+)/fx/([^/]+)/preset)",
             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
                 Handlers::handle_fx_get_preset(req, res);
             }));
-    svr.Post(R"(/state/tracks/(\d+)/fx/(\d+)/preset)",
+    svr.Post(R"(/state/tracks/(\d+)/fx/([^/]+)/preset)",
              auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
                  Handlers::handle_fx_set_preset(req, res);
              }));
+    // FX pin-mapping sub-resource (issue #101) — routing surface within the
+    // plugin's own I/O pins, distinct from track-level sends.
+    svr.Get(R"(/state/tracks/(\d+)/fx/([^/]+)/pins)",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
+                Handlers::handle_fx_get_pins(req, res);
+            }));
+    svr.Post(R"(/state/tracks/(\d+)/fx/([^/]+)/pins)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
+                 Handlers::handle_fx_set_pins(req, res);
+             }));
     // FX copy/move to another track (extra path segment; registered before the
     // bare fx/{slot} routes for clarity).
-    svr.Post(R"(/state/tracks/(\d+)/fx/(\d+)/copy)",
+    svr.Post(R"(/state/tracks/(\d+)/fx/([^/]+)/copy)",
              auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
                  Handlers::handle_fx_copy(req, res);
              }));
-    svr.Get(R"(/state/tracks/(\d+)/fx/(\d+))",
+    svr.Get(R"(/state/tracks/(\d+)/fx/([^/]+))",
             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
                 Handlers::handle_state_get_fx(req, res);
             }));
-    svr.Post(R"(/state/tracks/(\d+)/fx/(\d+))",
+    svr.Post(R"(/state/tracks/(\d+)/fx/([^/]+))",
              auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
                  Handlers::handle_state_set_fx(req, res);
              }));
-    svr.Delete(R"(/state/tracks/(\d+)/fx/(\d+))",
+    svr.Delete(R"(/state/tracks/(\d+)/fx/([^/]+))",
                auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                    const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                    const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[2];
@@ -309,22 +325,39 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
 
     // --- Take-FX verbs (issue #50) — registered before bare item-index routes ---
     // Preset sub-resource first (3 captures + /preset suffix — most specific).
-    svr.Get(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+)/preset)",
+    // {slot} accepts a numeric chain index OR a GUID string (issue #102) —
+    // "([^/]+)" rather than "(\d+)" so resolve_fx_slot() can try both.
+    svr.Get(R"(/state/items/(\d+)/takes/(\d+)/fx/([^/]+)/preset)",
             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                 const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
                 Handlers::handle_take_get_fx_preset(req, res);
             }));
-    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+)/preset)",
+    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/([^/]+)/preset)",
              auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
                  const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
                  Handlers::handle_take_set_fx_preset(req, res);
              }));
+    // Pin-mapping sub-resource (issue #101).
+    svr.Get(R"(/state/items/(\d+)/takes/(\d+)/fx/([^/]+)/pins)",
+            auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
+                const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
+                Handlers::handle_take_get_pins(req, res);
+            }));
+    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/([^/]+)/pins)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
+                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
+                 Handlers::handle_take_set_pins(req, res);
+             }));
     // Copy sub-resource (3 captures + /copy suffix).
-    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+)/copy)",
+    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/([^/]+)/copy)",
              auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
@@ -332,21 +365,21 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                  Handlers::handle_take_copy_fx(req, res);
              }));
     // Bare slot routes (3 captures).
-    svr.Get(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+))",
+    svr.Get(R"(/state/items/(\d+)/takes/(\d+)/fx/([^/]+))",
             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                 const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
                 const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
                 Handlers::handle_take_get_fx(req, res);
             }));
-    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+))",
+    svr.Post(R"(/state/items/(\d+)/takes/(\d+)/fx/([^/]+))",
              auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                  const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                  const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
                  const_cast<httplib::Request&>(req).path_params["slot"] = req.matches[3];
                  Handlers::handle_take_set_fx(req, res);
              }));
-    svr.Delete(R"(/state/items/(\d+)/takes/(\d+)/fx/(\d+))",
+    svr.Delete(R"(/state/items/(\d+)/takes/(\d+)/fx/([^/]+))",
                auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
                    const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
                    const_cast<httplib::Request&>(req).path_params["take"] = req.matches[2];
