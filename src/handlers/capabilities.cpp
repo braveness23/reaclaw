@@ -103,8 +103,10 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                "POST /state/items/{i}/takes/{t}/fx {name,enabled,params} — add FX to a take; "
                "GET/POST/DELETE /state/items/{i}/takes/{t}/fx/{slot} — read/set/delete; "
                "POST .../fx/{slot}/copy {to_item,to_take,to_slot:-1,move:false}; "
-               "GET/POST .../fx/{slot}/preset {name|navigate:-1|1}. "
-               "Mirrors the TrackFX_* surface via TakeFX_*."}}},
+               "GET/POST .../fx/{slot}/preset {name|navigate:-1|1}; "
+               "GET/POST .../fx/{slot}/pins — I/O pin count + channel routing. "
+               "Mirrors the TrackFX_* surface via TakeFX_*, including GUID "
+               "addressing and param modulation/plink."}}},
             {"midi",
              {{"read",
                "GET /state/items/{index}/midi — notes[] + cc[] from the active MIDI take; "
@@ -124,14 +126,24 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"read", "GET /state/tracks/{index}/fx/{slot}"},
               {"set",
                "POST /state/tracks/{index}/fx/{slot} "
-               "{enabled,offline,params:[{index|name,value}]}"},
+               "{enabled,offline,params:[{index|name,value?,plink?}]}"},
               {"delete", "DELETE /state/tracks/{index}/fx/{slot}"},
               {"copy",
                "POST /state/tracks/{index}/fx/{slot}/copy {to_track,to_slot:-1,move:false}"},
               {"preset", "GET/POST /state/tracks/{index}/fx/{slot}/preset {name|navigate:-1|1}"},
+              {"pins",
+               "GET/POST /state/tracks/{index}/fx/{slot}/pins {pins:[{pin,output,channels}]} — "
+               "I/O pin count (TrackFX_GetIOSize) and channel routing "
+               "(TrackFX_Get/SetPinMappings), distinct from the track-level sends"},
+              {"guid",
+               "every fx response carries guid (TrackFX_GetFXGUID); {slot} in every "
+               "fx route accepts either the numeric chain index or that guid string, "
+               "stable across chain reorders/insertions/deletions"},
               {"params",
                "normalized 0..1 by param index or name; reads also expose real-unit "
-               "min/max/mid/raw and offline state"}}},
+               "min/max/mid/raw, offline state, and a modulation object "
+               "(lfo_active,acs_active,plink_active,plink) reporting/setting any "
+               "existing LFO/ACS/MIDI-CC-link binding on the param"}}},
             {"routing",
              {{"add_send", "POST /state/tracks/{index}/sends {to_track,volume_db,pan}"},
               {"set_send",
