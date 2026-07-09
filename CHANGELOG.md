@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-07-08
+
 ### Added
 - **Stable FX addressing via GUID** (#102) — every FX read/write response
   (`GET`/`POST`/`DELETE .../fx/{slot}`, `.../copy`, `.../preset`, the new

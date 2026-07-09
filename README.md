@@ -256,7 +256,7 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.16.0** — the external-change event feed: `GET /events` (poll)
+Latest release: **v1.17.0** — the external-change event feed: `GET /events` (poll)
 and `GET /events/stream` (Server-Sent Events) push granular, attributed change
 events — track volume/pan/mute/solo/recarm/selected/title, play/repeat state —
 from *any* source, each tagged `source: "reaclaw"` or `"external"` so an agent
