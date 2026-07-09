@@ -52,7 +52,7 @@ What remains is everything below.
 | 3 | Audio perception ("hears itself") ✅ *done (v1.5.0); onset/density deferred* | Perception | IDEAS Q1, Q3 | [#18](https://github.com/braveness23/reaclaw/issues/18) |
 | 4 | Visual perception & musical probes ✅ *done (v1.6.0); A/B diff lands with the snapshot layer* | Perception | IDEAS Q4, Q5, Q7 | [#19](https://github.com/braveness23/reaclaw/issues/19) |
 | 5 | Learned suggestions (the moat) ✅ *done; pairwise layer + snapshot/diff. Heavier mining deferred* | Learning | IDEAS Q8 | [#20](https://github.com/braveness23/reaclaw/issues/20) |
-| 6 | Programmatic production — headless offline render engine ✅ *done (v1.13.0–v1.14.0): render, project lifecycle, async jobs, CI E2E* | Production | IDEAS Q9 | [#32](https://github.com/braveness23/reaclaw/issues/32) |
+| 6 | Programmatic production — headless offline render engine ✅ *done (v1.8.0–v1.15.0): render (v1.8.0), project lifecycle (v1.9.0), async jobs (v1.14.0), CI E2E (v1.15.0)* | Production | IDEAS Q9 | [#32](https://github.com/braveness23/reaclaw/issues/32) |
 
 **All six roadmap epics are complete.** The shared
 **snapshot / state-diff layer** built as #20's prep also retro-unlocks the one #19

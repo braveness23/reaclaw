@@ -228,7 +228,7 @@ Each phase is a shippable unit. Complete and test each phase before starting the
 ### Performance
 
 - [x] Add SQLite indexes: `execution_history(executed_at)`, `scripts(name)` — already in schema from Phase 1
-- [x] Cache frequent state reads in memory with 1s TTL — `/state`, `/state/tracks`, `/state/items` cached; invalidated on track writes
+- [x] Cache frequent state reads in memory with 1s TTL — `/state`, `/state/tracks` cached; invalidated on track writes. (`/state/items` was later moved to uncached main-thread reads when item CRUD landed, so item edits are always reflected — see `docs/API.md`.)
 - [x] Profile all Phase 0–1 endpoints (requires live REAPER; targets: catalog search <50ms, state queries <100ms, action execution <200ms excluding queue wait) — verified: catalog search ~47ms sequential, state queries ~47ms; action execution well under 200ms
 
 ### Optional MCP Wrapper
@@ -486,7 +486,12 @@ Adds `P_ICON` read/write to the track layer and a discovery endpoint.
 
 ---
 
-## Epic #32 — Programmatic production: headless offline render engine (Q9) — **in progress**
+## Epic #32 — Programmatic production: headless offline render engine (Q9) — **complete**
+
+> Closed by #36 (CI E2E render smoke test). The two unchecked items below —
+> stem rendering / batch presets and the release-triggered showcase render —
+> are deferred slivers, not blockers; region-bounds rendering shipped as
+> `bounds: "all_regions"` on `POST /render`.
 
 A new third half (production) beside control + perception. See
 `ReaClaw_ROADMAP.md` → Epic 6 and `ReaClaw_TECH_DECISIONS.md` §19. **Offline-first,
@@ -589,8 +594,51 @@ Phase 2 (real architecture/risk decisions, done one at a time with a check-in):
 - [x] **#31** External-change event feed + SSE + attribution. See
       `ReaClaw_TECH_DECISIONS.md` §26.
 
+---
+
+## Epic #45 — Full coverage: provable reachability + legible map — **complete**
+
+All six planned sub-issues shipped (#46 coverage matrix, #37 governance policy, #48
+state-chunk keystone, #49 transport verbs, #50 take-FX verbs, #51 MIDI verbs) plus
+project lifecycle (#34). Config vars (#44) deliberately deferred to the wish list —
+still reachable via action/Lua tiers, so the 100%-reachability goal holds without it.
+`ReaClaw_COVERAGE_REPORT.md` and the live `/capabilities` `sdk` object updated to
+current measured figures (868 total / 188 called / 21.7%, up from 865/131/15.1% at
+the report's original measurement). Epic closed 2026-07-02.
+
 Still deferred: Pi plugin curation (#62) — manual devops + subjective creative
 work, deliberately left for the user, not this marathon.
+
+---
+
+## Issues #100–#102 — FX introspection: modulation, pin-routing, GUID addressing — **complete**
+
+Three related gaps in the FX control surface, all backed by `TrackFX_*`/`TakeFX_*`
+functions that had zero prior callers in the codebase.
+
+- [x] **#102 — GUID addressing.** Every FX response (`fx[]`, `GET`/`POST`/
+      `DELETE .../fx/{slot}`, `.../copy`, `.../preset`, `.../pins`, track and
+      take) carries `guid` (`Track`/`TakeFX_GetFXGUID`); `{slot}` in every one
+      of those routes accepts either the numeric chain index or the GUID
+      string via a shared `resolve_fx_slot()` helper. Router regexes for FX
+      slot segments changed from `(\d+)` to `([^/]+)`.
+- [x] **#101 — Pin-mapping / channel routing.** New `GET`/
+      `POST .../fx/{slot}/pins` (track and take) expose `TrackFX_GetIOSize`
+      and `Get/SetPinMappings`, decoding the 64-bit-per-pin channel bitmask
+      into a `channels[]` list.
+- [x] **#100 — Modulation / MIDI-CC-link visibility.** Every param in an FX
+      read/write response carries a `modulation` object (`lfo_active`,
+      `acs_active`, `plink_active`, plus `plink` detail when active) via
+      `TrackFX_GetNamedConfigParm`'s `param.X.{lfo,acs,plink}.*` keys; a
+      `plink` object in the existing param write array sets/clears the
+      binding via `SetNamedConfigParm`.
+- [x] **Docs** — `docs/API.md`, `CHANGELOG.md`, `/capabilities` manifest
+      (`src/handlers/capabilities.cpp`) updated.
+- [x] **Verified live** on the Pi rig (REAPER 7.74/aarch64): GUID and slot
+      addressing both resolve the same FX; a bad numeric slot or unknown GUID
+      both 400; ReaComp's sidechain pin layout (4 in / 2 out) read correctly
+      and a pin remap round-tripped; a MIDI-CC `plink` binding was written and
+      read back with matching fields.
 
 ---
 

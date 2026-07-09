@@ -7,7 +7,7 @@ struct Response;
 
 namespace ReaClaw::Handlers {
 
-// Phase 1 — not implemented in Phase 0.
+// Script management (Phase 1, v0.2.0).
 void handle_scripts_register(const httplib::Request& req, httplib::Response& res);
 void handle_scripts_cache(const httplib::Request& req, httplib::Response& res);
 void handle_scripts_get(const httplib::Request& req, httplib::Response& res);

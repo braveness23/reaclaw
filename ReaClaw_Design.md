@@ -228,6 +228,11 @@ for (int i = 0; i < num_tracks; i++) {
 
 ## 4. API Specification
 
+> **Historical design spec.** This section is the original Phase 0/1 API design and is
+> kept for the record; the API has grown far beyond it (transport, MIDI, take-FX, render,
+> snapshots, events, …). The authoritative, current endpoint reference is
+> [`docs/API.md`](docs/API.md) and the live `GET /capabilities` manifest.
+
 All endpoints:
 - Accept and return `application/json`
 - Require `Authorization: Bearer {key}` header when `auth.type` is `api_key`
@@ -780,7 +785,9 @@ cmake --build build --config Release
 cmake --install build
 ```
 
-On Windows, must use MSVC (required for REAPER C++ ABI compatibility).
+On Windows, MSVC or MinGW-w64 GCC both work — the `GetFunc()`-loaded SDK surface is
+compiler-ABI-neutral (the release `.dll` is MinGW cross-compiled in CI; see
+`ReaClaw_TECH_DECISIONS.md` §2's Windows ABI note for the one virtual-interface caveat).
 
 ---
 

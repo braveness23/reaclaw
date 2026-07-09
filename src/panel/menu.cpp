@@ -1,7 +1,5 @@
-// ReaClaw "Extensions" menu.
-//
-// Replaces the former dockable control panel with a lightweight section under
-// REAPER's main "Extensions" menu:
+// ReaClaw "Extensions" menu — a lightweight section under REAPER's main
+// "Extensions" menu:
 //
 //   Extensions > ReaClaw >
 //     Start/stop server   (checked while the server is running)
@@ -11,8 +9,8 @@
 //     ----
 //     Copy API key        (SWELL dialog with copy button + confirmation)
 //
-// The Status / View log / Copy API key items open polished SWELL dialogs
-// (see panel/dialogs.cpp) instead of plain MessageBox popups.
+// The Status / View log / Copy API key items open SWELL dialogs
+// (see panel/dialogs.cpp).
 //
 // Each item is a registered REAPER action, so it also appears in the Actions
 // list and can be bound to a key or toolbar button. The submenu is built in the

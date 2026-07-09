@@ -269,30 +269,37 @@ Next session:
 
 ## Stdio MCP Server
 
-`mcp/server.py` is a ready-to-use stdio MCP bridge. It translates MCP `tools/call` JSON-RPC messages into ReaClaw HTTPS requests and returns results.
+The `mcp/` directory ships a ready-to-use stdio MCP server (Python package
+`reaclaw_mcp`, FastMCP-based). It translates MCP `tools/call` JSON-RPC messages
+into ReaClaw HTTPS requests and returns results. Full install/config/tuning
+reference (including the semantic-search warm-up): [`mcp/README.md`](../mcp/README.md).
 
 ### Install
 
 ```bash
 cd mcp
-pip install -r requirements.txt
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt        # or: pip install -e .
 ```
 
 ### Run
 
 ```bash
-REACLAW_API_KEY=sk_your_key_here python mcp/server.py
+REACLAW_API_KEY=sk_your_key_here python -m reaclaw_mcp.server
 ```
 
 ### Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `REACLAW_BASE_URL` | `https://localhost:9091` | ReaClaw server URL |
-| `REACLAW_API_KEY` | *(empty)* | Bearer API key; leave unset if `auth.type` is `"none"` |
-| `REACLAW_SSL_VERIFY` | `false` | Set to `"true"` to verify TLS cert (needed for CA-signed certs) |
+| `REACLAW_URL` | `https://127.0.0.1:9091` | ReaClaw server URL |
+| `REACLAW_API_KEY` | `sk_change_me` | Bearer API key from `config.json` |
+| `OLLAMA_URL` | `http://localhost:11434` | Embeddings backend for semantic search |
+| `REACLAW_EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model |
+| `REACLAW_CACHE_DIR` | `~/.cache/reaclaw-mcp` | Catalog-embedding cache |
 
-SSL verification is off by default because ReaClaw uses a self-signed cert in dev/home-network deployments.
+TLS verification is disabled by the client (ReaClaw uses a self-signed cert in
+dev/home-network deployments).
 
 ### Claude Desktop / claude_desktop_config.json
 
@@ -301,9 +308,9 @@ SSL verification is off by default because ReaClaw uses a self-signed cert in de
   "mcpServers": {
     "reaclaw": {
       "command": "python",
-      "args": ["/path/to/reaclaw/mcp/server.py"],
+      "args": ["-m", "reaclaw_mcp.server"],
       "env": {
-        "REACLAW_BASE_URL": "https://localhost:9091",
+        "REACLAW_URL": "https://127.0.0.1:9091",
         "REACLAW_API_KEY": "sk_your_key_here"
       }
     }
@@ -315,21 +322,21 @@ SSL verification is off by default because ReaClaw uses a self-signed cert in de
 
 | Tool | Maps to |
 |---|---|
-| `reaclaw_health` | `GET /health` |
-| `reaclaw_search_catalog` | `GET /catalog/search` |
-| `reaclaw_get_catalog` | `GET /catalog` |
-| `reaclaw_get_catalog_categories` | `GET /catalog/categories` |
-| `reaclaw_get_action` | `GET /catalog/{id}` |
-| `reaclaw_get_state` | `GET /state` (+ optional `/state/tracks`) |
-| `reaclaw_get_tracks` | `GET /state/tracks` |
-| `reaclaw_get_items` | `GET /state/items` |
-| `reaclaw_get_selection` | `GET /state/selection` |
-| `reaclaw_get_automation` | `GET /state/automation` |
-| `reaclaw_set_track` | `POST /state/tracks/{index}` |
-| `reaclaw_execute_action` | `POST /execute/action` |
-| `reaclaw_execute_sequence` | `POST /execute/sequence` |
-| `reaclaw_register_script` | `POST /scripts/register` |
-| `reaclaw_get_script_cache` | `GET /scripts/cache` |
-| `reaclaw_get_script` | `GET /scripts/{id}` |
-| `reaclaw_delete_script` | `DELETE /scripts/{id}` |
-| `reaclaw_get_history` | `GET /history` |
+| `reaper_health` | `GET /health` |
+| `reaper_capabilities` | `GET /capabilities` |
+| `reaper_search_actions` | `GET /catalog/search` (semantic ranking with keyword fallback) |
+| `reaper_get_state` | `GET /state` |
+| `reaper_get_tracks` | `GET /state/tracks` |
+| `reaper_create_tracks` | `POST /state/tracks` |
+| `reaper_set_track` | `POST /state/tracks/{index}` |
+| `reaper_delete_track` | `DELETE /state/tracks/{index}` |
+| `reaper_add_fx` | `POST /state/tracks/{index}/fx` |
+| `reaper_get_fx` | `GET /state/tracks/{index}/fx/{slot}` |
+| `reaper_set_fx` | `POST /state/tracks/{index}/fx/{slot}` |
+| `reaper_delete_fx` | `DELETE /state/tracks/{index}/fx/{slot}` |
+| `reaper_add_send` | `POST /state/tracks/{index}/sends` |
+| `reaper_delete_send` | `DELETE /state/tracks/{index}/sends/{send}` |
+| `reaper_set_selection` | `POST /state/selection` |
+| `reaper_run_action` | `POST /execute/action` |
+| `reaper_run_sequence` | `POST /execute/sequence` |
+| `reaper_register_script` | `POST /scripts/register` |

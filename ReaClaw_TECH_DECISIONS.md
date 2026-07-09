@@ -792,4 +792,4 @@ limit beyond httplib's own pool size — single-user tool (§13), same stance as
 | Production/render | Offline-first headless render engine (Epic #32); `/render` hides RENDER_FORMAT; long renders are jobs; local-first |
 | Dependencies | Tiered (0–3): vendored core required; SWS/external tools optional + feature-detected; network forbidden except one narrow, opt-in, loopback-only exception (§25) |
 | Versioning | SemVer — additive = MINOR, breaking = MAJOR; documented+advertised endpoints are stable; no 2.0 for additive growth |
-| Magic wand (Epic-adjacent, issue #10) | Three layers: Skill (`skill/reaclaw/`) + MCP server (`mcp/`, 17 tools) + server-side intent verbs/capabilities/recipes/semantic search |
+| Magic wand (Epic-adjacent, issue #10) | Three layers: Skill (`skill/reaclaw/`) + MCP server (`mcp/`, 18 tools) + server-side intent verbs/capabilities/recipes/semantic search |

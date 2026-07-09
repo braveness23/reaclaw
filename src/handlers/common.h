@@ -24,10 +24,6 @@ inline void json_error(httplib::Response& res,
     res.set_content(j.dump(), "application/json");
 }
 
-inline void not_implemented(httplib::Response& res) {
-    json_error(res, 501, "Not implemented in this phase", "NOT_IMPLEMENTED");
-}
-
 inline std::string now_iso() {
     auto now = std::chrono::system_clock::now();
     auto t = std::chrono::system_clock::to_time_t(now);

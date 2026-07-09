@@ -103,8 +103,10 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                "POST /state/items/{i}/takes/{t}/fx {name,enabled,params} — add FX to a take; "
                "GET/POST/DELETE /state/items/{i}/takes/{t}/fx/{slot} — read/set/delete; "
                "POST .../fx/{slot}/copy {to_item,to_take,to_slot:-1,move:false}; "
-               "GET/POST .../fx/{slot}/preset {name|navigate:-1|1}. "
-               "Mirrors the TrackFX_* surface via TakeFX_*."}}},
+               "GET/POST .../fx/{slot}/preset {name|navigate:-1|1}; "
+               "GET/POST .../fx/{slot}/pins — I/O pin count + channel routing. "
+               "Mirrors the TrackFX_* surface via TakeFX_*, including GUID "
+               "addressing and param modulation/plink."}}},
             {"midi",
              {{"read",
                "GET /state/items/{index}/midi — notes[] + cc[] from the active MIDI take; "
@@ -124,14 +126,24 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"read", "GET /state/tracks/{index}/fx/{slot}"},
               {"set",
                "POST /state/tracks/{index}/fx/{slot} "
-               "{enabled,offline,params:[{index|name,value}]}"},
+               "{enabled,offline,params:[{index|name,value?,plink?}]}"},
               {"delete", "DELETE /state/tracks/{index}/fx/{slot}"},
               {"copy",
                "POST /state/tracks/{index}/fx/{slot}/copy {to_track,to_slot:-1,move:false}"},
               {"preset", "GET/POST /state/tracks/{index}/fx/{slot}/preset {name|navigate:-1|1}"},
+              {"pins",
+               "GET/POST /state/tracks/{index}/fx/{slot}/pins {pins:[{pin,output,channels}]} — "
+               "I/O pin count (TrackFX_GetIOSize) and channel routing "
+               "(TrackFX_Get/SetPinMappings), distinct from the track-level sends"},
+              {"guid",
+               "every fx response carries guid (TrackFX_GetFXGUID); {slot} in every "
+               "fx route accepts either the numeric chain index or that guid string, "
+               "stable across chain reorders/insertions/deletions"},
               {"params",
                "normalized 0..1 by param index or name; reads also expose real-unit "
-               "min/max/mid/raw and offline state"}}},
+               "min/max/mid/raw, offline state, and a modulation object "
+               "(lfo_active,acs_active,plink_active,plink) reporting/setting any "
+               "existing LFO/ACS/MIDI-CC-link binding on the param"}}},
             {"routing",
              {{"add_send", "POST /state/tracks/{index}/sends {to_track,volume_db,pan}"},
               {"set_send",
@@ -202,11 +214,14 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
             {"render",
              {{"render",
                "POST /render {output, format?, bit_depth?, srate?, channels?, bounds?, "
-               "start?, end?, mp3_bitrate?, flac_compression?} — offline render to file. "
-               "Formats: wav (default), flac, mp3, ogg. Bounds: project (default), "
+               "start?, end?, mp3_bitrate?, flac_compression?, async?} — offline render to "
+               "file. Formats: wav (default), flac, mp3, ogg. Bounds: project (default), "
                "time_selection, all_regions, custom (requires start+end). "
                "Returns output_path, render_seconds, project_length, offline_ratio. "
                "Timeout: 300 s (covers projects up to ~100 min at 20× offline speed)."},
+              {"jobs",
+               "async:true returns {job_id, status} immediately; GET /render/jobs[/{id}] "
+               "polls, DELETE /render/jobs/{id} cancels a still-queued job (issue #35)"},
               {"note",
                "Render settings are saved and restored after each call so agent renders "
                "do not permanently change the project's render configuration."}}},
@@ -303,9 +318,15 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
                "universal backstop: full RPP state of any track/item/envelope, readable and "
                "writable even with no dedicated verb. Writes are undo-wrapped"}}},
             {"transport",
-             {{"action",
+             {{"read",
+               "GET /transport — live playing/paused/recording/position/loop state; "
+               "bypasses the 1s state cache, safe to poll during playback (issue #67)"},
+              {"action",
                "POST /transport {action: play|stop|pause|record} — "
                "backed by CSurf_OnPlay/Stop/Pause/Record; returns transport state after dispatch"},
+              {"aliases",
+               "POST /transport/play|stop|pause|record — same as POST /transport with the "
+               "action baked into the route (issue #71)"},
               {"cursor",
                "POST /transport/cursor {position, moveview?:false, seekplay?:false} — "
                "moves edit cursor to position (seconds); returns actual cursor position"},
@@ -318,6 +339,10 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
               {"list", "GET /scripts/cache — list all registered scripts with id/name/tags"},
               {"delete", "DELETE /scripts/{id}"},
               {"execute", "POST /execute/action {id: <script_id_string>}"},
+              {"execute_oneshot",
+               "POST /execute/script {script, name?, ephemeral?:true, feedback?, timeout_ms?} — "
+               "register + run (+ deregister by default) in one call, for throw-away "
+               "scripts (issue #69)"},
               {"error_capture",
                "Scripts are wrapped in pcall at registration. Runtime errors appear in the "
                "execute response as {status:'lua_error', lua_error:'...'} instead of silent "
@@ -328,8 +353,9 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
 
     // Things that have no direct verb yet — reach them via an action ID or a
     // generated Lua script. Kept honest so the agent doesn't probe blindly.
+    // (MIDI graduated to structured verbs in #51 — see direct.midi above.)
     nlohmann::json via_script_or_action = nlohmann::json::array(
-            {"MIDI notes/events", "freezing tracks"});
+            {"freezing tracks", "REAPER preferences / config vars (#44 deferred)"});
 
     // Coverage matrix — every REST-relevant REAPER domain and how it is reached, so an
     // agent (and a human) can see the whole map and know nothing is hidden. Statuses:
@@ -379,14 +405,15 @@ void handle_capabilities(const httplib::Request& req, httplib::Response& res) {
 
     // Honest SDK summary (reproducible — see ReaClaw_COVERAGE_REPORT.md §1).
     nlohmann::json sdk = {
-            {"functions_total", 865},
-            {"functions_called", 131},
-            {"raw_pct", 15.1},
+            {"functions_total", 868},
+            {"functions_called", 188},
+            {"raw_pct", 21.7},
             {"reachable", "100% via verbs + actions (~6700) + Lua + chunk backstop"},
             {"note",
-             "raw % understates coverage: ~16 of ~20 REST-relevant domains have typed verbs; "
-             "most uncalled functions are out-of-scope, redundant variants, or "
-             "action/Lua-reachable"}};
+             "raw % understates coverage: Epic #45 graduated all six planned gaps "
+             "(transport, MIDI, take-FX, project lifecycle, state-chunk, coverage matrix) "
+             "to typed verbs; remaining uncalled functions are out-of-scope, redundant "
+             "variants, or action/Lua-reachable (config vars deliberately deferred, #44)"}};
 
     // Optional-dependency / feature detection (folded from #37) so agents branch instead of
     // probe-and-fail. SWS via plugin_getapi; tools via a cheap PATH scan.

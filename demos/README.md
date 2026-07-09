@@ -193,6 +193,13 @@ the REAPER window fills 1920×1080.
   **pitch + note length** (low+short = kick/bass, high+short = hats).
 - **Gain-stage every track down** (−5..−17 dB) via `volume_db` or the master
   clips at 0 dB.
+- ReaSynth's one-sine limitation is now optional: **Surge XT**, **Nekobi**, and
+  **Cardinal Synth** (default patch, no setup) all drop in and make sound
+  immediately. **sfizz** is installed and its DSP engine is verified (real
+  audio from real SFZ libraries via the CLI render tool), but loading a
+  sample file *through the REAPER plugin GUI* is blocked on this Xvfb rig by
+  an environment GTK issue — see the plugin cheat sheet in
+  `skill/reaclaw/SKILL.md` for API names and gotchas (issue #62).
 
 ### Playback / the build-up effect
 - Loop: `GetSet_LoopTimeRange(true,false,0,len,false)` + `GetSetRepeat(1)`

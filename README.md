@@ -17,7 +17,7 @@ own process, so it has direct, first-class access to every single REAPER API cal
 
 ```bash
 curl -sk -H "Authorization: Bearer sk_your_key" \
-  https://localhost:9091/state | jq '.bpm, .tracks | length'
+  https://localhost:9091/state | jq '.project.bpm, .track_count'
 ```
 
 ---
@@ -256,7 +256,7 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.16.0** — the external-change event feed: `GET /events` (poll)
+Latest release: **v1.17.0** — the external-change event feed: `GET /events` (poll)
 and `GET /events/stream` (Server-Sent Events) push granular, attributed change
 events — track volume/pan/mute/solo/recarm/selected/title, play/repeat state —
 from *any* source, each tagged `source: "reaclaw"` or `"external"` so an agent
@@ -272,8 +272,8 @@ alongside the Linux `.so`. See the
 | 0 | Scaffold · catalog · state · action execution · HTTPS + auth | v0.1.0 |
 | 1 | Script registration · syntax validation · sequences · history | v0.2.0 |
 | 2 | Performance · security hardening · MCP wrapper | v1.0.0 |
-| 3 | Tier-A/B structured verbs · content manipulation | v1.5.0 |
-| 4 | Perception — loudness, spectral, meters, hints, visualization, probes | v1.6.0 |
+| 3 | Tier-A/B structured verbs · content manipulation | v1.3.0–v1.4.0 |
+| 4 | Perception — loudness, spectral, meters, hints, visualization, probes | v1.5.0–v1.6.0 |
 
 ---
 

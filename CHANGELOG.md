@@ -9,6 +9,78 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-07-08
+
+### Added
+- **Stable FX addressing via GUID** (#102) — every FX read/write response
+  (`GET`/`POST`/`DELETE .../fx/{slot}`, `.../copy`, `.../preset`, the new
+  `.../pins`) now carries a `guid` field (`TrackFX_GetFXGUID`/
+  `TakeFX_GetFXGUID`), and `{slot}` in every one of those routes accepts
+  either the numeric chain index (unchanged) or that GUID string — so an
+  agent that read a plugin's identity once can keep addressing it correctly
+  even after other FX are inserted/deleted/reordered in the chain. Backed by
+  a shared `resolve_fx_slot()` helper; router regexes for FX slot segments
+  changed from `(\d+)` to `([^/]+)` to accept both forms.
+- **FX channel routing / pin-mapping visibility** (#101) —
+  `GET`/`POST /state/tracks/{index}/fx/{slot}/pins` and the take-FX
+  equivalent expose a plugin's I/O pin count (`TrackFX_GetIOSize`) and how
+  each pin maps onto track/take channels (`TrackFX_GetPinMappings`/
+  `SetPinMappings`, decoded from the 64-bit channel bitmask into a
+  `channels[]` list per pin). Distinct control surface from the existing
+  `sends` verbs — this is routing *within* a plugin's own pins.
+- **FX parameter modulation / MIDI-CC-link visibility** (#100) — every
+  param in an FX read/write response now carries a `modulation` object
+  (`lfo_active`, `acs_active`, `plink_active`, and — only when a link is
+  active — a `plink` detail object) via `TrackFX_GetNamedConfigParm`'s
+  `param.X.{lfo,acs,plink}.*` keys, so an agent can tell whether a knob is
+  already wired to a hardware MIDI CC (or an LFO, or audio-rate modulation)
+  before setting it via the API. Write side: a per-param `plink` object in
+  the existing `params` write array sets or clears the binding via
+  `TrackFX_SetNamedConfigParm`.
+
+### Fixed
+- **`GET /state` time signature denominator** — was hardcoded to `/4`
+  (a 6/8 project reported `"6/4"`); now read from the tempo map via
+  `TimeMap_GetTimeSigAtTime`, matching what `GET /state/tempo` reports.
+- **`GET /capabilities` internal drift** (#103) — `via_script_or_action` still
+  listed "MIDI notes/events" even though MIDI graduated to structured verbs in
+  v1.8.0 (#51), contradicting the `coverage.midi: structured` entry in the same
+  response. Also added the missing `GET /transport`, `POST /transport/play|stop|
+  pause|record`, `POST /execute/script`, and render-jobs entries to `direct`.
+- **First-run `config.json` omitted the `learning` block** — `default_config()`
+  now writes it (matching `save()`, `config.example.json`, and the documented
+  reference in `ReaClaw_Design.md` §7).
+
+### Documentation (issue #103 — code-vs-docs drift audit)
+- `docs/API.md`: documented the take-FX verbs (#50, shipped v1.10.0 but never
+  added here), the unauthenticated `GET /` landing page, and the `409`/`503`
+  status codes; refreshed the stale `/capabilities` example (`sdk` numbers,
+  `coverage.midi`).
+- `docs/MCP.md`: rewrote the stdio-server section to match the real
+  `reaclaw_mcp` package — invocation (`python -m reaclaw_mcp.server`), env vars
+  (`REACLAW_URL`, not `REACLAW_BASE_URL`), and the actual `reaper_*` tool
+  names (the old table listed 18 `reaclaw_*` tools that never existed).
+- `docs/DEPLOYMENT.md`: first-run config block gained the `learning` and
+  `semantic_search` sections.
+- `ReaClaw_Design.md`: §4 marked as the historical Phase-0/1 spec (docs/API.md
+  is authoritative); §8's "Windows must use MSVC" corrected per the revised
+  ABI note in `ReaClaw_TECH_DECISIONS.md` §2.
+- `SECURITY.md`: documented the deliberate `GET /` no-auth exception.
+- `ReaClaw_IMPLEMENTATION_CHECKLIST.md`: Epic #32 heading corrected to
+  complete; `/state/items` cache claim corrected (uncached since item CRUD).
+- `ReaClaw_ROADMAP.md`: Epic 6 version span corrected (v1.8.0–v1.15.0).
+- `ReaClaw_TECH_DECISIONS.md`: MCP tool count 17 → 18.
+- `README.md`: fixed the `GET /state` jq example (`.project.bpm`,
+  `.track_count`) and the phase-table tags.
+- `CLAUDE.md`: removed contradictory stale Phase-2 task sections, refreshed the
+  phase-status table and the source-layout tree to the current handler set.
+
+### Removed
+- Dead code found during the #103 sweep: unused `not_implemented()` helper in
+  `handlers/common.h`, stale "not implemented in Phase 0" comment in
+  `handlers/scripts.h`, and `tests/placeholder_test.cpp` (never referenced by
+  the test build).
+
 ## [1.16.0] - 2026-07-01
 
 ### Added
