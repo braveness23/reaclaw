@@ -48,6 +48,110 @@ queries `GET /state/track-icons` first and warns about any it can't find.
 
 ---
 
+## FX & Automation trailer
+
+`scripts/show_fxauto.py` + `scripts/post_fxauto.py` (built 2026-07-08) — four
+MIDI tracks (Drums, Bass, Pad, Lead), four different stock effects (ReaComp,
+ReaXcomp, ReaDelay, ReaEQ), and every automation flavor the API exposes: an
+FX-**parameter** envelope (the compressor's Threshold, watched live through
+its floating plugin GUI as it plays), a built-in **track** envelope (Pan),
+stepping through a plugin's factory presets, and a MIDI read → transform →
+write beat. Output `trailer-fxauto-YYYY-MM-DD.mp4`, uploaded to Drive
+`ReaClaw/` alongside the other dated trailers there.
+
+```bash
+cd demos/scripts
+python3 show_fxauto.py prepare                                    # not recorded
+DISP=:3 MON=reatrailer.monitor ./record.sh /tmp/raw_fxauto.mp4 &
+REC=$!
+python3 show_fxauto.py perform
+kill -INT $REC
+python3 post_fxauto.py                                            # -> ~/reaclaw_fxauto_trailer.mp4
+```
+
+Gotchas specific to this one (extends the zoom-trailer gotchas noted in the
+scripts' docstrings and in project memory):
+
+- **FX-parameter automation has no REST verb.** `GetFXEnvelope(track, fx,
+  param, true)` (Lua) creates/arms it and `InsertEnvelopePoint` writes points
+  directly onto it — verified live: REAPER draws the lane in the arrange
+  immediately, no separate "show envelope" step needed. `lib.write_fx_param_envelope()` wraps this; there's no track-level analog to
+  `write_automation()`'s REST path for FX params.
+- **The `agent_slot` / raw-`slot` split is a hard invariant, not a guess**:
+  every new track's auto-added disabled inline ReaEQ is always raw slot 0, so
+  the first FX added (`ReaSynth`) always lands at slot 1 and the second
+  (the track's real effect) always lands at slot 2. `prepare()` asserts this
+  per track instead of trusting it silently.
+- **A floating FX GUI genuinely reflects live automation.** Opening it with
+  `TrackFX_Show(track, fx, 3)` (`lib.show_fx()`) *before* writing and playing
+  the parameter envelope makes the on-screen fader visibly sweep in sync with
+  the audio — a stronger shot than any camera move.
+- **Stock Cockos plugins ship real factory presets**: ReaEQ 24, ReaComp 20,
+  ReaXcomp 10, ReaDelay 9 (probed live via `GET .../fx/{slot}/preset` before
+  scripting the preset-tour shot). `POST .../fx/{slot}/preset {"navigate":1}`
+  steps through them and returns the real name each time.
+- The audio loop length is fixed by `BPM`/`BARS`, not by the zoom trailer's
+  `PACE` env var — shots that hold through a full automation sweep use raw
+  `time.sleep(N * LOOP_LEN)` rather than `hold()`, so the visual dwell stays a
+  whole number of musical loop cycles regardless of `PACE`.
+
+---
+
+## Stretch-marker timing-correction trailer
+
+`scripts/show_stretch.py` + `scripts/post_stretch.py` (built 2026-07-10) —
+real one-shot kick/snare/hi-hat samples (Sony ACID library, *Groove
+Spectrum*, pulled from Drive), arranged into a "human" drum take with
+deliberately loose kick/snare timing against a tight 8th-note hat reference,
+then corrected onto the grid live using REAPER's **stretch markers** —
+`SetTakeStretchMarker` + the native "snap to grid" action. No pitch shift,
+no re-recording: the audio between markers is locally time-stretched so each
+hit's real transient lands exactly on the beat. Output
+`trailer-stretch-YYYY-MM-DD.mp4`, uploaded to Drive `ReaClaw/`.
+
+```bash
+cd demos/scripts
+python3 show_stretch.py prepare                                   # not recorded
+DISP=:3 MON=reatrailer.monitor ./record.sh /tmp/raw_stretch.mp4 &
+REC=$!
+python3 show_stretch.py perform
+kill -INT $REC
+python3 post_stretch.py                                           # -> ~/reaclaw_stretch_trailer.mp4
+```
+
+Gotchas specific to this one:
+
+- **There is no REST verb for stretch markers at all** (same story as
+  FX-parameter envelopes). `reaper.SetTakeStretchMarker(take, -1, pos)`
+  appends one at a take-relative position (seconds from the start of the
+  take's *source*, not the item's absolute project position — easy to get
+  backwards). `lib.set_stretch_markers()` wraps the batch case.
+- **41843 "Item: Add stretch markers at time selection" does NOT do
+  per-transient detection on this build**, despite the name — verified live,
+  it only drops two markers at the EDGES of the time selection. The actual
+  automatic-detection primitive is native action `40836` ("move cursor to
+  nearest transient in items"), which does real analysis; `lib.nearest_transient()` parks the edit cursor near an expected hit and lets REAPER
+  snap it onto the true onset, then `41842` ("Add stretch marker at cursor")
+  drops the marker there. That's the on-camera "REAPER finds the hit" beat;
+  the remaining markers are placed in one batched call since their true
+  onsets are already known (we authored the take).
+- **`POST /state/items {"create":[{"track","position","file"}]}` is a real,
+  direct REST verb for placing audio — no Lua/`InsertMedia` workaround
+  needed** (that hack is `.mid`-only; see `insert_media()`). Placing 48
+  one-shot hits was 2 batched HTTP calls, not 48.
+- **Gluing several one-shot items into one continuous take is what makes
+  stretch markers meaningful.** `lib.glue_track_items()` wraps native action
+  `40362` ("glue items, ignoring time selection") — without gluing, "moving
+  a marker" would just be moving separate items, which is plain quantize,
+  not audio-only time-stretch.
+- **41846 "Item: Snap stretch markers to grid" is the actual payoff** — one
+  action call moves every marker on the selected item to the nearest grid
+  line (set explicitly via `reaper.GetSetProjectGrid`, `lib.set_project_grid()`, rather than trusting whatever division the UI was last
+  left on). Verified live: every take-relative marker position lands on an
+  exact multiple of the beat length post-snap.
+
+---
+
 The first trailer was built **2026-06-22** (output `~/trailer.mp4`, 1:40 long).
 That file and its original scratchpad scripts have since been cleared. The
 scripts in `scripts/` are **faithful reconstructions** from detailed build notes
@@ -169,6 +273,10 @@ the REAPER window fills 1920×1080.
 | `scripts/show.py` | The choreography: build groove → loop → unmute layer-by-layer → tour verbs. Logs caption marks. |
 | `scripts/record.sh` | ffmpeg screen + HDMI-monitor audio capture; writes record-start epoch. |
 | `scripts/post.py` | Burns lower-third captions (aligned via marks) + title/end cards; concats. |
+| `scripts/show_fxauto.py` | The FX & Automation trailer choreography (see section above). |
+| `scripts/post_fxauto.py` | Same caption/card pipeline as `post.py`, retitled for the FX trailer. |
+| `scripts/show_stretch.py` | The stretch-marker timing-correction trailer choreography (see section above). |
+| `scripts/post_stretch.py` | Same caption/card pipeline as `post.py`, retitled for the stretch-marker trailer. |
 
 ---
 
@@ -246,6 +354,7 @@ the REAPER window fills 1920×1080.
 | `POST /state/tracks/{i}` | `{volume_db,pan,muted,name,…}` | per-track update |
 | `POST /state/tracks/{i}/fx` | `{"name":"ReaSynth"}` | add instrument/FX |
 | `POST /state/tracks/{i}/automation` | `{"envelope","points":[{time,value}]}` | arm envelope first |
+| `POST /state/items` | `{"create":[{track,position,file,…}]}` | place an audio/MIDI item directly, no Lua |
 | `POST /state/tempo` | `{"time","bpm"}` | tempo/timesig marker |
 
 (Confirmed against `src/handlers/` + `src/server/router.cpp` at reconstruction

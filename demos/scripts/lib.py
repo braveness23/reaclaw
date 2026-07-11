@@ -14,6 +14,8 @@ Verified endpoints (against src/ on branch at time of writing):
     POST /state/tracks/{i}        body {volume_db, pan, muted, name, ...}
     POST /state/tracks/{i}/fx     body {"name": "ReaSynth"}
     POST /state/tracks/{i}/automation  body {"envelope": "Volume", "points":[{time,value}]}
+    GET/POST /state/tracks/{i}/fx/{slot}/preset  body {"navigate": -1|1} or {"name": "..."}
+    POST /state/items             body {"create":[{"track","position","file",...}]}
     POST /state/tempo             body {"time": float, "bpm": float}
 """
 import json
@@ -120,8 +122,145 @@ def write_automation(i, envelope, points):
                 {"envelope": envelope, "points": points})
 
 
+def fx_preset(track_i, slot, navigate=None, name=None):
+    """Read (no args) or change the FX's preset: navigate=-1|1 to step, or
+    name="..." to load by name. Returns {preset, preset_index, preset_count}."""
+    if navigate is None and name is None:
+        return get(f"/state/tracks/{track_i}/fx/{slot}/preset")
+    body = {}
+    if navigate is not None: body["navigate"] = navigate
+    if name is not None:     body["name"] = name
+    return post(f"/state/tracks/{track_i}/fx/{slot}/preset", body)
+
+
+def show_fx(track_i, slot, show=True):
+    """Float an FX's plugin GUI open (show=True) or closed (show=False).
+    No REST verb for this — TrackFX_Show is plain Lua."""
+    mode = 3 if show else 2
+    return run_lua(f'reaper.TrackFX_Show(reaper.GetTrack(0,{track_i}), {slot}, {mode})',
+                    name=f"reaclaw_fxshow_{track_i}_{slot}")
+
+
+def write_fx_param_envelope(track_i, slot, param_i, points, name=None):
+    """points = [(time_sec, value_0_1), ...]. Arms the FX-parameter envelope
+    (GetFXEnvelope(...,create=true)) and writes points directly via
+    InsertEnvelopePoint — verified live: REAPER draws the lane in the arrange
+    immediately, no separate 'show envelope' step needed. There is no REST
+    verb for this (only track-level Volume/Pan/etc. envelopes have one via
+    write_automation), so it goes through run_lua."""
+    inserts = "\n".join(
+        f'reaper.InsertEnvelopePoint(env, {float(t)}, {float(v)}, 0, 0, false, true)'
+        for t, v in points
+    )
+    lua = (
+        f'local tr = reaper.GetTrack(0, {track_i})\n'
+        f'local env = reaper.GetFXEnvelope(tr, {slot}, {param_i}, true)\n'
+        f'if env then\n{inserts}\n  reaper.Envelope_SortPoints(env)\nend\n'
+    )
+    return run_lua(lua, name=name or f"reaclaw_fxenv_{track_i}_{slot}_{param_i}")
+
+
 def set_tempo(time_sec, bpm):
     return post("/state/tempo", {"time": time_sec, "bpm": bpm})
+
+
+# ---- media items (audio) -------------------------------------------------
+
+def create_items(specs):
+    """specs = [{"track","position","file",...}, ...]. Unlike .mid insertion
+    (no MIDI-item REST verb, see insert_media), audio items have a real one:
+    POST /state/items {"create":[...]} loads the file as the item's source
+    directly. Returns the created item list (each with its assigned index)."""
+    return post("/state/items", {"create": specs})["created"]
+
+
+# ---- stretch markers (audio timing correction) ----------------------------
+#
+# No REST verb for any of this — same story as FX-parameter envelopes.
+# SetTakeStretchMarker/GetTakeNumStretchMarkers are plain Lua; "snap to grid"
+# is the native action 41846. Verified live against this build:
+#   - 41843 "Add stretch markers at time selection" does NOT do the transient
+#     detection its name implies here — it only drops markers at the two
+#     EDGES of the time selection. Per-hit markers need placing explicitly.
+#   - 40836 "Item navigation: move cursor to nearest transient in items" DOES
+#     do real transient analysis and is what nearest_transient() rides on.
+#   - A marker's `pos` is take-relative (seconds from the start of the
+#     take's source), not the item's absolute project position.
+
+def glue_track_items(track_i):
+    """Select every item on `track_i` and glue them into one continuous take
+    (40362, "ignoring time selection" so a stale time selection elsewhere
+    can't clip it). Leaves that track with exactly one item, selected."""
+    lua = (
+        f'local tr = reaper.GetTrack(0, {track_i})\n'
+        'reaper.SetOnlyTrackSelected(tr)\n'
+        'reaper.Main_OnCommand(40289, 0)\n'
+        'local n = reaper.CountTrackMediaItems(tr)\n'
+        'for i = 0, n - 1 do reaper.SetMediaItemSelected(reaper.GetTrackMediaItem(tr, i), true) end\n'
+        'reaper.Main_OnCommand(40362, 0)\n'
+        'reaper.UpdateArrange()\n'
+    )
+    return run_lua(lua, name=f"reaclaw_glue_{track_i}")
+
+
+def select_track_item(track_i, item_i=0):
+    """Select only the given track + the one item on it at slot `item_i`."""
+    lua = (
+        f'local tr = reaper.GetTrack(0, {track_i})\n'
+        'reaper.SetOnlyTrackSelected(tr)\n'
+        'reaper.Main_OnCommand(40289, 0)\n'
+        f'local it = reaper.GetTrackMediaItem(tr, {item_i})\n'
+        'if it then reaper.SetMediaItemSelected(it, true) end\n'
+        'reaper.UpdateArrange()\n'
+    )
+    return run_lua(lua, name=f"reaclaw_seltrkitem_{track_i}_{item_i}")
+
+
+def set_project_grid(division):
+    """division = fraction of a whole note (0.25 = quarter note)."""
+    return run_lua(f'reaper.GetSetProjectGrid(0, true, {float(division)}, 0, 0)',
+                    name="reaclaw_grid")
+
+
+def nearest_transient(near_time):
+    """Park the cursor at near_time, snap it onto the nearest REAL detected
+    transient (native action 40836 — genuine analysis, not a guess), and
+    return where it landed. Used for the on-camera 'REAPER finds the hit'
+    beat; the cursor move is visible in the arrange."""
+    run_lua(f'reaper.SetEditCurPos({float(near_time):.6f}, false, false)', name="reaclaw_curat")
+    act(40836)
+    lua = ('local f = io.open("/tmp/reaclaw_transient.txt", "w")\n'
+           'f:write(string.format("%.6f", reaper.GetCursorPosition()))\n'
+           'f:close()\n')
+    run_lua(lua, name="reaclaw_readtransient")
+    return float(open("/tmp/reaclaw_transient.txt").read())
+
+
+def add_stretch_marker_at_cursor():
+    """41842 — adds a stretch marker on the selected item at the edit cursor."""
+    return act(41842)
+
+
+def set_stretch_markers(track_i, positions, item_i=0):
+    """positions = take-relative seconds. Places one stretch marker at each
+    (SetTakeStretchMarker(take, -1, pos) appends) — the real 'audio quantize'
+    primitive, batched into one HTTP round trip."""
+    lua = (f'local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, {track_i}), {item_i})\n'
+           'local tk = reaper.GetActiveTake(it)\n')
+    for p in positions:
+        lua += f'reaper.SetTakeStretchMarker(tk, -1, {float(p):.6f})\n'
+    lua += 'reaper.UpdateArrange()\n'
+    return run_lua(lua, name=f"reaclaw_stretchmarkers_{track_i}")
+
+
+def snap_stretch_markers():
+    """41846 "Item: Snap stretch markers to grid" — the payoff. Every marker
+    on the selected item jumps to the nearest grid line; REAPER locally
+    stretches the audio around it so the transient lands on the beat, in
+    place, no pitch shift (verified live: take-relative marker positions
+    move to exactly n/BPM*60 while their srcpos — the audio content —
+    stays put)."""
+    return act(41846)
 
 
 # ---- raw Lua escape hatch -----------------------------------------------------
