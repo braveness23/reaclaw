@@ -152,6 +152,58 @@ Gotchas specific to this one:
 
 ---
 
+## Post-punk drum-anthem trailer
+
+`scripts/show_postpunk.py` + `scripts/post_postpunk.py` + `scripts/gen_postpunk.py`
+(built 2026-07-11) — drums in the school of **Stephen Morris** (Joy Division /
+New Order) and **Kevin Haskins** (Bauhaus / Tones on Tail): the drums carry
+the song instead of keeping time. Period-correct sampled hardware from Dave's
+Drive audio library (`Audio Media Library/3rd Party/Drum Machine Samples`,
+kb6.de archive): **Oberheim DMX** kick/snare/hats/clap/crash, **Simmons SDS5**
+toms as a four-pad melodic voice, **Star Instruments Synare 3** answering the
+snare. The bass is a Karplus-Strong plucked string synthesized offline by
+`gen_postpunk.py` (two voices detuned ±0.12% ≈ a chorus pedal, octave-down
+sine for body), one WAV per pitch in a note-filtered RS5K bank; cold detuned-saw
+pads are placed as audio items. 48 bars, 138 BPM, E minor: 16th-note machine
+kick intro → drums-only groove with the Simmons tom hook → driving-8ths bass
+entry → tribal floor-tom/rim-clave turn → rebuild with the high bass hook →
+motorik peak → machine outro with an octave-jumping 16th bass sequence.
+Output `trailer-postpunk-YYYY-MM-DD.mp4` + `reaclaw-postpunk-YYYY-MM-DD.mp3/.wav`
+mixdowns, uploaded to Drive `ReaClaw/`.
+
+```bash
+cd demos/scripts
+python3 gen_postpunk.py             # synthesize bass/pad WAVs (once)
+python3 show_postpunk.py probe      # dump FX param name->index maps (once)
+python3 show_postpunk.py render     # offline render + LUFS/spectral check
+DISP=:3 MON=reatrailer.monitor ./record.sh /tmp/raw_postpunk.mp4 &
+REC=$!
+python3 show_postpunk.py perform
+kill -INT $REC
+TRIM=11 python3 post_postpunk.py    # -> ~/reaclaw_postpunk_trailer.mp4
+```
+
+Gotchas specific to this one:
+
+- **Several Cockos plugins expose TWO params named "Wet"** (ReaDelay 0 and 13,
+  ReaVerbate 0 and 9, ReaComp 11 and 22 — the tap/mix wet vs. a global wet at
+  the chain tail). A name→index map built naively from the probe keeps the
+  *last* one and you end up turning down the wrong knob; the map in
+  `/tmp/postpunk/fx_map.json` is patched after probing so "Wet" means the mix
+  control (see `main()`'s probe note).
+- **ReaDelay "1: Length (musical)" takes the note value directly as the
+  normalized param**: `0.0625` = a 1/16-note slap — no ms math, and it tracks
+  the project tempo. That one param is the whole Martin Hannett snare sound.
+- The kb6 DMX samples are **IEEE-float WAVs** — RS5K and ffmpeg read them
+  fine, but Python's stdlib `wave` module can't (use ffprobe when auditing).
+- Mix iteration loop that worked: `render` mode → `GET /analysis/file` for
+  LUFS/true-peak/spectral split, plus a local per-2-bar RMS/band script to
+  verify each *section* of the arrangement has the energy profile it should
+  (the tribal turn is 85% sub-200 Hz *on purpose*; the grooves needed a hats
+  boost before the high band showed up at all).
+
+---
+
 The first trailer was built **2026-06-22** (output `~/trailer.mp4`, 1:40 long).
 That file and its original scratchpad scripts have since been cleared. The
 scripts in `scripts/` are **faithful reconstructions** from detailed build notes
