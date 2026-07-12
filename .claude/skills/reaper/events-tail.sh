@@ -32,6 +32,12 @@ while :; do
         tail -n 200 "$OUT" >"$OUT.tmp" && mv "$OUT.tmp" "$OUT"
     fi
     since=$(last_seq)
+    # The event ring resets when REAPER restarts; resuming with a stale high
+    # seq would filter out everything forever. Clamp to the server's cursor.
+    srv=$("$RC" GET '/events?since=0&limit=1' 2>/dev/null \
+        | python3 -c "import json,sys; print(json.load(sys.stdin).get('cursor', 0))" \
+        2>/dev/null || echo 0)
+    ((since > srv)) && since=$srv
     # Strip "data: " SSE prefixes, drop keepalives/blank lines, append pure JSONL.
     RC_STREAM=1 "$RC" GET "/events/stream?since=$since" \
         | sed -un 's/^data: //p' >>"$OUT"

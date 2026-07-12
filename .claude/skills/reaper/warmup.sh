@@ -28,18 +28,33 @@ python3 - "$TMP" "$DIR" <<'PY'
 import json, os, sys
 
 tmp, cache = sys.argv[1], sys.argv[2]
-load = lambda name: json.load(open(os.path.join(tmp, name)))
-proj, tracks = load("proj"), load("tracks")["tracks"]
-transport, changes = load("transport"), load("changes")
-cursor = load("events")["cursor"]
 
-open(os.path.join(cache, "change_count"), "w").write(str(changes["change_count"]))
+def load(name, default=None):
+    # A single slow endpoint (main-thread timeout right after a REAPER
+    # restart) must degrade the digest, not kill the warmup.
+    try:
+        j = json.load(open(os.path.join(tmp, name)))
+        return default if "error" in j else j
+    except (ValueError, OSError):
+        return default
+
+proj = load("proj", {"project": {}})
+tracks = (load("tracks") or {}).get("tracks", [])
+transport = load("transport", {})
+changes = load("changes") or {}
+cursor = (load("events") or {}).get("cursor", 0)
+change_count = changes.get("change_count", -1)
+
+open(os.path.join(cache, "change_count"), "w").write(str(change_count))
 open(os.path.join(cache, "cursor"), "w").write(str(cursor))
 
-p = proj["project"]
-t = "playing" if transport["playing"] else ("recording" if transport["recording"] else "stopped")
-print(f"ReaClaw up · {p['bpm']:g} BPM {p.get('time_signature','')} · {t} @ {transport['position']:.2f}s"
-      f" · change_count={changes['change_count']} events_cursor={cursor}")
+p = proj.get("project", {})
+t = ("playing" if transport.get("playing")
+     else "recording" if transport.get("recording") else "stopped")
+print(f"ReaClaw up · {p.get('bpm', 0):g} BPM {p.get('time_signature', '')} · {t}"
+      f" @ {transport.get('position', 0):.2f}s"
+      f" · change_count={change_count} events_cursor={cursor}"
+      + ("  [some reads timed out — values may be partial]" if change_count < 0 else ""))
 print(f"{len(tracks)} tracks:")
 for tr in tracks:
     flags = "".join([
