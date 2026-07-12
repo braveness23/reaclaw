@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# rc — one-shot ReaClaw API call with discovery, TLS and auth built in.
+#   rc GET /state
+#   rc POST /state/tracks/2 '{"muted":true}'
+#   RC_TIME=1 rc POST /transport/play      # append total round-trip time
+# Overrides: REACLAW_BASE, REACLAW_KEY, REACLAW_CONFIG.
+set -euo pipefail
+
+CFG="${REACLAW_CONFIG:-$HOME/.config/REAPER/reaclaw/config.json}"
+BASE="${REACLAW_BASE:-}"
+KEY="${REACLAW_KEY:-}"
+
+if [[ -z $BASE || -z $KEY ]]; then
+    [[ -r $CFG ]] || { echo "rc: no \$REACLAW_BASE/\$REACLAW_KEY and no config at $CFG" >&2; exit 2; }
+    read -r host port key < <(python3 -c "
+import json
+c = json.load(open('$CFG'))
+print(c['server']['host'], c['server']['port'], c.get('auth', {}).get('key', '-'))")
+    [[ $host == 0.0.0.0 ]] && host=127.0.0.1
+    BASE="${BASE:-https://$host:$port}"
+    KEY="${KEY:-$key}"
+fi
+
+method=${1:?usage: rc METHOD /path ['{json}']}
+path=${2:?usage: rc METHOD /path ['{json}']}
+body=${3:-}
+
+# RC_STREAM=1: SSE mode — no overall timeout (the server caps connections),
+# line-buffered output. Default mode bounds every call at 20s.
+if [[ -n ${RC_STREAM:-} ]]; then
+    args=(-skN -X "$method" -H "Authorization: Bearer $KEY" "$BASE$path")
+else
+    args=(-sk --max-time 20 -X "$method" -H "Authorization: Bearer $KEY" "$BASE$path")
+fi
+[[ -n $body ]] && args+=(-H 'Content-Type: application/json' -d "$body")
+[[ -n ${RC_TIME:-} ]] && args+=(-w '\n%{time_total}s')
+exec curl "${args[@]}"

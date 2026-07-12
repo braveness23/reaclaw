@@ -66,6 +66,29 @@ key gotchas, and a pointer to `GET /capabilities`.
 }
 ```
 
+### GET /agent/guide
+
+The **agent onboarding manual** — `docs/AGENT_GUIDE.md`, embedded into the
+binary at build time and served verbatim, so the copy an agent fetches always
+matches the running version (single source of truth, no drift). It covers
+connection discovery, the latency contract, the external-change sync protocol,
+a cheat sheet of the common verbs, and the trap list — enough for any AI
+harness (any vendor) to self-configure its own skill/memory equivalent from
+one call. Requires auth like everything except `GET /` (which points here).
+
+- Default: `200`, `Content-Type: text/markdown; charset=utf-8`, body = the guide.
+- `?format=json`:
+
+```json
+{
+  "version": "1.18.0",
+  "markdown": "# ReaClaw Agent Guide\n…",
+  "links": { "capabilities": "GET /capabilities", "catalog_search": "GET /catalog/search?q=",
+             "recipes": "GET /recipes", "events": "GET /events?since=",
+             "changes": "GET /state/changes" }
+}
+```
+
 ### GET /health
 
 Returns server status.

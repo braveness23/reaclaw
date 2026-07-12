@@ -11,6 +11,7 @@
 #include "handlers/events.h"
 #include "handlers/execute.h"
 #include "handlers/fx.h"
+#include "handlers/guide.h"
 #include "handlers/history.h"
 #include "handlers/items.h"
 #include "handlers/learning.h"
@@ -69,7 +70,8 @@ H auth_wrap(const Config& cfg, H handler) {
 void register_routes(httplib::SSLServer& svr, const Config& cfg) {
     // --- Health ---
     // Landing page — no auth required. A fresh agent hits GET / and gets enough
-    // to orient: what this is, the 9-step recipe, key gotchas, and /capabilities.
+    // to orient: what this is, the quick-start recipe, key gotchas, and pointers
+    // to /capabilities and /agent/guide.
     svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
         nlohmann::json j = {
                 {"what_i_am",
@@ -90,7 +92,9 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                           "\"start_ppq\":0,\"end_ppq\":960,\"velocity\":100}]} — write notes",
                           "7. POST /state/tracks/0/fx {\"name\":\"ReaSynth\"} — add built-in synth",
                           "8. POST /render {\"output\":\"/tmp/out.wav\"} — bounce to file",
-                          "9. GET /state/changes — poll for external edits"})},
+                          "9. GET /state/changes — poll for external edits",
+                          "10. GET /agent/guide — the agent operating manual; fetch once "
+                          "and self-configure"})},
                 {"key_gotchas",
                  nlohmann::json::array(
                          {"MIDI items: use {\"midi\":true} in create spec — "
@@ -104,6 +108,9 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                           "reaper.Main_OnCommand(41824,0) end) — or POST /render (preferred)"})},
                 {"endpoints",
                  {{"capabilities", "GET /capabilities — full API manifest"},
+                  {"agent_guide",
+                   "GET /agent/guide — the operating manual for AI agents; fetch it once and "
+                   "self-configure (latency contract, sync protocol, cheat sheet, traps)"},
                   {"health", "GET /health — status + uptime"},
                   {"state", "GET /state — full project snapshot"},
                   {"docs", "https://github.com/braveness23/reaclaw"}}}};
@@ -488,6 +495,9 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
 
     // Capability manifest.
     svr.Get("/capabilities", auth_wrap(cfg, Handlers::handle_capabilities));
+
+    // Agent onboarding manual (embedded docs/AGENT_GUIDE.md).
+    svr.Get("/agent/guide", auth_wrap(cfg, Handlers::handle_agent_guide));
 
     // --- Render (Epic #32 / issue #33; async job model issue #35) ---
     svr.Post("/render", auth_wrap(cfg, Handlers::handle_render));

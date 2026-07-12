@@ -14,6 +14,17 @@ Do not propose changes that contradict settled decisions in `TECH_DECISIONS.md`.
 
 ---
 
+## Operating the Live Rig
+
+For any request to *do something in REAPER right now* (mute, play, add FX,
+render, …) — as opposed to changing ReaClaw's source — invoke the **`reaper`
+skill** (`.claude/skills/reaper/`). It carries the operating manual
+(`docs/AGENT_GUIDE.md`), an auth-wrapped `rc` helper, a sub-second `warmup.sh`,
+and the background event tail. Do not rediscover ports, keys, or endpoint
+shapes by hand.
+
+---
+
 ## Update Docs As You Go
 
 After completing each checklist item, mark it done in `ReaClaw_IMPLEMENTATION_CHECKLIST.md`. After adding or changing any API endpoint, update `docs/API.md`. After any config change, update the config reference in `ReaClaw_Design.md` §7. This is how the project survives crashes, context compaction, and resumed sessions.
