@@ -279,15 +279,14 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.17.0** — the external-change event feed: `GET /events` (poll)
-and `GET /events/stream` (Server-Sent Events) push granular, attributed change
-events — track volume/pan/mute/solo/recarm/selected/title, play/repeat state —
-from *any* source, each tagged `source: "reaclaw"` or `"external"` so an agent
-can tell its own edits apart from a human at the GUI or another client. Also
-ships server-side semantic catalog search (`GET /catalog/search?semantic=true`,
-opt-in, loopback-only local embedding model) and `GET /recipes` for callers
-without the Skill loaded, plus a prebuilt Windows `.dll` release asset
-alongside the Linux `.so`. See the
+Latest release: **v1.18.0** — the server teaches your agent:
+`GET /agent/guide` serves the vendor-neutral operating manual
+([docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md), embedded at build time so it can
+never drift from the binary) — connection discovery, the latency contract, the
+external-change sync protocol, a verified verb cheat sheet, and the trap list —
+so any AI harness self-configures from one call. Claude Code users get a
+ready-made committed skill (`.claude/skills/reaper/`) with sub-second warmup
+and a background event tail. See the
 [CHANGELOG](CHANGELOG.md) for the full story.
 
 | Phase | Scope | Tag |
