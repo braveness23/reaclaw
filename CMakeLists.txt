@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(reaper_reaclaw VERSION 1.17.0 LANGUAGES C CXX)
+project(reaper_reaclaw VERSION 1.18.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -43,6 +43,23 @@ target_compile_definitions(sqlite3 PUBLIC SQLITE_ENABLE_FTS5=1)
 set_target_properties(sqlite3 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # ---------------------------------------------------------------------------
+# Agent guide — embed docs/AGENT_GUIDE.md so GET /agent/guide always serves
+# exactly the committed guide (single source of truth, no drift possible).
+# ---------------------------------------------------------------------------
+set(REACLAW_GENERATED_DIR ${CMAKE_BINARY_DIR}/generated)
+add_custom_command(
+    OUTPUT ${REACLAW_GENERATED_DIR}/agent_guide.gen.h
+    COMMAND ${CMAKE_COMMAND}
+        -DIN=${CMAKE_SOURCE_DIR}/docs/AGENT_GUIDE.md
+        -DOUT=${REACLAW_GENERATED_DIR}/agent_guide.gen.h
+        -DVAR=agent_guide_md
+        -P ${CMAKE_SOURCE_DIR}/cmake/embed_file.cmake
+    DEPENDS ${CMAKE_SOURCE_DIR}/docs/AGENT_GUIDE.md ${CMAKE_SOURCE_DIR}/cmake/embed_file.cmake
+    COMMENT "Embedding docs/AGENT_GUIDE.md -> agent_guide.gen.h"
+)
+add_custom_target(agent_guide_gen DEPENDS ${REACLAW_GENERATED_DIR}/agent_guide.gen.h)
+
+# ---------------------------------------------------------------------------
 # Main extension target
 # ---------------------------------------------------------------------------
 add_library(reaper_reaclaw SHARED
@@ -72,6 +89,7 @@ add_library(reaper_reaclaw SHARED
     src/handlers/history.cpp
     src/handlers/recipes.cpp
     src/handlers/events.cpp
+    src/handlers/guide.cpp
     src/reaper/api.cpp
     src/reaper/catalog.cpp
     src/reaper/csurf.cpp
@@ -89,7 +107,9 @@ add_library(reaper_reaclaw SHARED
     $<$<BOOL:${WIN32}>:src/panel/dialogs.rc>
 )
 
-target_include_directories(reaper_reaclaw PRIVATE src/)
+add_dependencies(reaper_reaclaw agent_guide_gen)
+
+target_include_directories(reaper_reaclaw PRIVATE src/ ${REACLAW_GENERATED_DIR})
 target_include_directories(reaper_reaclaw SYSTEM PRIVATE
     vendor/
     vendor/reaper-sdk/

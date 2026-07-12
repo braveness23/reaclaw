@@ -210,11 +210,34 @@ it. **There is no LLM inside the extension** — by design.
 
 ---
 
+## 🤖 Onboard your agent in one call
+
+ReaClaw teaches agents how to drive it — no vendor lock-in, no manual prompt
+engineering:
+
+- **`GET /agent/guide`** — the running server serves its own operating manual
+  ([docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md), embedded at build time so it
+  always matches the binary): connection discovery, the latency contract, how
+  to stay in sync with a human editing in the GUI at the same time, a cheat
+  sheet of the common verbs, and the traps. Point *any* AI harness at it and
+  tell it to self-configure.
+- **Claude Code users**: the repo ships a ready-made skill at
+  [.claude/skills/reaper/](.claude/skills/reaper/) — project digest warmup,
+  an auth-wrapped `rc` call helper, and a background event tail that makes
+  "what did the user just change?" a zero-latency file read. Run
+  `scripts/install-agent-skill.sh` to use it from sessions outside the repo.
+- The [skill/reaclaw/SKILL.md](skill/reaclaw/SKILL.md) teaches
+  session-*building* patterns (tiered coverage, batch verbs, Lua escape
+  hatch); `GET /recipes` serves its vetted recipes over the API.
+
+---
+
 ## 📚 Docs
 
 | Doc | What's in it |
 |---|---|
 | [docs/API.md](docs/API.md) | Full endpoint reference |
+| [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md) | Agent operating manual — also served live at `GET /agent/guide` |
 | [docs/EXAMPLES.md](docs/EXAMPLES.md) | Copy-paste curl recipes |
 | [docs/MCP.md](docs/MCP.md) | Python MCP server + OpenClaw/agent integration |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build per platform, config reference, security checklist, headless Linux testing |
@@ -256,15 +279,14 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.17.0** — the external-change event feed: `GET /events` (poll)
-and `GET /events/stream` (Server-Sent Events) push granular, attributed change
-events — track volume/pan/mute/solo/recarm/selected/title, play/repeat state —
-from *any* source, each tagged `source: "reaclaw"` or `"external"` so an agent
-can tell its own edits apart from a human at the GUI or another client. Also
-ships server-side semantic catalog search (`GET /catalog/search?semantic=true`,
-opt-in, loopback-only local embedding model) and `GET /recipes` for callers
-without the Skill loaded, plus a prebuilt Windows `.dll` release asset
-alongside the Linux `.so`. See the
+Latest release: **v1.18.0** — the server teaches your agent:
+`GET /agent/guide` serves the vendor-neutral operating manual
+([docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md), embedded at build time so it can
+never drift from the binary) — connection discovery, the latency contract, the
+external-change sync protocol, a verified verb cheat sheet, and the trap list —
+so any AI harness self-configures from one call. Claude Code users get a
+ready-made committed skill (`.claude/skills/reaper/`) with sub-second warmup
+and a background event tail. See the
 [CHANGELOG](CHANGELOG.md) for the full story.
 
 | Phase | Scope | Tag |

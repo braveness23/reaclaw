@@ -9,6 +9,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-07-12
+
+### Added
+- **Agent onboarding manual served by the API** — new `docs/AGENT_GUIDE.md`
+  (vendor-neutral operating manual for AI agents: connection discovery, the
+  latency contract, the external-change sync protocol, a verified cheat sheet
+  of the common verbs, and the trap list), embedded into the binary at build
+  time (`cmake/embed_file.cmake`) and served verbatim at **`GET /agent/guide`**
+  (`?format=json` wraps it with the server version and entry-point links).
+  Any AI harness can now bootstrap itself from the running server with one
+  call — and the served copy can never drift from the committed guide.
+  `GET /` gained an `agent_guide` pointer.
+- **Committed Claude Code skill** at `.claude/skills/reaper/` — instant-ready
+  live-REAPER operation for agent sessions in this repo: `rc` (auth/TLS/
+  discovery-wrapped curl), `warmup.sh` (sub-second project digest + change
+  cursors), `events-tail.sh` (background SSE mirror of `/events/stream` so
+  "what did the user change?" is a local file read), and a `LEARNED.md`
+  capture loop. `scripts/install-agent-skill.sh` symlinks it into
+  `~/.claude/skills` for sessions outside the repo.
+
 ## [1.17.0] - 2026-07-08
 
 ### Added

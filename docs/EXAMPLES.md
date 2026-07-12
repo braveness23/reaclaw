@@ -13,6 +13,23 @@ Add `-k` to skip certificate verification for the default self-signed cert.
 
 ---
 
+## Onboard an Agent
+
+### Fetch the operating manual from the running server
+
+```bash
+# Markdown — feed it straight into your agent's context / skill / memory
+curl -sk "$BASE/agent/guide" -H "$AUTH"
+
+# JSON — version + entry-point links + the same markdown
+curl -sk "$BASE/agent/guide?format=json" -H "$AUTH" | jq '.version, .links'
+```
+
+The guide is `docs/AGENT_GUIDE.md` embedded at build time — re-fetch after an
+upgrade and it always matches the running version.
+
+---
+
 ## Script Registration
 
 ### Register a Lua ReaScript

@@ -24,6 +24,7 @@ set(REACLAW_TESTABLE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/db/db.cpp
     ${CMAKE_SOURCE_DIR}/src/auth/auth.cpp
     ${CMAKE_SOURCE_DIR}/src/util/image.cpp
+    ${CMAKE_SOURCE_DIR}/src/handlers/guide.cpp
 )
 
 # ---------------------------------------------------------------------------
@@ -39,13 +40,17 @@ add_executable(reaclaw_tests
     test_music.cpp
     test_jsondiff.cpp
     test_midi.cpp
+    test_guide.cpp
     ${REACLAW_TESTABLE_SOURCES}
 )
+
+add_dependencies(reaclaw_tests agent_guide_gen)
 
 target_include_directories(reaclaw_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/
     ${CMAKE_SOURCE_DIR}/vendor/
     ${OPENSSL_INCLUDE_DIR}
+    ${REACLAW_GENERATED_DIR}
 )
 
 target_link_libraries(reaclaw_tests PRIVATE
