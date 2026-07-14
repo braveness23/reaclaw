@@ -14,6 +14,7 @@
 #include "reaper/csurf.h"
 #include "reaper/executor.h"
 #include "server/server.h"
+#include "streaming/registry.h"
 #include "util/logging.h"
 
 #include <string>
@@ -145,6 +146,13 @@ void shutdown() {
 
     // Unregister the event-feed control surface (issue #31)
     Csurf::shutdown();
+
+    // Flag every active video/audio stream to stop before the server itself
+    // stops, so no ffmpeg child (util/subprocess.h) outlives the extension
+    // unload — Server::stop() only joins the accept-loop thread, not each
+    // connection's worker thread, so this is the actual guarantee against a
+    // leaked capture process.
+    Streaming::instance().shutdown_all();
 
     // Stop server (blocks until thread joins)
     Server::stop();

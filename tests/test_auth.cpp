@@ -69,3 +69,32 @@ TEST_F(AuthTest, RejectSets401WithJson) {
     EXPECT_EQ(res.status, 401);
     EXPECT_NE(res.body.find("UNAUTHORIZED"), std::string::npos);
 }
+
+// check_stream: same policy as check(), plus a ?token= fallback for stream
+// URLs opened directly in a browser/media-player tag (handlers/stream_video.h,
+// handlers/stream_audio.h) — those callers can't set a custom Authorization
+// header.
+TEST_F(AuthTest, CheckStreamAcceptsHeaderLikeCheck) {
+    EXPECT_TRUE(ReaClaw::Auth::check_stream(cfg, make_req("Bearer test_secret_key")));
+}
+
+TEST_F(AuthTest, CheckStreamAcceptsCorrectQueryToken) {
+    httplib::Request req = make_req();
+    req.params.emplace("token", "test_secret_key");
+    EXPECT_TRUE(ReaClaw::Auth::check_stream(cfg, req));
+}
+
+TEST_F(AuthTest, CheckStreamRejectsWrongQueryToken) {
+    httplib::Request req = make_req();
+    req.params.emplace("token", "wrong_key");
+    EXPECT_FALSE(ReaClaw::Auth::check_stream(cfg, req));
+}
+
+TEST_F(AuthTest, CheckStreamRejectsMissingHeaderAndToken) {
+    EXPECT_FALSE(ReaClaw::Auth::check_stream(cfg, make_req()));
+}
+
+TEST_F(AuthTest, CheckStreamAuthTypeNoneAlwaysPasses) {
+    cfg.auth_type = "none";
+    EXPECT_TRUE(ReaClaw::Auth::check_stream(cfg, make_req()));
+}

@@ -37,7 +37,14 @@ json default_config() {
             {"semantic_search",
              {{"enabled", false},
               {"ollama_url", "http://127.0.0.1:11434"},
-              {"model", "nomic-embed-text"}}}};
+              {"model", "nomic-embed-text"}}},
+            {"streaming",
+             {{"ffmpeg_path", "ffmpeg"},
+              {"video_fps", 10},
+              {"video_quality", 5},
+              {"audio_monitor_source", ""},
+              {"audio_bitrate_kbps", 128},
+              {"max_duration_minutes", 10}}}};
 }
 
 template <typename T>
@@ -130,6 +137,14 @@ bool Config::load(Config& cfg, const std::string& resource_path) {
     cfg.semantic_search_ollama_url = jval<std::string>(sem, "ollama_url", "http://127.0.0.1:11434");
     cfg.semantic_search_model = jval<std::string>(sem, "model", "nomic-embed-text");
 
+    auto& stream = j["streaming"];
+    cfg.streaming_ffmpeg_path = jval<std::string>(stream, "ffmpeg_path", "ffmpeg");
+    cfg.streaming_video_fps = jval<int>(stream, "video_fps", 10);
+    cfg.streaming_video_quality = jval<int>(stream, "video_quality", 5);
+    cfg.streaming_audio_monitor_source = jval<std::string>(stream, "audio_monitor_source", "");
+    cfg.streaming_audio_bitrate_kbps = jval<int>(stream, "audio_bitrate_kbps", 128);
+    cfg.streaming_max_duration_minutes = jval<int>(stream, "max_duration_minutes", 10);
+
     // Resolve TLS cert/key paths (user-supplied or derived from certs_dir)
     if (!cfg.tls_cert_file.empty()) {
         cfg.resolved_cert_path = cfg.tls_cert_file;
@@ -164,7 +179,14 @@ bool Config::save() const {
               {"semantic_search",
                {{"enabled", semantic_search_enabled},
                 {"ollama_url", semantic_search_ollama_url},
-                {"model", semantic_search_model}}}};
+                {"model", semantic_search_model}}},
+              {"streaming",
+               {{"ffmpeg_path", streaming_ffmpeg_path},
+                {"video_fps", streaming_video_fps},
+                {"video_quality", streaming_video_quality},
+                {"audio_monitor_source", streaming_audio_monitor_source},
+                {"audio_bitrate_kbps", streaming_audio_bitrate_kbps},
+                {"max_duration_minutes", streaming_max_duration_minutes}}}};
 
     std::ofstream f(resource_dir + "config.json");
     if (!f)

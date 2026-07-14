@@ -32,6 +32,15 @@ bool check(const Config& cfg, const httplib::Request& req) {
     return true;
 }
 
+bool check_stream(const Config& cfg, const httplib::Request& req) {
+    if (check(cfg, req))
+        return true;
+    auto it = req.params.find("token");
+    if (it == req.params.end() || it->second != cfg.auth_key)
+        return false;
+    return true;
+}
+
 void reject(httplib::Response& res) {
     res.status = 401;
     res.set_content(R"({"error":"Unauthorized","code":"UNAUTHORIZED","context":{}})",

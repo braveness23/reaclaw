@@ -1,38 +1,24 @@
-#include "handlers/screenshot.h"
+#include "handlers/stream_video.h"
 
+#include "app.h"
 #include "handlers/common.h"
-#include "util/image.h"
+#include "streaming/registry.h"
 #include "util/logging.h"
+#include "util/subprocess.h"
 #include "util/x11_capture.h"
 
 #include <httplib.h>
 
-#include <cstdint>
-#include <cstdio>
+#include <chrono>
 #include <cstdlib>
 #include <string>
 #include <vector>
 
-#include <json.hpp>
-
 #ifndef _WIN32
-
-#include <fstream>
-
-#include <unistd.h>
 
 namespace ReaClaw::Handlers {
 
 namespace {
-
-// Width/height of a PNG from its IHDR (bytes 16..23, big-endian).
-bool png_dims(const std::vector<uint8_t>& png, int& w, int& h) {
-    if (png.size() < 24)
-        return false;
-    w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
-    h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
-    return w > 0 && h > 0;
-}
 
 int query_int(const httplib::Request& req, const char* key, int dflt) {
     auto it = req.params.find(key);
@@ -47,31 +33,27 @@ int query_int(const httplib::Request& req, const char* key, int dflt) {
 
 }  // namespace
 
-void handle_screenshot(const httplib::Request& req, httplib::Response& res) {
+void handle_stream_video(const httplib::Request& req, httplib::Response& res) {
     const char* disp_env = getenv("DISPLAY");
     if (!disp_env || !*disp_env) {
         json_error(res,
                    501,
-                   "No GUI display available (DISPLAY unset) — screenshots need a "
+                   "No GUI display available (DISPLAY unset) — video streaming needs a "
                    "running X server; this looks like a headless host",
                    "NO_DISPLAY");
         return;
     }
     std::string display = disp_env;
 
-    if (!Util::have_binary("ffmpeg")) {
-        json_error(res,
-                   501,
-                   "Screenshot requires ffmpeg (x11grab) on PATH — install it or use "
-                   "structured /state reads instead",
-                   "TOOL_MISSING");
+    if (!Util::have_binary(g_config.streaming_ffmpeg_path.c_str())) {
+        json_error(res, 501, "Video streaming requires ffmpeg (x11grab) on PATH", "TOOL_MISSING");
         return;
     }
 
-    // Resolve capture rectangle. Precedence: region > window > target.
+    // Resolve capture rectangle — same precedence/framing as GET /screenshot:
+    // region > window > target.
     bool have_rect = false;
     int x = 0, y = 0, w = 0, h = 0;
-    std::string framed = "screen";
 
     auto rit = req.params.find("region");
     auto wit = req.params.find("window");
@@ -83,14 +65,10 @@ void handle_screenshot(const httplib::Request& req, httplib::Response& res) {
             return;
         }
         have_rect = true;
-        framed = "region";
     } else if (wit != req.params.end() || target != "screen") {
-        // Resolve a window-title substring: explicit `window=` wins, else map the
-        // named surface target (mixer / fxchain / midi / routing / master / …).
         std::string name;
         if (wit != req.params.end()) {
             name = wit->second;
-            framed = "window:" + name;
         } else {
             const char* sub = Util::target_window_substr(target);
             if (!sub) {
@@ -104,13 +82,12 @@ void handle_screenshot(const httplib::Request& req, httplib::Response& res) {
                 return;
             }
             name = sub;
-            framed = target;
         }
         if (!Util::have_binary("xdotool")) {
             json_error(res,
                        501,
                        "Framing a window requires xdotool on PATH; omit window/target to "
-                       "grab the whole screen",
+                       "stream the whole screen",
                        "TOOL_MISSING");
             return;
         }
@@ -125,8 +102,7 @@ void handle_screenshot(const httplib::Request& req, httplib::Response& res) {
         have_rect = true;
     }
 
-    // Clamp the capture rectangle to the screen so x11grab doesn't refuse an
-    // over-the-edge region (e.g. a maximized window's full geometry).
+    // Clamp to the screen so x11grab doesn't refuse an over-the-edge region.
     if (have_rect) {
         int sw = 0, sh = 0;
         if (Util::display_geometry(sw, sh)) {
@@ -145,16 +121,21 @@ void handle_screenshot(const httplib::Request& req, httplib::Response& res) {
         }
     }
 
+    int fps = query_int(req, "fps", g_config.streaming_video_fps);
+    if (fps < 1)
+        fps = 1;
+    if (fps > 30)
+        fps = 30;
+    int quality = query_int(req, "quality", g_config.streaming_video_quality);
     int scale_w = query_int(req, "width", 0);
 
-    // Build the ffmpeg argv. Single-frame x11grab to a temp PNG.
-    std::string tmp = "/tmp/reaclaw_shot_" + std::to_string(getpid()) + "_" + now_iso().substr(11) +
-                      ".png";
-    for (char& c : tmp)
-        if (c == ':')
-            c = '-';
-
-    std::vector<std::string> argv = {"ffmpeg", "-loglevel", "error", "-f", "x11grab"};
+    std::vector<std::string> argv = {g_config.streaming_ffmpeg_path,
+                                     "-loglevel",
+                                     "error",
+                                     "-f",
+                                     "x11grab",
+                                     "-r",
+                                     std::to_string(fps)};
     if (have_rect) {
         argv.push_back("-video_size");
         argv.push_back(std::to_string(w) + "x" + std::to_string(h));
@@ -164,59 +145,67 @@ void handle_screenshot(const httplib::Request& req, httplib::Response& res) {
         argv.push_back("-i");
         argv.push_back(display);  // full screen (ffmpeg auto-detects size)
     }
-    argv.push_back("-frames:v");
-    argv.push_back("1");
     if (scale_w > 0) {
         argv.push_back("-vf");
         argv.push_back("scale=" + std::to_string(scale_w) + ":-1");
     }
-    argv.push_back("-y");
-    argv.push_back(tmp);
+    argv.push_back("-q:v");
+    argv.push_back(std::to_string(quality));
+    argv.push_back("-f");
+    argv.push_back("mpjpeg");
+    argv.push_back("-boundary_tag");
+    argv.push_back("reaclawframe");
+    argv.push_back("pipe:1");
 
-    bool ok = Util::run_capture(argv, nullptr);
-    std::vector<uint8_t> png;
-    if (ok) {
-        std::ifstream f(tmp, std::ios::binary);
-        png.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    }
-    std::remove(tmp.c_str());
-
-    if (!ok || png.empty()) {
-        json_error(res,
-                   503,
-                   "Screen capture failed — ffmpeg could not grab the display (is the X "
-                   "session reachable?)",
-                   "CAPTURE_FAILED");
+    // shared_ptr, not unique_ptr: httplib::ContentProviderWithoutLength is a
+    // std::function, which requires its target to be copy-constructible even
+    // though only one owner ever calls it.
+    std::shared_ptr<Util::Subprocess> proc = Util::Subprocess::spawn(argv);
+    if (!proc) {
+        json_error(res, 503, "Failed to start ffmpeg capture", "CAPTURE_FAILED");
         return;
     }
 
-    int iw = 0, ih = 0;
-    png_dims(png, iw, ih);
-    nlohmann::json out = {
-            {"framed", framed},
-            {"display", display},
-            {"image",
-             {{"format", "png"}, {"width", iw}, {"height", ih}, {"base64", Image::base64(png)}}},
-            {"note",
-             "structure-first: prefer /state reads; use a screenshot only for "
-             "GUI-only state structured data can't express"}};
-    if (have_rect)
-        out["region"] = {{"x", x}, {"y", y}, {"w", w}, {"h", h}};
-    json_ok(res, out);
+    std::string stream_id = Streaming::instance().register_stream("video", req.remote_addr);
+    Log::info("Video stream started: " + stream_id + " (" + req.remote_addr + ")");
+
+    int max_minutes = g_config.streaming_max_duration_minutes;
+    res.set_header("Cache-Control", "no-cache");
+    res.set_chunked_content_provider(
+            "multipart/x-mixed-replace; boundary=reaclawframe",
+            [proc, stream_id, max_minutes](size_t, httplib::DataSink& sink) mutable -> bool {
+                auto max_duration = std::chrono::minutes(max_minutes);
+                auto start = std::chrono::steady_clock::now();
+                char buf[65536];
+                while (std::chrono::steady_clock::now() - start < max_duration) {
+                    if (!sink.is_writable())
+                        return false;
+                    if (Streaming::instance().stop_requested(stream_id))
+                        break;
+                    if (!proc->alive())
+                        break;
+                    long n = proc->read_some(buf, sizeof(buf));
+                    if (n <= 0)
+                        break;
+                    if (!sink.write(buf, static_cast<size_t>(n)))
+                        return false;
+                }
+                sink.done();
+                Streaming::instance().unregister(stream_id);
+                Log::info("Video stream ended: " + stream_id);
+                return false;
+            });
 }
 
 }  // namespace ReaClaw::Handlers
 
-#else  // _WIN32 — capture is implemented via the x11grab path on Linux only.
+#else  // _WIN32
 
 namespace ReaClaw::Handlers {
 
-void handle_screenshot(const httplib::Request&, httplib::Response& res) {
-    json_error(res,
-               501,
-               "Built-in screenshot is implemented for Linux/X11 only; on this platform "
-               "capture the screen out-of-band",
-               "NOT_IMPLEMENTED");
+void handle_stream_video(const httplib::Request&, httplib::Response& res) {
+    json_error(
+            res, 501, "Live video streaming is implemented for Linux/X11 only", "NOT_IMPLEMENTED");
 }
 
 }  // namespace ReaClaw::Handlers

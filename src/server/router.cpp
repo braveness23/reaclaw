@@ -18,6 +18,7 @@
 #include "handlers/midi.h"
 #include "handlers/probe.h"
 #include "handlers/project.h"
+#include "handlers/reastream.h"
 #include "handlers/recipes.h"
 #include "handlers/render.h"
 #include "handlers/restart.h"
@@ -25,6 +26,9 @@
 #include "handlers/scripts.h"
 #include "handlers/snapshot.h"
 #include "handlers/state.h"
+#include "handlers/stream_admin.h"
+#include "handlers/stream_audio.h"
+#include "handlers/stream_video.h"
 #include "handlers/transport.h"
 #include "handlers/visualize.h"
 #include "reaper/executor.h"
@@ -62,6 +66,22 @@ H auth_wrap(const Config& cfg, H handler) {
             Log::error(req.method + " " + req.path + " → " + std::to_string(res.status));
         else if (res.status >= 400)
             Log::warn(req.method + " " + req.path + " → " + std::to_string(res.status));
+    };
+}
+
+// Auth for GET /stream/video and GET /stream/audio only: Auth::check_stream
+// additionally accepts `?token=<key>`, since a browser <img>/<audio> tag or a
+// phone's stock player can't set a custom Authorization header. See
+// auth/auth.h and ReaClaw_TECH_DECISIONS.md for why this isn't widened to the
+// other ~80 routes.
+H auth_wrap_stream(const Config& cfg, H handler) {
+    return [cfg, handler](const httplib::Request& req, httplib::Response& res) {
+        if (!Auth::check_stream(cfg, req)) {
+            Auth::reject(res);
+            return;
+        }
+        Log::debug(req.method + " " + req.path);
+        handler(req, res);
     };
 }
 
@@ -290,6 +310,13 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
                  Handlers::handle_automation_write(req, res);
              }));
 
+    // Audio/MIDI-in via REAPER's own ReaStream plugin (see handlers/reastream.h).
+    svr.Post(R"(/state/tracks/(\d+)/reastream)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["index"] = req.matches[1];
+                 Handlers::handle_reastream_configure(req, res);
+             }));
+
     // Single-track update + delete.
     svr.Post(R"(/state/tracks/(\d+))",
              auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
@@ -441,6 +468,22 @@ void register_routes(httplib::SSLServer& svr, const Config& cfg) {
 
     // --- On-demand screenshot (Epic #19 / Q5) — fallback for GUI-only state ---
     svr.Get("/screenshot", auth_wrap(cfg, Handlers::handle_screenshot));
+
+    // --- Live media streaming — video-out / audio-out ---
+    // auth_wrap_stream (not auth_wrap): these URLs are meant to be opened
+    // directly in a browser <img>/<audio> tag or a phone's stock player, so
+    // they accept `?token=` in addition to the Authorization header.
+    svr.Get("/stream/video", auth_wrap_stream(cfg, Handlers::handle_stream_video));
+    svr.Get("/stream/audio", auth_wrap_stream(cfg, Handlers::handle_stream_audio));
+    // Discovery/admin surface stays on the normal header-only auth_wrap — an
+    // agent calls these with its API key, they're never opened as bare URLs.
+    svr.Get("/stream/audio/devices", auth_wrap(cfg, Handlers::handle_stream_audio_devices));
+    svr.Get("/stream/status", auth_wrap(cfg, Handlers::handle_stream_status));
+    svr.Post(R"(/stream/([^/]+)/stop)",
+             auth_wrap(cfg, [](const httplib::Request& req, httplib::Response& res) {
+                 const_cast<httplib::Request&>(req).path_params["id"] = req.matches[1];
+                 Handlers::handle_stream_stop(req, res);
+             }));
 
     // --- Snapshot / state-diff layer (Epic #20 prep; also backs #19 A/B diff) ---
     svr.Post("/snapshot", auth_wrap(cfg, Handlers::handle_snapshot_create));

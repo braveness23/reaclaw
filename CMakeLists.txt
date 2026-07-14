@@ -90,6 +90,11 @@ add_library(reaper_reaclaw SHARED
     src/handlers/recipes.cpp
     src/handlers/events.cpp
     src/handlers/guide.cpp
+    src/handlers/stream_video.cpp
+    src/handlers/stream_audio.cpp
+    src/handlers/stream_admin.cpp
+    src/handlers/reastream.cpp
+    src/streaming/registry.cpp
     src/reaper/api.cpp
     src/reaper/catalog.cpp
     src/reaper/csurf.cpp
@@ -101,6 +106,8 @@ add_library(reaper_reaclaw SHARED
     src/util/tls.cpp
     src/util/logging.cpp
     src/util/image.cpp
+    src/util/subprocess.cpp
+    src/util/x11_capture.cpp
     src/panel/menu.cpp
     src/panel/dialogs.cpp
     src/panel/swell_stub.cpp

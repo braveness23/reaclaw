@@ -642,6 +642,50 @@ functions that had zero prior callers in the codebase.
 
 ---
 
+## Live Media Streaming — video-out, audio-out, audio-in via ReaStream (§27)
+
+Formalizes the ad-hoc realtime path noted in §19 (PulseAudio null sink +
+`x11grab`, previously only used for `demos/` videos) into a first-class API
+surface, plus a new audio-in path via REAPER's own ReaStream plugin.
+
+- [x] **Phase 0 — shared infra.** `util/subprocess.h/.cpp` (persistent
+      child-process wrapper — SIGTERM → grace period → SIGKILL → reap);
+      `util/x11_capture.h/.cpp` (X11 helpers extracted from
+      `screenshot.cpp`, behavior-identical); `streaming/registry.h/.cpp`
+      (active-stream tracking + stop-flag polling); `Streaming::shutdown_all()`
+      wired into `ReaClaw::shutdown()` before `Server::stop()`.
+- [x] **Phase 1 — video-out.** `GET /stream/video` — continuous MJPEG-over-HTTP
+      (`multipart/x-mixed-replace`), same target/window/region framing as
+      `GET /screenshot`, one ffmpeg process per connection.
+- [x] **Phase 2 — audio-out.** `GET /stream/audio` — continuous MP3-over-HTTP
+      from a PulseAudio monitor source; `GET /stream/audio/devices` to
+      discover the right monitor name.
+- [x] **Admin surface.** `GET /stream/status`, `POST /stream/{id}/stop`.
+- [x] **Auth carve-out.** `Auth::check_stream()` + `auth_wrap_stream()` —
+      `?token=` fallback for the two browser/player-opened routes only.
+- [x] **Phase 3 — audio-in.** `POST /state/tracks/{index}/reastream` —
+      finds-or-adds a ReaStream instance and best-effort maps named fields
+      onto its sliders, reusing `handlers/fx.cpp`'s param-resolution
+      machinery (hoisted into `handlers/fx_internal.h`).
+- [ ] **ReaStream param-layout spike** — not yet run against a live REAPER
+      instance. `handlers/reastream.cpp`'s field→slider mapping is an
+      unverified best-effort guess (see the response's `unresolved` array).
+      Next session: `POST .../fx {"name":"ReaStream"}` → `GET .../fx/{slot}`
+      to dump the real param names/ranges → tighten `candidate_names()` in
+      `reastream.cpp` and this checklist item. If IP/ident turn out to live
+      only in ReaStream's custom UI state (not automatable sliders at all),
+      fall back to the same-machine virtual-ALSA-MIDI-port alternative in
+      `docs/NETWORK_AUDIO_NOTES.md` instead.
+- [x] **Docs** — `docs/API.md`, `ReaClaw_Design.md` §7, `ReaClaw_TECH_DECISIONS.md`
+      §27, `docs/NETWORK_AUDIO_NOTES.md` updated.
+- [ ] **Verified live** — not yet exercised against a running REAPER
+      instance (no reachable rig this session); see the Verification section
+      of the implementation plan for the manual smoke-test steps
+      (`curl`/`<img>`/`<audio>` against each stream endpoint, confirm ffmpeg
+      process teardown on disconnect and on `POST /reaper/restart`).
+
+---
+
 ## Ongoing (All Phases)
 
 - [x] Keep unit and integration tests passing before each commit — 38/38 unit tests pass; verified live against REAPER 7.74 (aarch64)
