@@ -700,6 +700,14 @@ If missing, ReaClaw writes defaults on startup.
     "enabled": false,
     "ollama_url": "http://127.0.0.1:11434",
     "model": "nomic-embed-text"
+  },
+  "streaming": {
+    "ffmpeg_path": "ffmpeg",
+    "video_fps": 10,
+    "video_quality": 5,
+    "audio_monitor_source": "",
+    "audio_bitrate_kbps": 128,
+    "max_duration_minutes": 10
   }
 }
 ```
@@ -711,6 +719,13 @@ Notes:
 - `learning`: Epic #20 opt-in correction mining, local-only. Off by default.
 - `semantic_search`: issue #10 opt-in embedding-based catalog search, loopback-only.
   Off by default — see `ReaClaw_TECH_DECISIONS.md` §25.
+- `streaming`: live video/audio-out over HTTP (`GET /stream/video`,
+  `GET /stream/audio`) and ReaStream-based audio-in (`POST
+  /state/tracks/{index}/reastream`). Linux/X11+PulseAudio only.
+  `audio_monitor_source` has no reliable auto-detect and must be set manually
+  (see `GET /stream/audio/devices`); everything else has a usable default.
+  See `ReaClaw_TECH_DECISIONS.md` for the `?token=` auth carve-out this
+  required and the one-process-per-connection concurrency model.
 
 ---
 

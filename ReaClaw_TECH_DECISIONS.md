@@ -769,6 +769,66 @@ limit beyond httplib's own pool size — single-user tool (§13), same stance as
 
 ---
 
+## 27. Live Media Streaming: ReaClaw serves video/audio-out itself; audio-in rides REAPER's own ReaStream
+
+**Decision:** `GET /stream/video` and `GET /stream/audio` (`src/handlers/stream_video.cpp`,
+`src/handlers/stream_audio.cpp`) turn the existing ad-hoc realtime path (§19: "PulseAudio null
+sink + `x11grab`... only for producing a video / for live human observation") into a
+first-class, documented API surface — open the URL directly in a browser tab or a phone's
+stock player, no extra software. `docs/NETWORK_AUDIO_NOTES.md` (2026-07-02) explored this and
+parked it as wishlist; this supersedes that parking for the video/audio-out half. Audio-**in**
+(`POST /state/tracks/{index}/reastream`) takes the opposite shape deliberately: rather than
+ReaClaw owning a second network wire protocol, it drives REAPER's own bundled **ReaStream**
+JSFX plugin (UDP audio+MIDI streaming) via the existing FX-parameter-mutation machinery
+(`handlers/fx.cpp`) — "start streaming audio in" is just another mutation call, keeping the
+two-family API pattern (§16) intact instead of ReaClaw becoming a UDP relay.
+
+**One ffmpeg process per HTTP connection, not a shared capture fanned out to N viewers.**
+Matches the single-user posture (§13) and avoids building a broadcaster/fan-out component this
+codebase has no precedent for; `x11grab`/PulseAudio monitor sources tolerate multiple
+independent readers fine if that's ever needed. Opening the stream URL *is* starting the
+capture; disconnecting stops it. Each connection is bounded to
+`streaming.max_duration_minutes` (default 10, config-driven rather than the hardcoded constant
+`events.cpp` uses for its SSE bound — same shape, promoted to config here since a stream is a
+heavier resource than an SSE poll loop), same reconnect-by-reopening model as `/events/stream`.
+
+**Subprocess lifecycle: a small owned wrapper (`util/subprocess.h`), not the existing
+block-until-exit `run()` helper.** `screenshot.cpp`'s one-shot capture blocks until ffmpeg
+exits; a stream's ffmpeg lives for minutes and must be torn down deterministically — SIGTERM,
+brief grace period, SIGKILL, reap — on client disconnect, the wall-clock bound, or extension
+shutdown. `src/streaming/registry.h` tracks active streams for `GET /stream/status` and
+`POST /stream/{id}/stop`, but deliberately never reaches across threads to touch a
+`Subprocess` directly — it only sets a "stop requested" flag the owning handler's read loop
+polls once per cycle, the same shape as `events.cpp`'s wall-clock check. `ReaClaw::shutdown()`
+calls `Streaming::instance().shutdown_all()` **before** `Server::stop()`, because
+`Server::stop()` only joins the accept-loop thread, not each connection's own worker thread —
+without this, a REAPER extension unload/reload could leak a running ffmpeg child indefinitely.
+
+**Auth: a narrow, explicit `?token=` carve-out for exactly two routes, not a global auth
+change.** `Auth::check()` only reads the `Authorization: Bearer <key>` header — correct for
+~80 JSON-API routes, but a browser `<img>`/`<audio>` tag or a phone's stock player opening a
+stream URL directly can't set a custom header. Rather than widen `check()` itself (which would
+put the API key into server logs/browser history for every route), `Auth::check_stream()` adds
+a `?token=` fallback used only by a separate `auth_wrap_stream()` in `router.cpp`, applied only
+to `GET /stream/video` and `GET /stream/audio`. Trade-off, accepted deliberately: a shared
+stream URL carries the key in the clear in that URL — rotate `auth_key` if one ever leaks
+outside the trusted user. `GET /stream/audio/devices`, `GET /stream/status`, and
+`POST /stream/{id}/stop` stay on the normal header-only `auth_wrap`, since nothing calls those
+as a bare URL.
+
+**ReaStream's exact param layout is an explicit, flagged unknown — not assumed away.** Whether
+ReaStream's IP/port/mode are exposed as normal automatable JSFX sliders (settable via
+`TrackFX_SetParamNormalized`, same as any other plugin param) or live only in its custom
+`@gfx`-drawn UI state (not reachable that way at all) was not verified against a live REAPER
+instance while this was built. `handlers/reastream.cpp` best-effort-matches named fields
+(`ip`/`port`/`mode`/`channel`/`ident`) against a candidate list of plausible slider names and
+reports both the FX's actual `params` and any `unresolved` fields in every response, so a
+caller can correct the mapping on first use rather than trust a silent, possibly-wrong write.
+`docs/NETWORK_AUDIO_NOTES.md` records the three-step spike (add → dump params → adjust) that
+should replace this guess with a verified mapping once run against a live instance.
+
+---
+
 ## Summary
 
 | Concern | Decision |
@@ -793,3 +853,4 @@ limit beyond httplib's own pool size — single-user tool (§13), same stance as
 | Dependencies | Tiered (0–3): vendored core required; SWS/external tools optional + feature-detected; network forbidden except one narrow, opt-in, loopback-only exception (§25) |
 | Versioning | SemVer — additive = MINOR, breaking = MAJOR; documented+advertised endpoints are stable; no 2.0 for additive growth |
 | Magic wand (Epic-adjacent, issue #10) | Three layers: Skill (`skill/reaclaw/`) + MCP server (`mcp/`, 18 tools) + server-side intent verbs/capabilities/recipes/semantic search |
+| Live media streaming (§27) | Video/audio-out: ReaClaw serves its own ffmpeg-backed HTTP stream, one process per connection. Audio-in: REAPER's own ReaStream plugin, driven via the FX-parameter API — not a new wire protocol |

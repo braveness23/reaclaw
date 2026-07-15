@@ -50,6 +50,18 @@ struct Config {
     std::string semantic_search_ollama_url = "http://127.0.0.1:11434";
     std::string semantic_search_model = "nomic-embed-text";
 
+    // streaming — live video/audio-out over HTTP (handlers/stream_video.cpp,
+    // handlers/stream_audio.cpp). Linux/X11+PulseAudio only; see
+    // ReaClaw_TECH_DECISIONS.md for the query-token auth carve-out this
+    // requires and the one-process-per-connection concurrency model.
+    std::string streaming_ffmpeg_path = "ffmpeg";  // resolved via PATH, like /screenshot
+    int streaming_video_fps = 10;
+    int streaming_video_quality = 5;             // ffmpeg -q:v (2=best .. 31=worst)
+    std::string streaming_audio_monitor_source;  // PulseAudio monitor name; no
+                                                 // reliable auto-detect — see docs/API.md
+    int streaming_audio_bitrate_kbps = 128;
+    int streaming_max_duration_minutes = 10;  // mirrors events.cpp's kMaxStreamDuration
+
     // Derived paths (filled in by load())
     std::string resource_dir;  // {GetResourcePath()}/reaclaw/
     std::string certs_dir;     // {resource_dir}/certs/

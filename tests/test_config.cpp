@@ -42,6 +42,31 @@ TEST_F(ConfigTest, DefaultsWrittenOnFirstRun) {
     EXPECT_EQ(cfg.max_script_size_kb, 512);
     EXPECT_TRUE(cfg.validate_syntax);
     EXPECT_TRUE(cfg.log_all_executions);
+
+    EXPECT_EQ(cfg.streaming_ffmpeg_path, "ffmpeg");
+    EXPECT_EQ(cfg.streaming_video_fps, 10);
+    EXPECT_EQ(cfg.streaming_video_quality, 5);
+    EXPECT_TRUE(cfg.streaming_audio_monitor_source.empty());
+    EXPECT_EQ(cfg.streaming_audio_bitrate_kbps, 128);
+    EXPECT_EQ(cfg.streaming_max_duration_minutes, 10);
+}
+
+TEST_F(ConfigTest, LoadsCustomStreamingValues) {
+    fs::create_directories(tmp_dir / "reaclaw");
+    std::ofstream f(tmp_dir / "reaclaw" / "config.json");
+    f << R"({
+        "streaming": {"video_fps": 24, "audio_monitor_source": "reaclaw.monitor",
+                      "audio_bitrate_kbps": 192}
+    })";
+    f.close();
+
+    ReaClaw::Config cfg;
+    ASSERT_TRUE(ReaClaw::Config::load(cfg, tmp_dir.string()));
+
+    EXPECT_EQ(cfg.streaming_video_fps, 24);
+    EXPECT_EQ(cfg.streaming_audio_monitor_source, "reaclaw.monitor");
+    EXPECT_EQ(cfg.streaming_audio_bitrate_kbps, 192);
+    EXPECT_EQ(cfg.streaming_video_quality, 5);  // default preserved
 }
 
 TEST_F(ConfigTest, LoadsCustomValues) {
