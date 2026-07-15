@@ -1447,6 +1447,89 @@ open (`"No visible window matching '…'"`); `501` no `DISPLAY`, or `ffmpeg`/
 
 ---
 
+## Live media streaming — video-out, audio-out, audio-in
+
+Open these directly in a browser tab, an `<img>`/`<audio>` tag, or a phone's
+stock browser/player — no extra software. Linux only (X11 for video,
+PulseAudio for audio). One `ffmpeg` process per connection: opening the URL
+starts the stream, disconnecting stops it (see `ReaClaw_TECH_DECISIONS.md` for
+why there's no shared-capture/fan-out broadcaster). Bounded to
+`streaming.max_duration_minutes` (default 10) per connection, same reconnect
+model as `GET /events/stream`.
+
+**Auth**: since a browser/media-player tag can't set a custom `Authorization`
+header, `GET /stream/video` and `GET /stream/audio` also accept
+`?token=<api key>` in addition to the header. Everything else under
+`/stream/*` uses the normal header-only auth. A token in the URL will show up
+in proxy/access logs and browser history — rotate `auth_key` if a stream URL
+ever leaks.
+
+### GET /stream/video?target=|window=|region=&fps=&quality=&width=&token=
+
+Continuous MJPEG stream (`multipart/x-mixed-replace`) of REAPER's screen.
+Same `target`/`window`/`region` framing and precedence as `GET /screenshot`.
+`fps` (default from config, clamped 1–30), `quality` (ffmpeg `-q:v`, 2=best..
+31=worst), `width` (downscale) are all optional.
+
+Errors: same shapes as `GET /screenshot` (`400`/`404`/`501`), plus `503` if
+`ffmpeg` fails to start.
+
+### GET /stream/audio?bitrate=&token=
+
+Continuous MP3 stream of REAPER's audio output, captured from a PulseAudio
+monitor source — plain internet-radio-style byte stream, no container. `bitrate`
+in kbps (default from config, clamped 32–320).
+
+Requires `streaming.audio_monitor_source` to be set in config (see
+`ReaClaw_Design.md` §7) — route REAPER's output to a PulseAudio null sink
+first, then point this at that sink's `.monitor` source. `501 NOT_CONFIGURED`
+if unset; `501 TOOL_MISSING` if `ffmpeg` isn't on PATH; `503` if it fails to
+start.
+
+### GET /stream/audio/devices
+
+Lists PulseAudio sources (`pactl list short sources`) so you can find the
+right monitor name for `streaming.audio_monitor_source` without leaving the
+API. `{ "sources": [ { "name": "...", "is_monitor": true } ] }`.
+
+### GET /stream/status · POST /stream/{id}/stop
+
+Admin/observability surface for the streams above — a safety valve for
+orphaned/crashed-client cleanup, not the primary control path (opening/closing
+the stream URL is). `GET /stream/status` lists active streams
+(`{ id, kind, client, started_at_unix }`); `POST /stream/{id}/stop` flags one
+to stop (`404` if the id isn't active).
+
+### POST /state/tracks/{index}/reastream
+
+Audio/MIDI-**in** via REAPER's own bundled ReaStream plugin (UDP audio+MIDI
+streaming), rather than ReaClaw owning a new wire protocol — this is just
+another FX-parameter mutation, like `POST .../fx`. Adds a ReaStream instance
+to the track if one isn't already present.
+
+Body (all optional): `{ "mode": 0..1, "ip": 0..1, "port": 0..1, "ident": 0..1,
+"channel": 0..1, "enabled": true }` — normalized (0..1) slider writes.
+
+```json
+{
+  "track": 0, "slot": 2, "enabled": true,
+  "params": [ { "index": 0, "name": "...", "value": 0.5, "formatted": "..." } ],
+  "unresolved": [],
+  "note": "ReaStream's slider layout is not verified against a live instance — inspect 'params' …"
+}
+```
+
+**Not yet verified against a live REAPER instance**: ReaStream exposes much of
+its configuration through a custom UI rather than plain automatable sliders,
+so the `mode`/`ip`/`port`/`ident`/`channel` → slider mapping here is a
+best-effort guess. Always check the response's `params` (every slider
+ReaStream actually exposes) and `unresolved` (which requested fields didn't
+match anything) — if a field is unresolved, read `params` for the real name
+and set it directly via `POST /state/tracks/{index}/fx/{slot}` instead. See
+`docs/NETWORK_AUDIO_NOTES.md` for the spike that should tighten this mapping.
+
+---
+
 ## Phase 4 — Snapshot / state-diff layer (#20 prep)
 
 A shared, cross-cutting layer: capture a canonical project-state snapshot, store

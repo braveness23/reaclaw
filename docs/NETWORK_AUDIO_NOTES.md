@@ -1,8 +1,26 @@
 # Network Audio / Remote Plugin Hosting — Notes for ReaClaw
 
 Context dump from a claude.ai chat (2026-07-02), exploring whether ReaClaw should
-grow network-audio capability. Not scoped as committed work — this is background
-for whoever (Claude Code included) picks up the idea next.
+grow network-audio capability. Originally parked as background/wishlist, not
+committed work.
+
+**Update:** the video/audio-out half (remote human observation — "listen/watch
+while the agent works") is now implemented — see `ReaClaw_TECH_DECISIONS.md`
+§27, `ReaClaw_IMPLEMENTATION_CHECKLIST.md`'s "Live Media Streaming" section,
+and `docs/API.md`'s streaming section (`GET /stream/video`,
+`GET /stream/audio`). That work took the option this doc leaned toward for
+audio-in (drive REAPER's own transport rather than reimplement one) and
+applied the same idea to audio-out too, except audio/video-**out** are served
+directly by ReaClaw's own HTTP endpoints (so a browser/phone can just open a
+URL), while audio-**in** (`POST /state/tracks/{index}/reastream`, Idea 1 below)
+does drive REAPER's bundled ReaStream plugin as originally proposed.
+
+Idea 1's cross-machine audio-in option is implemented but **unverified**:
+ReaStream's exact slider layout was never checked against a live REAPER
+instance, so `handlers/reastream.cpp`'s field→slider mapping is a best-effort
+guess (see its `unresolved` response field). The spike below is still the
+right next step before trusting it fully. Ideas 2 and 3 (Kubernetes REAPER
+pod, Carla/Sushi alternatives) remain unexplored beyond this document.
 
 ## Starting point: what REAPER already has
 
@@ -82,9 +100,19 @@ forward — that one's cheap enough it could just be built.
 
 - Does the live-audition MIDI loop (virtual ALSA port) actually get used, or
   is file-based round-trip fine in practice? Worth prototyping before building
-  more.
-- If cross-machine audio ever becomes real: emulate ReaStream's UDP protocol
-  in Go, or drive REAPER's own ReaStream instance via control surface API?
-  Leaning toward the latter to avoid owning a second network protocol.
-- Is there an existing `docs/` or wishlist file in `braveness23/reclaw` this
-  should be merged into, or does it start as its own file?
+  more. Still unresolved — not built.
+- ~~If cross-machine audio ever becomes real: emulate ReaStream's UDP protocol
+  in Go, or drive REAPER's own ReaStream instance via control surface API?~~
+  **Resolved**: drive ReaStream via the FX-parameter API — implemented in
+  `handlers/reastream.cpp` (`POST /state/tracks/{index}/reastream`).
+- **New**: the ReaStream param-layout spike, not yet run —
+  1. `POST /state/tracks/0/fx {"name":"ReaStream"}` (works today).
+  2. `GET /state/tracks/0/fx/{slot}` — dump every param's real name/index/range.
+  3. If `ip`/`ident` don't show up as normal automatable sliders (ReaStream's
+     UI is mostly custom `@gfx`, not plain sliders — a real possible outcome),
+     try `TrackFX_GetNamedConfigParm` with likely JSFX keys; if that also
+     comes up empty, scope audio-in down to same-machine-only and fall back
+     to the virtual-ALSA-MIDI-port option above instead of cross-machine
+     ReaStream control.
+  Run this against a live instance and tighten `candidate_names()` in
+  `reastream.cpp` (and the corresponding checklist item) with the result.
