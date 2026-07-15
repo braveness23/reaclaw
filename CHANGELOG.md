@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-07-14
+
 ### Fixed
 - **Windows: extension corrupted REAPER's mouse/keyboard handling** (#111) —
   plain clicks executed their Ctrl-variants ("mute/solo exclusively"), wheel
