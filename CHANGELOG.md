@@ -9,6 +9,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-07-14
+
+### Fixed
+- **Windows: extension corrupted REAPER's mouse/keyboard handling** (#111) —
+  plain clicks executed their Ctrl-variants ("mute/solo exclusively"), wheel
+  zoom died, FX windows wouldn't open. Root cause: `csurf_inst` handed a
+  MinGW-ABI C++ vtable to MSVC-built REAPER; the host's virtual calls
+  (including `IsKeyDown`) landed one slot off. The control surface is no
+  longer registered on Windows, so `GET /events` reads empty there (poll
+  `GET /state/changes` instead) until an MSVC-layout vtable shim restores the
+  feed.
+
 ## [1.18.0] - 2026-07-12
 
 ### Added

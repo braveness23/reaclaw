@@ -1638,6 +1638,12 @@ what — pair with `GET /snapshot/diff` or `GET /events` to find out.
 Granular, attributed events via an `IReaperControlSurface` hook — the real push feed, polled.
 Covers track list/volume/pan/mute/selected/solo/recarm/title and play/repeat state.
 
+> **Windows:** the event feed is disabled — the feed always reads empty and
+> `/events/stream` never emits. Registering the C++ control-surface object from
+> the MinGW-built DLL into MSVC-built REAPER corrupts the host's input handling
+> (issue #111). Poll `GET /state/changes` (unaffected, C API) until the ABI
+> shim lands.
+
 - `since` *(optional, default 0)* — return events with `seq` greater than this (the response's
   `cursor`, from your last poll).
 - `limit` *(optional, default 100, max 500)*.

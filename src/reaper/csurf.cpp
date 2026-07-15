@@ -117,13 +117,29 @@ ReaClawSurface s_surface;
 }  // namespace
 
 void init() {
+#ifdef _WIN32
+    // Issue #111: registering this C++ object from the MinGW-built DLL into
+    // MSVC-built REAPER crosses incompatible C++ ABIs. IReaperControlSurface
+    // declares its virtual destructor first; Itanium (GCC/MinGW) gives it two
+    // vtable slots, MSVC one, so every virtual call from the host lands one
+    // slot off — including IsKeyDown(), whose garbage return makes REAPER
+    // treat every click/wheel as Ctrl-modified. Until the surface is exposed
+    // through an MSVC-layout vtable shim, Windows must not register it.
+    Log::warn(
+            "ReaClaw: csurf event feed disabled on Windows (issue #111, "
+            "MSVC/MinGW C++ ABI mismatch) — poll GET /state/changes instead");
+    (void)s_surface;
+#else
     if (plugin_register)
         plugin_register("csurf_inst", static_cast<void*>(&s_surface));
+#endif
 }
 
 void shutdown() {
+#ifndef _WIN32
     if (plugin_register)
         plugin_register("-csurf_inst", static_cast<void*>(&s_surface));
+#endif
 }
 
 std::vector<Event> events_since(int64_t since, int limit) {
