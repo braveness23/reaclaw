@@ -216,6 +216,26 @@ design conversation, not decided here. Candidate axes to discuss later:
 > probes; the *learning* side feeds **Q8**. Q10 is the framing that ties these
 > into a single "prefer, don't just produce" capability.
 
+### Q11 — In-REAPER terminal channel back to the agent
+
+Every idea above is one-directional: the agent perceives and acts, the human
+watches. Q11 is the opposite direction — a dockable window in REAPER (extending
+`src/panel/`) that reads like a terminal/chat pane, so a human sitting at the
+DAW can type a note or correction ("stop, revert that EQ move" / "make the kick
+louder") without alt-tabbing to a separate chat app, and see the agent's replies
+land back in the same window.
+
+Since ReaClaw's server is passive by design (agents connect *to* it; no
+outbound calls, no LLM client embedded — see `TECH_DECISIONS.md`), this has to
+be built as more API surface, not a socket the extension opens itself: new
+endpoints for an agent to poll/stream pending human messages and push replies
+back, following the existing `/events` + `/events/stream` SSE shape (issue #31,
+`src/handlers/events.{h,cpp}`).
+
+Filed as [#118](https://github.com/braveness23/reaclaw/issues/118) with open
+questions on persistence (db-backed history vs. an in-memory ring buffer like
+the events feed) and whether it's a single global channel or per-agent-session.
+
 ---
 
 ## Cross-cutting concepts to keep in mind
@@ -246,6 +266,7 @@ defer to the (more grounded) issues.
 | Q8 learned suggestions | **New** |
 | Q9 programmatic production / render engine | **New** — a third half; → Epic 6 ([#32](https://github.com/braveness23/reaclaw/issues/32)), children #33–#36 |
 | Q10 A/B comparison ("taste" loop) | **New** — builds on the snapshot layer + Q4; feeds Q8 |
+| Q11 in-REAPER terminal channel | **New** — filed as [#118](https://github.com/braveness23/reaclaw/issues/118) |
 
 Gating dependency: **#7's coverage-philosophy decision** (action-runner vs
 structured REST data model) shapes how Q2 lands and how Q7's "project"
