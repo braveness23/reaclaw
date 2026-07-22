@@ -35,6 +35,23 @@ RC_TIME=1 .claude/skills/reaper/rc POST /transport/play   # appends total time
 Known verb ⇒ mutation first, single tool call, response body is the
 verification. Batch independent calls in one invocation.
 
+## API-first — and log when it isn't possible
+
+Default to the ReaClaw REST API for anything it can do — project/track
+state, transport, FX, items, MIDI, render, and so on. Don't reach for a
+`reaper.ini` edit, `/execute/script` Lua, or GUI automation (`xdotool`
+against REAPER's actual windows) until the API is confirmed insufficient
+for the specific thing being changed.
+
+When it genuinely can't — usually because the thing is a REAPER
+*application* preference rather than project/track state ReaClaw models
+(audio device/system selection, channel counts, dialog-prompt checkboxes,
+etc.) — say so **once per session** (not on every repeated use of the same
+workaround) and log it as a dated bullet in `LEARNED.md`, same as any other
+discovered fact. Issue #119 has the concrete inventory that prompted this
+rule — worth a skim for what's already known to be API-unreachable, so it
+isn't rediscovered from scratch.
+
 ## Staying in sync with the user's GUI edits
 
 The event tail appends to `~/.cache/reaclaw-agent/events.jsonl` — reading it

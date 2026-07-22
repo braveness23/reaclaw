@@ -60,3 +60,26 @@ else
     setsid nohup "$HERE/events-tail.sh" >/dev/null 2>&1 &
     echo "event tail: started -> $DIR/events.jsonl"
 fi
+
+# Preflight: known reaper.ini settings that gate blocking modals (issue #119).
+# Best-effort only — reaper.ini's location is OS-specific and this checks the
+# conventional Linux path (already assumed elsewhere in this repo, e.g. the
+# CI smoke test's [verchk] pre-seed — see ReaClaw_TECH_DECISIONS.md). Missing
+# file or unreadable = skip silently; never fail warmup over this.
+REAPER_INI="$HOME/.config/REAPER/reaper.ini"
+if [[ -r "$REAPER_INI" ]]; then
+    promptendrec=$(grep -m1 "^promptendrec=" "$REAPER_INI" | cut -d= -f2)
+    if [[ "${promptendrec:-1}" != "0" ]]; then
+        echo "warmup: WARNING - reaper.ini promptendrec != 0 — a POST /transport/stop" \
+             "after recording can hang ~15s on REAPER's \"save/delete new files\" modal." \
+             "Fix once via Preferences > Audio > Recording > uncheck \"on stop\" (persists" \
+             "as promptendrec=0). See LEARNED.md 2026-07-21." >&2
+    fi
+    verchk_lastt=$(awk '/^\[verchk\]/{f=1;next} /^\[/{f=0} f && /^lastt=/{print;exit}' "$REAPER_INI")
+    if [[ -z "$verchk_lastt" ]]; then
+        echo "warmup: WARNING - reaper.ini has no [verchk] lastt — a genuinely fresh config" \
+             "can wedge the main thread on REAPER's update-check modal on first launch" \
+             "(ReaClaw_TECH_DECISIONS.md §CI E2E smoke test). Pre-seed [verchk]/lastt=<unix-ts>" \
+             "before launch if this is a new install." >&2
+    fi
+fi
