@@ -58,3 +58,83 @@ facts belong in `LOCAL.md` (gitignored), not here.
   /render` on Linux leaves REAPER's "Finished in 0:00" window open; it eats GUI
   clicks under its rectangle — close with `wmctrl -c "Finished in"` if a human
   needs the GUI afterwards.
+- 2026-07-19 — **`POST /reaper/restart` silently saves the current project to
+  its existing path first, before restarting.** If that in-memory project is
+  a scratch session built via `/project/reset` on top of a REAL project's
+  file path (`/project/reset` blanks tracks in place — it does NOT change
+  the path), restarting overwrites the real project file with the scratch
+  content. This actually happened: a throwaway drum-beat test session sitting
+  under `PostPunkTrailer.rpp`'s path got saved over the real 7-track project
+  when a restart was needed to pick up a newly-installed system plugin.
+  Recovered via the timestamped `Backups/*.rpp-bak` (confirmed exact match to
+  pre-session state: same BPM, track count/names, project length, `dirty:
+  false`) — those backups are the safety net, so know where they live before
+  you ever call restart. **Rule: before any `/reaper/restart`, check
+  `GET /project` → `dirty` and the current path; if the in-memory project
+  doesn't match what should legitimately live at that path, `/project/save`
+  to somewhere safe (or `/project/reset` again pointed nowhere important)
+  first — never let restart's implicit save be the first time you think
+  about what's about to hit disk.**
+- 2026-07-19 — **Generic technique: cloning opaque VST/VSTi state via
+  `/state/chunk`.** For any plugin with proprietary internal state that has
+  no structured verb and no useful named-config param (e.g. Reason Rack
+  Plugin — a whole Reason rack, device + patch, is one binary blob inside
+  the VST3's serialized state), the FX's state still round-trips as plain
+  text inside `GET/POST /state/chunk?target=track&index=N` (it's embedded in
+  the track's `<FXCHAIN>` block). So: get one instance into the state you
+  want (GUI-only, one-time), capture the track chunk, then replay it onto
+  other tracks/projects by rewriting just `TRACKID` and each FX's `FXID`
+  guid (to avoid ID collisions) before POSTing. Verified live: params
+  renamed to the real patch's names and the cloned instance produced
+  identical audio output, with zero further GUI interaction. Turns "GUI-only
+  forever" into "one human step, then scriptable indefinitely" for any
+  black-box plugin.
+- 2026-07-18 — Pre-seeding `[verchk]` in `reaper.ini` (the 2026-07-12 fix)
+  does NOT fully prevent the "REAPER New Version Notification" modal: it
+  stops the *check* from re-firing, but if a real newer version exists the
+  one-time "update available" dialog still surfaces on launch even with
+  `lastt` already populated. Keep treating a post-launch `/health` showing
+  `queue_depth` rising / TIMEOUTs as "assume the modal is up" regardless.
+- 2026-07-18 — On a WM-less Xvfb display (no window manager running),
+  `wmctrl -l` fails outright (`Cannot get client list properties` —
+  `_NET_CLIENT_LIST` needs a WM to set it). `xdotool search --name "<title>"`
+  still finds windows fine by title on the same display; use that instead of
+  wmctrl for modal-recovery on this class of headless rig.
+- 2026-07-15 — `config.json`'s `tls.enabled` field is dead at the transport
+  layer: `src/server/server.cpp` always constructs an `httplib::SSLServer`
+  regardless of the flag (matches TECH_DECISIONS.md §4 — TLS-always is the
+  settled design, so this isn't a bug to silently "fix" by adding an HTTP
+  branch, just a misleading unused config key). Don't trust `tls.enabled` when
+  reasoning about how to reach the API — it's always `https://`, self-signed
+  cert, `-k`/trust-prompt required. `rc` already assumes this (`BASE=https://…`
+  hardcoded) and is correct; a raw `curl http://host:port/...` will hang/empty-reply.
+- 2026-07-21 — **REAPER's Linux audio backend (Preferences → Audio → Device
+  → "Audio system") cannot be changed by editing `reaper.ini`'s `audiodev=`
+  key while REAPER is closed** — the key gets written back to whatever
+  value you set, but it has no effect on which backend is actually active
+  on next launch; only driving the real Preferences dialog (GUI click or
+  automated via `xdotool`) and clicking OK does anything. This is easy to
+  get wrong silently: a tool like `pw-jack jack_lsp` can show REAPER's
+  ports connected even while it's genuinely still on a *different* backend
+  (PulseAudio/ALSA), because under PipeWire every client — regardless of
+  which protocol it actually used — shows up in every protocol's view of
+  the unified graph. The only trustworthy signals that a backend switch
+  actually took: REAPER's own status bar text, and (bonus tell) the master
+  track's output label switching from generic `Output 1 / Output 2` to the
+  real device name once on JACK/ALSA. Once switched via the GUI, it does
+  persist across a `POST /reaper/restart` without repeating the GUI step.
+- 2026-07-21 — **`POST /transport/stop` after a recording can hang for the
+  full main-thread timeout (~15s) and return `{"code":"TIMEOUT"}`** — cause:
+  REAPER's own "Select files to save or delete" modal (Preferences default:
+  "Prompt to save/delete/rename new files: on stop" is checked out of the
+  box), which pops up over the recorded take and blocks the main thread
+  exactly like the verchk/render-finished modals already documented above.
+  `GET /health` can still report `status:"ok", queue_depth:0` *while this
+  modal is up* — health isn't a reliable "is a modal blocking me" signal
+  for this particular case, only the timeout itself and/or a screenshot are.
+  Fix: uncheck "on stop" on that dialog once (persists to `reaper.ini` as
+  `promptendrec=0`, confirmed durable — unlike `audiodev=`, this key *is*
+  read on startup) — after that, `/transport/stop` returns in well under a
+  second even with freshly recorded media on the timeline. If a request
+  needs to record via the API at all, check/set `promptendrec=0` first
+  rather than eating a 15s timeout on the first stop.

@@ -91,7 +91,7 @@ void handle_stream_audio(const httplib::Request& req, httplib::Response& res) {
                 char buf[65536];
                 while (std::chrono::steady_clock::now() - start < max_duration) {
                     if (!sink.is_writable())
-                        return false;
+                        break;
                     if (Streaming::instance().stop_requested(stream_id))
                         break;
                     if (!proc->alive())
@@ -100,7 +100,7 @@ void handle_stream_audio(const httplib::Request& req, httplib::Response& res) {
                     if (n <= 0)
                         break;
                     if (!sink.write(buf, static_cast<size_t>(n)))
-                        return false;
+                        break;
                 }
                 sink.done();
                 Streaming::instance().unregister(stream_id);

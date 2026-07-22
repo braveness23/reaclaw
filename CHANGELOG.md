@@ -9,7 +9,47 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **Stream handlers leaked their registry entry on client disconnect** —
+  `stream_audio.cpp`/`stream_video.cpp`'s chunked-content-provider loop used
+  `return false` (exiting the whole callback immediately) instead of `break`
+  when the sink stopped being writable or a write failed mid-stream. That
+  skipped the cleanup right after the loop (`sink.done()`,
+  `Streaming::instance().unregister(stream_id)`, the "stream ended" log
+  line), leaving a dead stream registered as active in `GET /stream/status`
+  indefinitely after the client was already gone.
+
 ## [1.18.1] - 2026-07-14
+
+### Added
+- **Live media streaming: video-out, audio-out, audio-in via ReaStream** (#114)
+  — turns the ad-hoc "PulseAudio null sink + x11grab" realtime path (previously
+  only used for `demos/` videos, see `ReaClaw_TECH_DECISIONS.md` §19) into a
+  first-class API surface. `GET /stream/video` streams continuous
+  MJPEG-over-HTTP (`multipart/x-mixed-replace`), reusing `screenshot.cpp`'s
+  target/window/region framing via the new `util/x11_capture.h/.cpp`.
+  `GET /stream/audio` + `GET /stream/audio/devices` stream continuous
+  MP3-over-HTTP from a PulseAudio monitor source. `GET /stream/status` and
+  `POST /stream/{id}/stop` are the admin safety valve, backed by new
+  `streaming/registry.h/.cpp`; `ReaClaw::shutdown()` now flags every active
+  stream to stop before `Server::stop()` so no ffmpeg child can outlive an
+  extension unload. `POST /state/tracks/{index}/reastream` adds audio/MIDI-in
+  via REAPER's own bundled ReaStream plugin, driven through the existing
+  FX-parameter API rather than a new wire protocol — **its slider-name mapping
+  is an unverified best-effort guess** (no live REAPER instance was reachable
+  when this shipped); the response's `unresolved` field flags anything it
+  couldn't match. New `util/subprocess.h/.cpp` gives streams a persistent
+  child-process handle (SIGTERM → grace period → SIGKILL → reap), since
+  streaming ffmpeg processes run for minutes rather than exiting immediately
+  like the existing screenshot capture helper. A narrow `?token=` auth
+  fallback (`Auth::check_stream()`/`auth_wrap_stream()`) covers just the two
+  browser/player-opened routes, since `<img>`/`<audio>` tags can't set a
+  custom header. One ffmpeg process per HTTP connection, bounded by the new
+  `streaming.max_duration_minutes` config (default 10). Linux/X11+PulseAudio
+  only, `#ifndef _WIN32`-gated (501 on Windows) — matching this codebase's
+  existing platform scope for screenshot/render tooling. Not yet exercised
+  against a running REAPER instance; see
+  `ReaClaw_IMPLEMENTATION_CHECKLIST.md` §27 for the open verification items.
 
 ### Fixed
 - **Windows: extension corrupted REAPER's mouse/keyboard handling** (#111) —
