@@ -179,3 +179,4 @@ Backups/
 # Agent skill: machine/user-specific notes stay local (see .claude/skills/reaper/)
 # -----------------------------------------------------------------------------
 .claude/skills/reaper/LOCAL.md
+.claude/skills/reaper/launch-local.sh
