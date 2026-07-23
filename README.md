@@ -279,7 +279,7 @@ before you expose it beyond localhost.
 
 ## 📦 Releases & status
 
-Latest release: **v1.18.1** — the server teaches your agent:
+Latest release: **v1.18.2** — the server teaches your agent:
 `GET /agent/guide` serves the vendor-neutral operating manual
 ([docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md), embedded at build time so it can
 never drift from the binary) — connection discovery, the latency contract, the

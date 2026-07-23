@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-07-22
+
 ### Fixed
 - **Stream handlers leaked their registry entry on client disconnect** —
   `stream_audio.cpp`/`stream_video.cpp`'s chunked-content-provider loop used
