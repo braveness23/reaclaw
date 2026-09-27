@@ -68,7 +68,7 @@ ReaClaw is a native C++ REAPER extension (`.dll`/`.dylib`/`.so`) that embeds an 
 - No rate limiting — single-user tool; network isolation is the right defense layer
 - Auth: `none` or `api_key` only — no mTLS, no OAuth
 - Lua validation: syntax only, no static analysis, no approval gate — agent is trusted
-- No LLM client in the extension binary — amended for v2 by TECH_DECISIONS §28: the chat's LLM client is a separate backend process (`backend/`), spawned on demand, loopback-only
+- No LLM client in the extension binary — changed by TECH_DECISIONS §28: the chat panel's LLM client is a separate backend process (`backend/`), started on demand, loopback-only
 
 ---
 
@@ -76,8 +76,8 @@ ReaClaw is a native C++ REAPER extension (`.dll`/`.dylib`/`.so`) that embeds an 
 
 All v1 phases and the first six roadmap epics are **complete** (see
 `ReaClaw_ROADMAP.md` §2 and `ReaClaw_IMPLEMENTATION_CHECKLIST.md` for the full
-record). Current release line: v1.18.2. **v2.0 (Epic #130 / ROADMAP Epic 7) is in
-Phase 0** — spikes gate all feature code.
+record). Current release line: v1.18.2. **Epic #130 (chat panel + installers, ROADMAP
+Epic 7) is in its testing phase** — the tests gate all feature code.
 
 | Phase | Tag | Status |
 |-------|-----|--------|
@@ -88,7 +88,7 @@ Phase 0** — spikes gate all feature code.
 | Phase 4 — Perception, ergonomics & learning (Epics #16–#20) | v1.3.0–v1.6.0 | Complete |
 | Epic #32 — Headless offline render engine | v1.8.0–v1.15.0 | Complete |
 | Epic #45 — Full coverage (transport/MIDI/take-FX/chunk/lifecycle) | v1.8.0–v1.10.0 | Complete |
-| Epic #130 — v2.0: in-REAPER AI chat, installers, breaking cleanups | v2.0.0 | Phase 0 in progress |
+| Epic #130 — Chat panel inside REAPER + installers | v1.19.0+ | Testing phase |
 
 Forward work is tracked as GitHub issues (see `ReaClaw_IDEAS.md` for the backlog).
 

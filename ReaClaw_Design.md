@@ -8,9 +8,9 @@ ReaClaw is a native C++ REAPER extension that embeds an HTTPS server inside REAP
 
 **Design principle:** ReaClaw interfaces with REAPER. The agent reasons, generates, and decides. ReaClaw does not call LLMs, does not manage workflows on the agent's behalf, and does not second-guess the agent's generated code beyond a syntax check.
 
-> **v2.0 (in development):** the extension binary keeps this principle. The product adds a
-> chat panel whose LLM client is a separate backend process driving REAPER through this same
-> API — see `ReaClaw_TECH_DECISIONS.md` §28–§31. This spec gets v2 sections as that work lands.
+> **Chat panel (in development):** the extension still follows this. The chat panel's LLM
+> client is a separate backend process that drives REAPER through this same API — see
+> `ReaClaw_TECH_DECISIONS.md` §28–§31. This spec gets chat sections as that work lands.
 
 **Key properties:**
 - Native extension — runs in REAPER's process; direct access to all REAPER API functions
