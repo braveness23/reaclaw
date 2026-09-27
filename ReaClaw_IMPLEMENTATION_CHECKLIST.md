@@ -686,6 +686,66 @@ surface, plus a new audio-in path via REAPER's own ReaStream plugin.
 
 ---
 
+## Epic #130 — v2.0: AI chat inside REAPER, installers, breaking cleanups
+
+> **Status:** Phase 0 in progress. Plan: `ReaClaw_ROADMAP.md` Epic 7. Decisions:
+> `ReaClaw_TECH_DECISIONS.md` §28–§31.
+
+**Phase 0 — decisions + spikes**
+- [x] **Decisions written.** TECH_DECISIONS §28 (chat, amends §11), §29 (web view in a
+      dock), §30 (installers + platform matrix), §31 (backend process + secrets); §11, §18,
+      §19, §20, §21 and the summary table point at them.
+- [x] **SECURITY.md.** "Chat Panel and AI Backend (v2.0)" section, scope and best
+      practices.
+- [ ] **Spike A — web view in a REAPER dock** on Windows, macOS, Linux: dock / undock /
+      redock, resize, dock-tab hide/show, screensets, close/reopen, REAPER restart with
+      panel open, HiDPI. Go/no-go recorded in §29.
+- [ ] **Spike B — backend packaging:** TS backend + pinned Node runtime running the Agent
+      SDK on all 5 targets; SDK redistribution terms settled (bundle vs. fetch at install).
+- [ ] **Anthropic approval** for Claude subscription login requested (Dave).
+
+**v1.19.0 — deprecation notice**
+- [ ] Deprecation `hints[]` + `docs/API.md` notes for the three §6.4 cleanups.
+
+**Chat panel (C++)**
+- [ ] `src/panel/chat_panel.{h,cpp}` — dock registration, menu item, bindable action.
+- [ ] `src/panel/webhost.h` + `webhost_win.cpp` / `webhost_mac.mm` / `webhost_linux.cpp`.
+- [ ] `src/backend/supervisor.{h,cpp}`; Windows support in `util/subprocess.h` (Job object).
+- [ ] `chat` config block; `ReaClaw_Design.md` §7.
+
+**AI backend (TypeScript, `backend/`)**
+- [ ] Loopback server with per-launch token; streaming to the UI.
+- [ ] Anthropic provider (Agent SDK; built-in shell/file tools off by default).
+- [ ] OpenAI-compatible provider (LiteLLM, OpenRouter) with its own tool loop.
+- [ ] ReaClaw REST tools (one definition → SDK MCP server + OpenAI schemas); approval for
+      mutating tools; undo-last-AI-change.
+- [ ] Context chips + `@` picker.
+- [ ] OS keychain for provider keys.
+- [ ] Chat UI: streaming sanitized markdown, tool-call cards, settings, sessions, stop.
+- [ ] vitest suite with a mock provider; checks wired into `scripts/checks/`.
+
+**Breaking cleanups (COVERAGE_REPORT §6.4)**
+- [ ] `GET /state/tracks` / single-track envelope made consistent.
+- [ ] Track `icon` read/write symmetry.
+- [ ] One response / error / hints envelope.
+
+**Installers, CI, release**
+- [ ] `scripts/checks/build.sh --target`; `scripts/package/*.sh`; `scripts/fetch-node-runtime.sh`.
+- [ ] CI matrix: windows-x64, windows-arm64, macos-universal, linux-x86_64, linux-aarch64.
+- [ ] Installers per target, with uninstallers.
+- [ ] Signing (Apple Developer ID + notarization, Windows cert) via `tf-registry` `github` stack.
+- [ ] Release job attaches installers + raw binaries; `release` skill handles major and
+      pre-release tags.
+
+**Docs + verification**
+- [ ] `ReaClaw_Design.md`, `docs/API.md` (migration section), README install rewrite,
+      CHANGELOG `[2.0.0]` with a Breaking section, CLAUDE.md phase table.
+- [ ] Linux e2e: install from tarball → open panel → mock-provider tool call changes state
+      → undo reverts it.
+- [ ] Windows/macOS CI smoke; manual run on the Pi rig, the p73 Windows rig and a Mac.
+
+---
+
 ## Ongoing (All Phases)
 
 - [x] Keep unit and integration tests passing before each commit — 38/38 unit tests pass; verified live against REAPER 7.74 (aarch64)

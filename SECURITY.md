@@ -11,6 +11,7 @@ Understanding the security model before deploying ReaClaw is important.
 
 | Version | Supported |
 |---------|-----------|
+| v2.x (in development) | Not yet released — the chat sections below describe the v2 design |
 | v1.x (current stable) | Yes — full support with SLA below |
 | v0.x | No — upgrade to v1.x |
 
@@ -123,6 +124,41 @@ attacker-influenced input — no shell, no request-derived command construction.
 As with the rest of the API, the mitigation is network isolation (bind to
 loopback, or firewall the port), not per-endpoint gating.
 
+### Chat Panel and AI Backend (v2.0)
+
+v2 adds a chat panel inside REAPER, served by a separate **backend process**
+that the extension starts and stops. Design rationale:
+`ReaClaw_TECH_DECISIONS.md` §28–§31.
+
+**Outbound connections.** The extension itself still makes no outbound
+connections. The backend connects to exactly one place: the AI provider the
+user configures (Anthropic, a LiteLLM gateway, or OpenRouter). Until a provider
+is configured it makes no outbound calls at all. What the user types, the
+context chips they attach (selected tracks, items, FX, time selection, optional
+screenshots) and the results of the chat's tool calls are sent to that
+provider. Nothing else leaves the machine.
+
+**Local connections.** The backend binds to `127.0.0.1` only, on a random port,
+and requires a random token generated fresh each time it starts. The extension
+passes the token to the backend and loads the panel with it; nothing else on
+the machine knows it. The backend reaches REAPER through ReaClaw's normal REST
+API, using ReaClaw's own API key.
+
+**Third-party credentials.** Provider API keys are stored in the OS keychain
+(Windows Credential Manager, macOS Keychain, Secret Service on Linux) — never in
+`config.json`, logs, or the panel's browser storage. Unlike ReaClaw's own
+`auth_key`, a provider key spends the user's money, so it gets stronger storage.
+
+**What the chat's model can do.** Only ReaClaw's REST tools. The Agent SDK's
+built-in shell and file-write tools are disabled unless the user turns them on
+in chat settings. Tools that change the project ask for approval in the panel
+(allow once / always); read-only tools run without asking. Every change goes
+through ReaClaw's normal undo wrapping, and the panel has an undo button for the
+last AI change.
+
+**Model output is untrusted.** The panel renders the model's markdown as HTML
+only after sanitizing it (DOMPurify), and loads no remote content.
+
 ---
 
 ## Scope
@@ -143,6 +179,10 @@ The following classes of issues are in scope for this security policy:
   REAPER's expected permission boundary
 - **Denial of service within ReaClaw itself** — resource exhaustion via the
   HTTP layer (e.g., request floods causing REAPER to hang or crash)
+- **Chat backend (v2)** — reaching the backend without its token, the backend
+  listening beyond loopback, provider keys leaking outside the OS keychain,
+  script injection through rendered model output, or a mutating tool running
+  without the approval the user set
 
 ### Out of Scope
 
@@ -153,6 +193,10 @@ The following classes of issues are in scope for this security policy:
   `{ResourcePath}` (at that point they can already modify REAPER directly)
 - Self-signed certificate warnings in browsers or curl without `-k`
   (expected behavior, not a vulnerability — see TLS section above)
+- A model doing something unwanted that the user approved, or that a tool the
+  user set to "always allow" permits — that's the approval working as designed
+- How the chosen AI provider handles data sent to it (governed by that
+  provider's terms)
 - Issues only reproducible on a REAPER version no longer in mainstream use
 
 ---
@@ -169,4 +213,6 @@ The following classes of issues are in scope for this security policy:
   `{ResourcePath}/reaclaw/reaclawdb.sqlite`.
 - **Review scripts before use.** Lua scripts run with the same OS permissions
   as REAPER. Do not execute scripts from untrusted sources.
+- **Be deliberate with "always allow" in the chat (v2).** It lets the model
+  change the project without asking; keep it for tools you'd undo happily.
 - **Keep ReaClaw updated.** Security fixes are released as patch versions.

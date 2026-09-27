@@ -169,6 +169,37 @@ production never needs sound-pressure waves until a listener plays the file.
 
 ---
 
+### Epic 7 — v2.0: AI chat inside REAPER, installers, breaking cleanups ([#130](https://github.com/braveness23/reaclaw/issues/130))
+
+Decided 2026-09-27. So far ReaClaw has been a control surface *for* an agent that lives
+somewhere else. v2 is for REAPER users who use AI but don't run agent frameworks — the
+chat window inside REAPER *is* their agent. It deliberately amends §11 ("no LLM client"):
+the extension binary still makes no model calls, but the product now ships an LLM client
+as a separate backend process (TECH_DECISIONS §28–§31).
+
+- **Phase 0 — decisions + spikes.** §28–§31 and `SECURITY.md` written first. Spike A: an
+  OS-native web view inside a REAPER dock on Windows, macOS and Linux, run hard against the
+  docking edge cases that killed the v1.1.0 dock (go/no-go; fallback is a floating window on
+  every platform). Spike B: backend + pinned Node runtime on all five targets, and whether
+  the Agent SDK may be redistributed in an installer. Anthropic approval requested for
+  Claude subscription login.
+- **Chat panel (C++).** Dock panel + web view host per OS (WebView2 / WKWebView /
+  WebKitGTK via `dlopen`), backend supervisor (spawn on demand, loopback + token, restart
+  with backoff), Extensions menu item + bindable action.
+- **AI backend (TypeScript, `backend/`).** Anthropic via the Claude Agent SDK; LiteLLM and
+  OpenRouter via an OpenAI-compatible client; ReaClaw REST tools with approval for
+  mutations; context chips (selection, time selection, markers, screenshots); keys in the
+  OS keychain; streaming markdown UI.
+- **Breaking cleanups.** The `ReaClaw_COVERAGE_REPORT.md` §6.4 fixes 2.0 was reserved for,
+  with deprecation hints in v1.19.0 first (§21).
+- **Installers.** windows-x64/arm64 (NSIS), macos-universal (notarized `.pkg`),
+  linux-x86_64/aarch64 (tarball + script); CI matrix grows to match.
+
+**Order:** Phase 0 → v1.19.0 → chat panel + backend in parallel → installers → cleanups
+→ betas → 2.0.0. Supersedes IDEAS Q11 / #118.
+
+---
+
 ## 4. Cross-cutting concerns
 
 - **Snapshot / state-diff layer.** Both Epic 4's A/B visual diff and Epic 5's
