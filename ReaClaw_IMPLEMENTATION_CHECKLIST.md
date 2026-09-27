@@ -720,16 +720,31 @@ surface, plus a new audio-in path via REAPER's own ReaStream plugin.
 - [ ] `src/backend/supervisor.{h,cpp}`; Windows support in `util/subprocess.h` (Job object).
 - [ ] `chat` config block; `ReaClaw_Design.md` §7.
 
-**Backend (TypeScript, `backend/`)**
-- [ ] Local server with per-launch token; streaming to the page.
-- [ ] Anthropic provider (Agent SDK; shell/file tools off by default).
+**Backend (TypeScript, `backend/`) — runs standalone (`npm run dev`), not yet spawned by the extension**
+- [x] Local server (`src/server.ts`): loopback only, random port reported over stdout
+      (`PORT <n>` / `TOKEN <t>`, same shape as the dock-webview spike's `XID <n>` line),
+      fresh token per launch, WebSocket for streaming.
+- [x] Anthropic provider (`src/providers/anthropic.ts`): Claude Agent SDK, `tools: []`
+      so the SDK's own Bash/Read/Write tools are off, ReaClaw's tools registered as an
+      in-process MCP server instead. Not yet run against a real API key (needs one).
 - [ ] OpenAI-compatible provider (LiteLLM, OpenRouter) with its own tool loop.
-- [ ] ReaClaw REST tools (defined once, used by both providers); ask-before-changing;
-      undo-last-AI-change.
+- [x] ReaClaw REST tools (`src/tools/reaclawTools.ts`, one definition used by every
+      provider): `get_tracks`/`get_track` read-only, `set_track`/`execute_action` ask
+      first via `src/approvals.ts`. `POST /api/undo` is a direct button, not a model tool.
+      Verified live against a throwaway real REAPER, not just mocks: a "mute track 0"
+      request paused on approval, and after approving, REAPER's own `/state/tracks`
+      showed `muted: true` afterwards.
 - [ ] Context chips + `@` picker.
-- [ ] Keys in the OS keychain.
-- [ ] Chat UI: streaming sanitized markdown, tool-call cards, settings, sessions, stop.
-- [ ] vitest suite with a fake provider; checks wired into `scripts/checks/`.
+- [ ] Keys in the OS keychain (works with a plain env var for now).
+- [x] Chat UI (`src/ui/index.html`): plain-text log, tool-call cards, inline
+      approve/always/deny buttons, undo button. **Not yet markdown** (no sanitizer wired
+      up) and no session list/settings/stop button yet.
+- [x] `FakeProvider` (`src/providers/fake.ts`) — deterministic, no network/API key,
+      exercises the same tool registry and approval broker as the real provider so
+      tests (and `npm run dev` before a key is set) cover the read/mutate/approval path
+      for free. vitest suite: 22 tests (approvals, tools against a stub ReaClaw, the
+      fake provider, and the server's token/WebSocket handling end to end). Not yet
+      wired into `scripts/checks/`.
 
 **Docs + checking it works**
 - [ ] `ReaClaw_Design.md`, `docs/API.md`, CHANGELOG, CLAUDE.md phase table.

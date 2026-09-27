@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ReaClaw Chat</title>
+<style>
+  html,body{margin:0;height:100%;font:14px/1.45 -apple-system,BlinkMacSystemFont,sans-serif;background:#1d2533;color:#e6e9ef}
+  body{display:flex;flex-direction:column}
+  header{padding:8px 12px;background:#2b3a55;display:flex;justify-content:space-between;align-items:center}
+  header b{font-size:14px}
+  #status{font-size:12px;opacity:.75}
+  #undo{background:#3b3f55;color:#e6e9ef;border:0;border-radius:4px;padding:4px 10px;cursor:pointer}
+  #undo:hover{background:#4a5070}
+  #log{flex:1;overflow:auto;padding:12px}
+  .m{max-width:80%;padding:8px 10px;border-radius:8px;margin:0 0 10px;white-space:pre-wrap;word-break:break-word}
+  .u{background:#3b5b8c;margin-left:auto}
+  .a{background:#2a3242}
+  .tool{background:#20262f;border:1px solid #333d4d;border-radius:8px;padding:8px 10px;margin:0 0 10px;max-width:90%}
+  .tool .name{font-family:monospace;color:#9fd2ff}
+  .tool .input{font-family:monospace;font-size:12px;opacity:.8;margin-top:4px;white-space:pre-wrap}
+  .tool .result{margin-top:6px;font-size:13px}
+  .tool .result.ok{color:#8fdc9a}
+  .tool .result.err{color:#f28b82}
+  .approve-row{display:flex;gap:6px;margin-top:8px}
+  .approve-row button{flex:1;border:0;border-radius:4px;padding:6px;cursor:pointer;font-size:12px}
+  .btn-allow{background:#2f7a3d;color:#fff}
+  .btn-always{background:#2f5f7a;color:#fff}
+  .btn-deny{background:#7a2f2f;color:#fff}
+  .err-banner{background:#4a2626;color:#f2b8b5;padding:6px 10px;border-radius:6px;margin-bottom:10px;font-size:13px}
+  footer{display:flex;gap:6px;padding:8px;background:#2b3a55}
+  input{flex:1;padding:8px;border:0;border-radius:4px;font-size:14px}
+  #send{padding:8px 16px;border:0;border-radius:4px;background:#3b5b8c;color:#fff;cursor:pointer}
+  #send:disabled{opacity:.5;cursor:default}
+</style>
+</head>
+<body>
+<header>
+  <b>ReaClaw Chat</b>
+  <div style="display:flex;gap:10px;align-items:center">
+    <span id="status">connecting...</span>
+    <button id="undo">Undo last AI change</button>
+  </div>
+</header>
+<div id="log"></div>
+<footer>
+  <input id="inp" placeholder="Type a message" autofocus>
+  <button id="send">Send</button>
+</footer>
+<script>
+(() => {
+  const token = new URLSearchParams(location.search).get("token") || "";
+  const log = document.getElementById("log");
+  const status = document.getElementById("status");
+  const inp = document.getElementById("inp");
+  const sendBtn = document.getElementById("send");
+  const undoBtn = document.getElementById("undo");
+
+  const toolCards = new Map(); // toolUseId -> { root, resultEl }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function addMessage(cls, text) {
+    const m = el("div", "m " + cls, text);
+    log.appendChild(m);
+    log.scrollTop = log.scrollHeight;
+    return m;
+  }
+
+  function addError(text) {
+    const e = el("div", "err-banner", text);
+    log.appendChild(e);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function addToolCall(toolUseId, name, input) {
+    const root = el("div", "tool");
+    root.appendChild(el("span", "name", name));
+    root.appendChild(el("div", "input", JSON.stringify(input)));
+    const resultEl = el("div", "result", "running...");
+    root.appendChild(resultEl);
+    log.appendChild(root);
+    log.scrollTop = log.scrollHeight;
+    toolCards.set(toolUseId, { root, resultEl });
+  }
+
+  function addApprovalRequest(id, toolName, input) {
+    const root = el("div", "tool");
+    root.appendChild(el("span", "name", toolName));
+    root.appendChild(el("div", "input", JSON.stringify(input)));
+    const row = el("div", "approve-row");
+    const allow = el("button", "btn-allow", "Allow once");
+    const always = el("button", "btn-always", "Always allow");
+    const deny = el("button", "btn-deny", "Deny");
+    row.append(allow, always, deny);
+    root.appendChild(row);
+    log.appendChild(root);
+    log.scrollTop = log.scrollHeight;
+
+    const respond = (decision) => {
+      ws.send(JSON.stringify({ type: "approval_response", id, decision }));
+      row.remove();
+      root.appendChild(el("div", "result", "decision sent: " + decision));
+    };
+    allow.onclick = () => respond("allow_once");
+    always.onclick = () => respond("allow_always");
+    deny.onclick = () => respond("deny");
+  }
+
+  function handleEvent(msg) {
+    switch (msg.type) {
+      case "assistant_text":
+        addMessage("a", msg.text);
+        break;
+      case "tool_call":
+        addToolCall(msg.toolUseId, msg.name, msg.input);
+        break;
+      case "tool_result": {
+        const card = toolCards.get(msg.toolUseId);
+        if (card) {
+          card.resultEl.className = "result " + (msg.ok ? "ok" : "err");
+          card.resultEl.textContent = msg.ok ? JSON.stringify(msg.output) : ("denied/failed: " + msg.error);
+        }
+        break;
+      }
+      case "approval_request":
+        addApprovalRequest(msg.id, msg.toolName, msg.input);
+        break;
+      case "turn_done":
+        sendBtn.disabled = false;
+        break;
+      case "error":
+        addError(msg.message);
+        sendBtn.disabled = false;
+        break;
+    }
+  }
+
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+  ws.onopen = () => { status.textContent = "connected"; };
+  ws.onclose = () => { status.textContent = "disconnected"; sendBtn.disabled = true; };
+  ws.onerror = () => { status.textContent = "connection error"; };
+  ws.onmessage = (ev) => handleEvent(JSON.parse(ev.data));
+
+  function send() {
+    const text = inp.value.trim();
+    if (!text) return;
+    addMessage("u", text);
+    inp.value = "";
+    sendBtn.disabled = true;
+    ws.send(JSON.stringify({ type: "user_message", text }));
+  }
+  sendBtn.onclick = send;
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+
+  undoBtn.onclick = async () => {
+    try {
+      const res = await fetch(`/api/undo?token=${encodeURIComponent(token)}`, { method: "POST" });
+      const body = await res.json();
+      addMessage("a", res.ok ? "Undid last change." : "Undo failed: " + (body.error || res.status));
+    } catch (e) {
+      addMessage("a", "Undo failed: " + e);
+    }
+  };
+})();
+</script>
+</body>
+</html>
