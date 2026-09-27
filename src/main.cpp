@@ -89,7 +89,7 @@ int ReaperPluginEntry(void* hInstance, reaper_plugin_info_t* rec) {
     // declares functions added across many REAPER versions, so older hosts will
     // leave some pointers null. We validate the specific functions we need in
     // ReaClaw::init() instead.
-    int unresolved = REAPERAPI_LoadAPI(rec->GetFunc);
+    [[maybe_unused]] int unresolved = REAPERAPI_LoadAPI(rec->GetFunc);
 
 #ifdef _WIN32
     // Step 3 — LoadAPI result + critical pointer check

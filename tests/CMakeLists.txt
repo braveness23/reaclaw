@@ -48,9 +48,12 @@ add_dependencies(reaclaw_tests agent_guide_gen)
 
 target_include_directories(reaclaw_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/
-    ${CMAKE_SOURCE_DIR}/vendor/
     ${OPENSSL_INCLUDE_DIR}
     ${REACLAW_GENERATED_DIR}
+)
+# SYSTEM like the main target: httplib.h warns about its own deprecated APIs.
+target_include_directories(reaclaw_tests SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/vendor/
 )
 
 target_link_libraries(reaclaw_tests PRIVATE

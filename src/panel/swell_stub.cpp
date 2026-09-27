@@ -17,6 +17,6 @@
 #include <cstdint>
 #endif
 
-#define SWELL_PROVIDED_BY_APP
+// SWELL_PROVIDED_BY_APP comes from CMakeLists.txt, not a #define here.
 #include "WDL/swell/swell-modstub-generic.cpp"
 #endif
