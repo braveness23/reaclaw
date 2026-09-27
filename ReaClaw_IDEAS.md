@@ -218,6 +218,10 @@ design conversation, not decided here. Candidate axes to discuss later:
 
 ### Q11 — In-REAPER terminal channel back to the agent
 
+> **Replaced (2026-09-27)** by the chat panel — Epic 7 in `ReaClaw_ROADMAP.md`, issue
+> [#130](https://github.com/braveness23/reaclaw/issues/130), TECH_DECISIONS §28. Instead of
+> relaying messages to an outside agent, ReaClaw runs the agent itself.
+
 Every idea above is one-directional: the agent perceives and acts, the human
 watches. Q11 is the opposite direction — a dockable window in REAPER (extending
 `src/panel/`) that reads like a terminal/chat pane, so a human sitting at the

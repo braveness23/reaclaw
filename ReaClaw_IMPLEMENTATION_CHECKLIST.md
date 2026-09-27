@@ -686,6 +686,56 @@ surface, plus a new audio-in path via REAPER's own ReaStream plugin.
 
 ---
 
+## Epic #130 — Chat panel inside REAPER + installers
+
+> **Status:** testing phase. Plan: `ReaClaw_ROADMAP.md` Epic 7. Decisions:
+> `ReaClaw_TECH_DECISIONS.md` §28–§31.
+
+**Decisions + tests**
+- [x] **Decisions written.** TECH_DECISIONS §28 (chat, changes §11), §29 (web view in a
+      dock), §30 (installers), §31 (backend + keys); §11, §18, §19, §20, §21 and the summary
+      table point at them.
+- [x] **SECURITY.md** "Chat Panel" section, scope and tips.
+- [ ] **Test 1 — web view in a REAPER dock** on Windows, macOS, Linux: dock / undock /
+      redock, resize, dock-tab hide/show, screensets, close/reopen, REAPER restart with the
+      panel open, HiDPI. Result goes in §29.
+- [ ] **Test 2 — backend packaging:** TS backend + pinned Node runtime running the Agent SDK
+      on all 5 targets; can we bundle the SDK or do we download it at install time.
+- [ ] **Ask Anthropic** about Claude subscription login (Dave).
+
+**Installers (v1.19.0)**
+- [ ] `scripts/checks/build.sh --target`; `scripts/package/*.sh`; `scripts/fetch-node-runtime.sh`.
+- [ ] CI builds windows-x64, windows-arm64, macos-universal, linux-x86_64, linux-aarch64.
+- [ ] Installer + uninstaller per target.
+- [ ] Signing (Apple Developer ID + notarization, Windows cert) via `tf-registry` `github` stack.
+- [ ] Release job attaches installers + raw binaries; `release` skill handles pre-release tags.
+- [ ] README install section rewritten.
+
+**Chat panel (C++)**
+- [ ] `src/panel/chat_panel.{h,cpp}` — dock, menu item, bindable action.
+- [ ] `src/panel/webhost.h` + `webhost_win.cpp` / `webhost_mac.mm` / `webhost_linux.cpp`.
+- [ ] `src/backend/supervisor.{h,cpp}`; Windows support in `util/subprocess.h` (Job object).
+- [ ] `chat` config block; `ReaClaw_Design.md` §7.
+
+**Backend (TypeScript, `backend/`)**
+- [ ] Local server with per-launch token; streaming to the page.
+- [ ] Anthropic provider (Agent SDK; shell/file tools off by default).
+- [ ] OpenAI-compatible provider (LiteLLM, OpenRouter) with its own tool loop.
+- [ ] ReaClaw REST tools (defined once, used by both providers); ask-before-changing;
+      undo-last-AI-change.
+- [ ] Context chips + `@` picker.
+- [ ] Keys in the OS keychain.
+- [ ] Chat UI: streaming sanitized markdown, tool-call cards, settings, sessions, stop.
+- [ ] vitest suite with a fake provider; checks wired into `scripts/checks/`.
+
+**Docs + checking it works**
+- [ ] `ReaClaw_Design.md`, `docs/API.md`, CHANGELOG, CLAUDE.md phase table.
+- [ ] Linux e2e: install from tarball → open panel → fake provider makes a tool call → state
+      changes → undo puts it back.
+- [ ] Windows/macOS CI smoke; manual run on the Pi rig, the p73 Windows rig and a Mac.
+
+---
+
 ## Ongoing (All Phases)
 
 - [x] Keep unit and integration tests passing before each commit — 38/38 unit tests pass; verified live against REAPER 7.74 (aarch64)

@@ -178,6 +178,9 @@ The REAPER SDK distinguishes threadsafe from non-threadsafe API functions. `Main
 
 ## 11. No LLM Client in the Extension
 
+> **Changed by §28 (chat panel).** The extension itself still never calls an LLM, but
+> ReaClaw now ships one in a separate backend process. Read §28 too.
+
 **Decision:** ReaClaw does not call any LLM API. The agent generates scripts; ReaClaw registers them.
 
 **Rationale:**
@@ -380,7 +383,8 @@ also retro-unlocks the #19 A/B diff.
   (`learning.enabled=false`); while off, `note()` is a no-op and nothing is
   recorded. All state is in the same local SQLite DB — there is **no network
   egress anywhere in the extension** (settled in §11: no LLM client, no outbound
-  calls), so "nothing leaves the machine" is structural, not a promise.
+  calls), so "nothing leaves the machine" is structural, not a promise. (The chat
+  backend, §28, is a separate process and never reads the learning DB.)
 - **Shared channel, distinct source.** Learned suggestions ride the same
   suggestion idea as #18's hints but are tagged `method:"learned"` (vs. the
   hand-authored invariants), so an agent can weight them differently. They are
@@ -416,7 +420,8 @@ a `composition spec → mastered file` function — and that production path is
   structured verbs over the escape hatch for common operations).
 - **Same trust + locality model.** Render/save/open inherit the existing stance —
   the agent is trusted (§10, no approval gate), and there is **no network egress**
-  (§11), so a production pipeline stays local by construction. Output paths are
+  from the extension (§11; the chat backend in §28 is separate and opt-in), so a
+  production pipeline stays local by construction. Output paths are
   caller-specified files on the local box; uploading anywhere is an explicit,
   separate step (e.g. the `gdrive` skill), never implicit in a render.
 - **Long renders are jobs, not blocking calls.** A long project or a batch can
@@ -475,7 +480,9 @@ on anything external we apply a deliberate policy, not ad-hoc decisions.
    the SDK/Lua; we ship nothing but must feature-detect.
 3. **Optional external tools/processes** (ffmpeg, a key/tempo analyzer) — user-installed,
    path-configured, skipped when absent.
-4. **Network / cloud services** — **forbidden** (local-first; no phoning home; no LLM client, §11).
+4. **Network / cloud services** — **forbidden in the extension** (local-first; no phoning home;
+   no LLM client in the `.so`, §11). The exception is the chat backend (§28): a separate process
+   that stays quiet until you add a provider key.
 
 **Tiered rule:**
 - **Tier 0 — Core (required, vendored):** the minimum to *be* ReaClaw. Pinned, license-cleared, in-tree.
@@ -519,7 +526,9 @@ release before removal in the next MAJOR.
 **No 2.0 for additive growth.** Aggressively expanding coverage does **not** justify a major
 bump — additive surface is correct as MINOR. A 2.0.0 is reserved for the day we choose to make
 the cohesion fixes catalogued in `ReaClaw_COVERAGE_REPORT.md` §6.4 (response-envelope
-normalization, relative/absolute icon symmetry, unified error/hints shapes).
+normalization, relative/absolute icon symmetry, unified error/hints shapes). The chat panel
+(§28) and installers (§30) are additive, so they ship as 1.x minor releases; the §6.4 fixes
+stay parked.
 
 ---
 
@@ -829,6 +838,151 @@ should replace this guess with a verified mapping once run against a live instan
 
 ---
 
+## 28. Chat Panel: ReaClaw now ships an LLM client — but not inside the extension
+
+**Decision (2026-09-27, issue #130):** add a chat panel inside REAPER, like Obsidian's
+Claudian plugin or the Claude extension in VS Code. You type, a model answers and makes
+changes to the project. This undoes §11 for ReaClaw as a whole, so it's split into two
+processes:
+
+- **The extension** (`reaper_reaclaw.{dll,dylib,so}`) stays a REST/SSE server that never
+  calls out. It gets two new jobs: show a web view in a REAPER dock (§29) and start/stop the
+  backend (§31).
+- **The backend** (`backend/`, TypeScript, Claude Agent SDK plus a small OpenAI-compatible
+  client) is the LLM client. It serves the chat page to the web view, talks to the model
+  provider, and changes REAPER through ReaClaw's normal REST API — the same one any other
+  agent uses.
+
+**Why change §11.** §11 assumed whoever uses ReaClaw already has an agent somewhere else.
+Plenty of REAPER users use AI but don't run agent setups. For them the chat panel *is* the
+agent. §11 still holds for what it was about: ReaClaw never calls an LLM on behalf of an
+agent that is calling it.
+
+**Why a separate process.** A stuck or crashing model call shouldn't take REAPER down with
+it, the good SDKs are TypeScript/Python rather than C++, and provider APIs change more often
+than we want to rebuild the extension. The price is shipping a Node runtime per platform,
+which the installers handle (§30).
+
+**Why go through the REST API.** One way in. Chat edits get the same undo wrapping, hints
+and event attribution as any other client, and the chat can't do anything an outside agent
+couldn't.
+
+**Keeping it local by default:**
+- A fresh install makes no outbound calls. The backend only talks to a provider after you
+  add a key.
+- Backend and extension only talk over `127.0.0.1`, with a random token (§31).
+- No shell access by default. The Agent SDK's built-in Bash and file-writing tools are off;
+  the model only gets ReaClaw's REST tools. Tools that change the project ask first
+  (allow once / always); read-only tools just run.
+- Keys don't go in `config.json` (§31).
+
+**Providers at first:** Anthropic (API key), LiteLLM and OpenRouter (base URL + key, through
+the OpenAI-compatible client). **No Claude subscription (claude.ai) login for now** — the
+Agent SDK terms don't allow third-party apps to offer it without Anthropic's OK. Dave is
+asking; the code leaves room to add it. Naming follows the SDK's rules: "ReaClaw Chat",
+"Powered by Claude" is fine, "Claude Code" isn't.
+
+**Same on every OS, not the same for every provider.** Anthropic gets the Agent SDK's extras
+(skills, subagents, saved sessions). The OpenAI-compatible path uses a simpler tool loop of
+our own. Both get the same REAPER tools, context and approval prompts.
+
+**Replaces** IDEAS Q11 / #118, which relayed messages to an outside agent that had to poll
+for them.
+
+---
+
+## 29. Chat Panel UI: the OS's own web view inside a REAPER dock
+
+**Decision:** the chat page is HTML/JS shown in the operating system's built-in web view —
+**WebView2** on Windows, **WKWebView** on macOS, **WebKitGTK** on Linux — inside a panel
+registered with REAPER's docker (`DockWindowAddEx`). The web view just loads the backend's
+local URL. There's no native↔JavaScript bridge, so it works the same way on every OS.
+
+**Why a web view.** A decent chat needs streaming markdown, code blocks, images and tool-call
+cards. SWELL has edit boxes and list views. Obsidian and VS Code get a browser for free
+because they're Electron apps; REAPER isn't, so we use the one the OS already has. Plenty of
+native apps do this (JUCE audio plugins, for one). We don't bundle a browser.
+
+**Why load WebKitGTK at runtime (`dlopen`) instead of linking it.** Not every Linux box has
+it. If we linked it, the whole extension — REST API included — would fail to load without
+it. Loaded at runtime, a missing library just means the chat panel says what to install.
+That keeps §20's rule that the core never needs anything past Tier 0.
+
+**Linux panel needs X11.** REAPER on Linux runs on X11 (or XWayland). SWELL child windows
+there aren't real native windows, so the web view is its own X window kept lined up over the
+dock area.
+
+**Try it before building on it.** ReaClaw had a dock panel in v1.1.0 and dropped it in
+v1.2.0 because of docking edge cases. So first, a quick test on all three OSes: dock,
+undock, redock, resize, hide/show when switching dock tabs, screensets, close/reopen,
+restarting REAPER with the panel open, HiDPI. **If any OS can't be made reliable, all of
+them use a floating window instead** — same behavior everywhere matters more than docking.
+
+---
+
+## 30. Installers
+
+**Decision:** an installer for each platform and architecture, so people don't have to copy
+a `.so`/`.dll` into `UserPlugins` by hand. The raw binaries stay on the release page for
+anyone who wants to do it manually. Installers ship first (planned for v1.19.0), before the
+chat; once the chat lands they install the backend too.
+
+| Target | Built on | Installer |
+|---|---|---|
+| windows-x64 | MinGW cross-compile (self-hosted runner) | NSIS `.exe`, per-user |
+| windows-arm64 | llvm-mingw cross-compile (self-hosted runner) | NSIS `.exe`, per-user |
+| macos-universal (x86_64 + arm64) | GitHub-hosted macOS runner | signed + notarized `.pkg` |
+| linux-x86_64 | native (self-hosted runner) | `.tar.gz` + `install.sh` |
+| linux-aarch64 | GitHub-hosted `ubuntu-24.04-arm` runner | `.tar.gz` + `install.sh` |
+
+**What it does:** finds REAPER's resource folder (the usual spot, or one you pick for a
+portable install), puts the extension in `UserPlugins`, puts the backend (bundled JS plus a
+pinned Node runtime) in a per-user folder (`%LOCALAPPDATA%\ReaClaw`,
+`~/Library/Application Support/ReaClaw`, `~/.local/share/reaclaw`), writes
+`chat.backend_path` into `config.json`, and adds an uninstaller. On Windows it checks for
+the WebView2 runtime; on Linux it checks for `libwebkit2gtk-4.1` and tells you how to install
+it. No admin rights needed.
+
+**Why NSIS.** It runs on Linux, so the same runner that already cross-compiles the `.dll`
+can build the Windows installer. No Windows runner needed.
+
+**Why a tarball + script on Linux.** REAPER on Linux is usually a tarball in your home
+folder anyway. AppImage doesn't fit a plugin, and `.deb`/`.rpm` means one package per distro.
+
+**Build scripts stay shared** (per CLAUDE.md): packaging goes in `scripts/package/*.sh`, the
+Node runtime pin in `scripts/fetch-node-runtime.sh`, and CI jobs just call them.
+
+**Signing.** Without an Apple Developer ID and a Windows code-signing certificate, the
+installers work but macOS and Windows show scary warnings. CI signing secrets go through the
+`github` stack in `tf-registry`, not set by hand.
+
+**Still to check:** whether Anthropic's terms let us bundle the Agent SDK in the installer.
+If not, the installer downloads it from npm during install.
+
+---
+
+## 31. Backend Process & Secrets
+
+**Starting and stopping:** the extension starts the backend the first time you open the chat
+panel (or when REAPER starts, if `chat.autostart` is on) and kills it when REAPER exits.
+Nothing runs in the background otherwise. The extension hands it ReaClaw's URL, ReaClaw's API
+key and a fresh random token through environment variables. The backend listens on
+`127.0.0.1` on a random port, reports the port back, and rejects anything without the token.
+If it dies, the extension restarts it (with backoff).
+
+**Why not a system service.** Nothing running when REAPER isn't, no service setup on three
+different OSes, and a crash just means a restart next time you open the panel.
+
+**Uses §27's `util/subprocess.h`,** plus a Windows version that puts the child in a Job
+object so it dies with REAPER even if REAPER crashes.
+
+**Keys:** provider API keys go in the OS keychain (Windows Credential Manager, macOS
+Keychain, Secret Service on Linux) — never in `config.json`, logs or the page's browser
+storage. That's stricter than ReaClaw's own `auth_key` (plain text in `config.json`, §12) on
+purpose: that key only opens a local server, a provider key can run up a bill.
+
+---
+
 ## Summary
 
 | Concern | Decision |
@@ -843,14 +997,16 @@ should replace this guess with a verified mapping once run against a live instan
 | Threading | Background server + main-thread command queue |
 | REAPER API | GetFunc binding via reaper_plugin_functions.h |
 | Script validation | Lua syntax check only |
-| LLM | None — agent generates, extension registers |
+| LLM | Extension: none — agent generates, extension registers. The chat panel's LLM client is a separate backend process (§28) |
+| Chat panel | OS-native web view in a REAPER dock; backend spawned on demand, loopback + token; keys in OS keychain (§28–§31) |
+| Installers | Per platform × arch: NSIS (Windows), notarized .pkg (macOS), tarball + script (Linux) (§30) |
 | Auth | none or api_key |
 | Rate limiting | None |
 | Config | JSON at GetResourcePath()/reaclaw/config.json |
 | Plugin name | reaper_reaclaw.{dll,dylib,so} |
 | API coverage | Tiered: structured verbs + action-runner + Lua escape hatch |
 | Production/render | Offline-first headless render engine (Epic #32); `/render` hides RENDER_FORMAT; long renders are jobs; local-first |
-| Dependencies | Tiered (0–3): vendored core required; SWS/external tools optional + feature-detected; network forbidden except one narrow, opt-in, loopback-only exception (§25) |
+| Dependencies | Tiered (0–3): vendored core required; SWS/external tools optional + feature-detected; the extension makes no outbound calls except one narrow, opt-in, loopback-only exception (§25); the chat backend's provider calls are opt-in and live outside the extension (§28) |
 | Versioning | SemVer — additive = MINOR, breaking = MAJOR; documented+advertised endpoints are stable; no 2.0 for additive growth |
 | Magic wand (Epic-adjacent, issue #10) | Three layers: Skill (`skill/reaclaw/`) + MCP server (`mcp/`, 18 tools) + server-side intent verbs/capabilities/recipes/semantic search |
 | Live media streaming (§27) | Video/audio-out: ReaClaw serves its own ffmpeg-backed HTTP stream, one process per connection. Audio-in: REAPER's own ReaStream plugin, driven via the FX-parameter API — not a new wire protocol |

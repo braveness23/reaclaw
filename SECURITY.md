@@ -123,6 +123,34 @@ attacker-influenced input — no shell, no request-derived command construction.
 As with the rest of the API, the mitigation is network isolation (bind to
 loopback, or firewall the port), not per-endpoint gating.
 
+### Chat Panel (in development)
+
+The upcoming chat panel runs a separate **backend process** that the extension
+starts and stops. Details: `ReaClaw_TECH_DECISIONS.md` §28–§31.
+
+**What leaves the machine.** The extension itself still never calls out. The
+backend only talks to the AI provider you set up (Anthropic, a LiteLLM gateway,
+or OpenRouter), and not at all until you add a key. What gets sent: your
+messages, any context you attach (selected tracks, items, FX, time selection,
+screenshots), and the results of the chat's tool calls.
+
+**Local connections.** The backend listens on `127.0.0.1` only, on a random
+port, and needs a random token that's new every time it starts. It changes
+REAPER through ReaClaw's normal REST API using ReaClaw's API key.
+
+**Provider keys** are stored in the OS keychain (Windows Credential Manager,
+macOS Keychain, Secret Service on Linux) — not in `config.json`, logs or the
+page's browser storage. A provider key can run up a bill, so it gets better
+storage than ReaClaw's own `auth_key`.
+
+**What the model can do.** Only ReaClaw's REST tools. Shell and file-writing
+tools are off unless you turn them on. Tools that change the project ask first
+(allow once / always); read-only tools just run. Changes go through ReaClaw's
+normal undo, and the panel has an undo button for the last AI change.
+
+**Model output isn't trusted.** Markdown from the model is sanitized
+(DOMPurify) before it's shown, and the page loads nothing remote.
+
 ---
 
 ## Scope
@@ -143,6 +171,10 @@ The following classes of issues are in scope for this security policy:
   REAPER's expected permission boundary
 - **Denial of service within ReaClaw itself** — resource exhaustion via the
   HTTP layer (e.g., request floods causing REAPER to hang or crash)
+- **Chat backend** — reaching the backend without its token, the backend
+  listening beyond loopback, provider keys leaking outside the OS keychain,
+  script injection through rendered model output, or a mutating tool running
+  without the approval the user set
 
 ### Out of Scope
 
@@ -153,6 +185,8 @@ The following classes of issues are in scope for this security policy:
   `{ResourcePath}` (at that point they can already modify REAPER directly)
 - Self-signed certificate warnings in browsers or curl without `-k`
   (expected behavior, not a vulnerability — see TLS section above)
+- The model doing something you approved, or that you set to "always allow"
+- What your AI provider does with the data you send it (their terms apply)
 - Issues only reproducible on a REAPER version no longer in mainstream use
 
 ---
@@ -169,4 +203,6 @@ The following classes of issues are in scope for this security policy:
   `{ResourcePath}/reaclaw/reaclawdb.sqlite`.
 - **Review scripts before use.** Lua scripts run with the same OS permissions
   as REAPER. Do not execute scripts from untrusted sources.
+- **Go easy on "always allow" in the chat.** It lets the model change the
+  project without asking.
 - **Keep ReaClaw updated.** Security fixes are released as patch versions.
