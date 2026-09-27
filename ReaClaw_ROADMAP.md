@@ -169,6 +169,35 @@ production never needs sound-pressure waves until a listener plays the file.
 
 ---
 
+### Epic 7 — Chat panel inside REAPER + installers ([#130](https://github.com/braveness23/reaclaw/issues/130))
+
+Started 2026-09-27. So far ReaClaw has been something *another* agent drives. This adds a
+chat panel inside REAPER — like Claudian in Obsidian — for people who want AI help in REAPER
+without setting up an agent. It changes §11 ("no LLM client"): the extension still never
+calls a model, but ReaClaw now ships a separate backend process that does (TECH_DECISIONS
+§28–§31). Nothing existing breaks, so it all ships as 1.x minor releases.
+
+- **Try it first.** Test 1: a web view inside a REAPER dock on Windows, macOS and Linux,
+  pushed hard on the docking cases that killed the v1.1.0 dock (if it can't be made solid,
+  use a floating window everywhere). Test 2: the TS backend + Node runtime running on all
+  five targets, and whether we're allowed to bundle the Agent SDK. Dave asks Anthropic about
+  Claude subscription login.
+- **Installers (v1.19.0).** windows-x64/arm64 (NSIS), macos-universal (notarized `.pkg`),
+  linux-x86_64/aarch64 (tarball + script). CI grows to build all five.
+- **Chat panel (C++).** Dock panel + a web view per OS (WebView2 / WKWebView / WebKitGTK
+  loaded at runtime), starting/stopping the backend, an Extensions menu item and a bindable
+  action.
+- **Backend (TypeScript, `backend/`).** Anthropic through the Claude Agent SDK; LiteLLM and
+  OpenRouter through an OpenAI-compatible client; ReaClaw REST tools that ask before
+  changing things; context chips (selection, time selection, markers, screenshots); keys in
+  the OS keychain; streaming chat UI.
+
+**Order:** tests → installers (v1.19.0) → chat panel + backend → betas → chat release
+(v1.20.0 or later). Replaces IDEAS Q11 / #118. The COVERAGE_REPORT §6.4 breaking fixes stay
+parked for an actual 2.0.
+
+---
+
 ## 4. Cross-cutting concerns
 
 - **Snapshot / state-diff layer.** Both Epic 4's A/B visual diff and Epic 5's
