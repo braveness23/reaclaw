@@ -918,6 +918,33 @@ undock, redock, resize, hide/show when switching dock tabs, screensets, close/re
 restarting REAPER with the panel open, HiDPI. **If any OS can't be made reliable, all of
 them use a floating window instead** — same behavior everywhere matters more than docking.
 
+**Linux result (2026-09-27): passed.** Spiked on the Pi rig (aarch64, REAPER 7.78) as a
+throwaway extension (`spikes/dock-webview/`, not shipped code) before writing any of the real
+panel. Confirmed live, each case screenshotted: dock and undock, redock, resize (both the
+floating window and REAPER's own main window), hide/show when switching the docker to another
+tab and back, moving the panel between all four of REAPER's dockers (bottom/left/top/right —
+the page reflows to fit each), close and reopen, and quitting REAPER with the panel open and
+starting it again (state remembered via `SetExtState`/`GetExtState`, panel reopens docked). No
+leaked helper processes in any case — exactly one `dockspike-webhost` process while the panel
+is open, zero once it's closed or REAPER exits. Keyboard and mouse input reach the reparented
+web view correctly (typed text landed in the page's input box; a click fired its button
+handler). Full write-up and screenshots: `~/greymatter/Projects/Reaclaw/02 Dock Test.md`
+(outside this repo; see `CLAUDE.md`'s pointer to where chat-panel working notes live).
+
+**Confirms the web view must be a separate process, not a widget in-process.** REAPER's
+Linux windowing layer (SWELL, backed by GDK/X11) does not deliver input events to a GTK
+widget created inside the extension's own process — REAPER's event loop only knows about its
+own SWELL windows. The spike's web view runs in a small standalone helper program
+(GTK + WebKitGTK) whose X window is reparented into REAPER's window and kept positioned over
+the panel's visible area (clipped to it — a panel can be larger than the docker actually
+showing it, e.g. when a docker's tab is scrolled or another tab is selected). This also means
+a web view crash can't take REAPER down with it, which lines up with §28's process-isolation
+reasoning for the backend.
+
+**Not yet tested:** a real desktop with a window manager (title bars, dragging the docker
+edge by hand, screensets) — the spike so far only ran on a bare Xvfb display with no window
+manager; HiDPI; Windows and macOS (different code path on each, per this section).
+
 ---
 
 ## 30. Installers

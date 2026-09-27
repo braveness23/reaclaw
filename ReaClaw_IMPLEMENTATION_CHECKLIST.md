@@ -696,9 +696,12 @@ surface, plus a new audio-in path via REAPER's own ReaStream plugin.
       dock), §30 (installers), §31 (backend + keys); §11, §18, §19, §20, §21 and the summary
       table point at them.
 - [x] **SECURITY.md** "Chat Panel" section, scope and tips.
-- [ ] **Test 1 — web view in a REAPER dock** on Windows, macOS, Linux: dock / undock /
-      redock, resize, dock-tab hide/show, screensets, close/reopen, REAPER restart with the
-      panel open, HiDPI. Result goes in §29.
+- [x] **Test 1 (Linux) — web view in a REAPER dock.** Passed on the Pi rig (aarch64,
+      REAPER 7.78): dock/undock/redock, resize, dock-tab hide/show, all four dockers,
+      close/reopen, REAPER restart with the panel open, keyboard/mouse input — all confirmed,
+      screenshotted. Write-up: TECH_DECISIONS §29, `~/greymatter/Projects/Reaclaw/02 Dock Test.md`.
+      **Still open:** a real desktop with a window manager (title bars, dragging the dock
+      edge, screensets — only run on a bare Xvfb display so far), HiDPI, Windows, macOS.
 - [ ] **Test 2 — backend packaging:** TS backend + pinned Node runtime running the Agent SDK
       on all 5 targets; can we bundle the SDK or do we download it at install time.
 - [ ] **Ask Anthropic** about Claude subscription login (Dave).
