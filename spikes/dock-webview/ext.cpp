@@ -6,17 +6,18 @@
 // GtkPlug X window is reparented into whichever REAPER toplevel currently
 // holds our panel, and kept lined up over the panel's client area on a timer.
 
-#include <dlfcn.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <spawn.h>
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <spawn.h>
+#include <unistd.h>
+
+#include <sys/wait.h>
 
 #define SWELL_PROVIDED_BY_APP
 #include "WDL/swell/swell.h"
@@ -113,8 +114,8 @@ static bool x_init() {
     X.unmap = (XWin_t)sym("XUnmapWindow");
     X.raise = (XWin_t)sym("XRaiseWindow");
     X.flush = (XFlush_t)sym("XFlush");
-    if (!X.display_get_default || !X.get_xdisplay || !X.get_xid || !X.reparent ||
-        !X.move_resize || !X.map || !X.unmap || !X.raise || !X.flush)
+    if (!X.display_get_default || !X.get_xdisplay || !X.get_xid || !X.reparent || !X.move_resize ||
+        !X.map || !X.unmap || !X.raise || !X.flush)
         return false;
     void* gd = X.display_get_default();
     X.dpy = gd ? X.get_xdisplay(gd) : nullptr;
@@ -140,8 +141,7 @@ static std::string helper_path() {
     dladdr((void*)&helper_path, &info);
     std::string p = info.dli_fname ? info.dli_fname : "";
     size_t slash = p.rfind('/');
-    p = (slash == std::string::npos ? std::string(".") : p.substr(0, slash)) +
-        "/dockspike-webhost";
+    p = (slash == std::string::npos ? std::string(".") : p.substr(0, slash)) + "/dockspike-webhost";
     return p;
 }
 
@@ -267,8 +267,7 @@ static void sync_webview() {
         g_applied.mapped = false;
         g_applied.x = g_applied.y = g_applied.w = g_applied.h = -1;
     }
-    if (visible && (x != g_applied.x || y != g_applied.y || w != g_applied.w ||
-                    h != g_applied.h)) {
+    if (visible && (x != g_applied.x || y != g_applied.y || w != g_applied.w || h != g_applied.h)) {
         X.move_resize(X.dpy, g_plug, x, y, (unsigned)w, (unsigned)h);
         g_applied.x = x;
         g_applied.y = y;
@@ -313,8 +312,8 @@ static void create_panel() {
     if (g_hwnd)
         return;
     HWND main = GetMainHwnd();
-    g_hwnd = CreateDialogParam(g_inst, MAKEINTRESOURCE(g_docked ? IDD_DOCKED : IDD_FLOAT), main,
-                               dlgproc, 0);
+    g_hwnd = CreateDialogParam(
+            g_inst, MAKEINTRESOURCE(g_docked ? IDD_DOCKED : IDD_FLOAT), main, dlgproc, 0);
     if (!g_hwnd)
         return;
     if (g_docked) {
@@ -372,8 +371,8 @@ static bool hookcommand2(KbdSectionInfo*, int cmd, int, int, int, HWND) {
         // Test-only: xdotool can't resize REAPER's window without a WM.
         static bool small = false;
         small = !small;
-        SetWindowPos(GetMainHwnd(), nullptr, 0, 0, small ? 1000 : 1280, small ? 620 : 800,
-                     SWP_NOZORDER);
+        SetWindowPos(
+                GetMainHwnd(), nullptr, 0, 0, small ? 1000 : 1280, small ? 620 : 800, SWP_NOZORDER);
         return true;
     }
     return false;
@@ -401,7 +400,7 @@ static void timer() {
 }
 
 extern "C" REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hInstance,
-                                                                  reaper_plugin_info_t* rec) {
+                                                                 reaper_plugin_info_t* rec) {
     if (!rec) {
         destroy_panel();
         if (plugin_register) {

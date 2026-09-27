@@ -3,40 +3,41 @@
  * argv[1] = X window id to embed into. Prints "XID <plug window id>" on stdout
  * so the extension can position it. Exits when stdin closes (REAPER gone). */
 
-#include <gtk/gtk.h>
-#include <gtk/gtkx.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <gtk/gtk.h>
+#include <gtk/gtkx.h>
 #include <webkit2/webkit2.h>
 
 static const char* kPage =
-    "<!doctype html><html><head><meta charset=utf-8><style>"
-    "html,body{margin:0;height:100%;font:14px/1.45 sans-serif;background:#1d2533;color:#e6e9ef}"
-    "body{display:flex;flex-direction:column}"
-    "header{padding:8px 12px;background:#2b3a55;display:flex;justify-content:space-between}"
-    "#log{flex:1;overflow:auto;padding:12px}"
-    ".m{max-width:80%;padding:8px 10px;border-radius:8px;margin:0 0 10px}"
-    ".u{background:#3b5b8c;margin-left:auto}.a{background:#2a3242}"
-    "code,pre{font-family:monospace;background:#0f141d;border-radius:4px}"
-    "pre{padding:8px;white-space:pre-wrap}"
-    "footer{display:flex;gap:6px;padding:8px;background:#2b3a55}"
-    "input{flex:1;padding:6px;border:0;border-radius:4px}"
-    "</style></head><body>"
-    "<header><b>ReaClaw Chat &middot; dock test</b><span id=info></span></header>"
-    "<div id=log>"
-    "<div class='m u'>make the kick louder</div>"
-    "<div class='m a'>Raised <b>Kick</b> by <code>+3 dB</code> (now -4.2 dB). Undo?"
-    "<pre>POST /state/tracks/0 {\"volume_db\": -4.2}</pre></div>"
-    "</div>"
-    "<footer><input id=inp placeholder='Type a message'><button>Send</button></footer>"
-    "<script>"
-    "function tick(){document.getElementById('info').textContent="
-    "innerWidth+'\\u00d7'+innerHeight+' px \\u00b7 '+new Date().toLocaleTimeString()}"
-    "tick();setInterval(tick,500);addEventListener('resize',tick);"
-    "document.querySelector('button').onclick=function(){var i=document.getElementById('inp');"
-    "if(!i.value)return;var d=document.createElement('div');d.className='m u';"
-    "d.textContent=i.value;document.getElementById('log').appendChild(d);i.value=''};"
-    "</script></body></html>";
+        "<!doctype html><html><head><meta charset=utf-8><style>"
+        "html,body{margin:0;height:100%;font:14px/1.45 sans-serif;background:#1d2533;color:#e6e9ef}"
+        "body{display:flex;flex-direction:column}"
+        "header{padding:8px 12px;background:#2b3a55;display:flex;justify-content:space-between}"
+        "#log{flex:1;overflow:auto;padding:12px}"
+        ".m{max-width:80%;padding:8px 10px;border-radius:8px;margin:0 0 10px}"
+        ".u{background:#3b5b8c;margin-left:auto}.a{background:#2a3242}"
+        "code,pre{font-family:monospace;background:#0f141d;border-radius:4px}"
+        "pre{padding:8px;white-space:pre-wrap}"
+        "footer{display:flex;gap:6px;padding:8px;background:#2b3a55}"
+        "input{flex:1;padding:6px;border:0;border-radius:4px}"
+        "</style></head><body>"
+        "<header><b>ReaClaw Chat &middot; dock test</b><span id=info></span></header>"
+        "<div id=log>"
+        "<div class='m u'>make the kick louder</div>"
+        "<div class='m a'>Raised <b>Kick</b> by <code>+3 dB</code> (now -4.2 dB). Undo?"
+        "<pre>POST /state/tracks/0 {\"volume_db\": -4.2}</pre></div>"
+        "</div>"
+        "<footer><input id=inp placeholder='Type a message'><button>Send</button></footer>"
+        "<script>"
+        "function tick(){document.getElementById('info').textContent="
+        "innerWidth+'\\u00d7'+innerHeight+' px \\u00b7 '+new Date().toLocaleTimeString()}"
+        "tick();setInterval(tick,500);addEventListener('resize',tick);"
+        "document.querySelector('button').onclick=function(){var i=document.getElementById('inp');"
+        "if(!i.value)return;var d=document.createElement('div');d.className='m u';"
+        "d.textContent=i.value;document.getElementById('log').appendChild(d);i.value=''};"
+        "</script></body></html>";
 
 static gboolean on_stdin(GIOChannel* ch, GIOCondition cond, gpointer data) {
     (void)data;
