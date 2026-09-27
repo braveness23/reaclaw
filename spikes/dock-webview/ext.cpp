@@ -33,6 +33,7 @@
 #define REAPERAPI_WANT_DockWindowAddEx
 #define REAPERAPI_WANT_DockWindowActivate
 #define REAPERAPI_WANT_DockWindowRemove
+#define REAPERAPI_WANT_Dock_UpdateDockID
 #define REAPERAPI_WANT_DockIsChildOfDock
 #define REAPERAPI_WANT_GetExtState
 #define REAPERAPI_WANT_SetExtState
@@ -65,8 +66,8 @@ static HINSTANCE g_inst;
 static HWND g_hwnd;
 static bool g_docked = true;
 
-static custom_action_register_t g_a_toggle, g_a_dock, g_a_shrink;
-static int g_cmd_toggle, g_cmd_dock, g_cmd_shrink;
+static custom_action_register_t g_a_toggle, g_a_dock, g_a_shrink, g_a_nextdock;
+static int g_cmd_toggle, g_cmd_dock, g_cmd_shrink, g_cmd_nextdock;
 
 // ---- Xlib / GDK, resolved at runtime (libSwell loads both) ----------------
 
@@ -367,6 +368,16 @@ static bool hookcommand2(KbdSectionInfo*, int cmd, int, int, int, HWND) {
         toggle_dock();
         return true;
     }
+    if (cmd && cmd == g_cmd_nextdock) {
+        // Test-only: move the panel to the next of REAPER's dockers (0-3).
+        static int which = 0;
+        which = (which + 1) % 4;
+        destroy_panel();
+        g_docked = true;
+        Dock_UpdateDockID(kIdent, which);
+        create_panel();
+        return true;
+    }
     if (cmd && cmd == g_cmd_shrink) {
         // Test-only: xdotool can't resize REAPER's window without a WM.
         static bool small = false;
@@ -425,6 +436,8 @@ extern "C" REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_H
     g_cmd_dock = plugin_register("custom_action", &g_a_dock);
     g_a_shrink = {0, "DOCKSPIKE_SHRINKMAIN", "Dock test: shrink/restore REAPER window", nullptr};
     g_cmd_shrink = plugin_register("custom_action", &g_a_shrink);
+    g_a_nextdock = {0, "DOCKSPIKE_NEXTDOCK", "Dock test: move panel to next docker", nullptr};
+    g_cmd_nextdock = plugin_register("custom_action", &g_a_nextdock);
     plugin_register("hookcommand2", (void*)hookcommand2);
     plugin_register("toggleaction", (void*)toggleaction);
     plugin_register("timer", (void*)timer);
