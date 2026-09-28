@@ -156,7 +156,7 @@ void build(DB& db, const std::string& reaper_version) {
     db.query("INSERT OR REPLACE INTO meta(key, value) VALUES('catalog_version', ?1)",
              {std::to_string(k_catalog_version)});
 
-    int indexed = db.scalar_int("SELECT COUNT(*) FROM actions");
+    int indexed = static_cast<int>(db.scalar_int("SELECT COUNT(*) FROM actions"));
     Log::info("Action catalog: indexed " + std::to_string(indexed) + " actions");
 }
 

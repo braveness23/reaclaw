@@ -3,8 +3,8 @@
 #include <json.hpp>
 
 // REAPER opaque types (full defs come from reaper_plugin_functions.h in the .cpp)
-struct MediaTrack;
-struct MediaItem;
+class MediaTrack;
+class MediaItem;
 
 namespace ReaClaw::Hints {
 
