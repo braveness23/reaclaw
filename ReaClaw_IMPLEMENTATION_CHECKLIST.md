@@ -706,7 +706,8 @@ surface, plus a new audio-in path via REAPER's own ReaStream plugin.
       by that height; re-verified clean (docked and floating) after the fix. Divider-drag
       by synthetic input remains inconclusive after six attempts. Write-up:
       TECH_DECISIONS §29, `~/greymatter/Projects/Reaclaw/02 Dock Test.md`.
-      **Still open:** Dave's actual physical desktop, HiDPI, Windows, macOS.
+      Confirming on Dave's actual physical desktop was deliberately skipped (his call) —
+      the virtual-WM run was judged sufficient. **Still open:** HiDPI, Windows, macOS.
 - [ ] **Test 2 — backend packaging:** TS backend + pinned Node runtime running the Agent SDK
       on all 5 targets; can we bundle the SDK or do we download it at install time.
 - [ ] **Ask Anthropic** about Claude subscription login (Dave).

@@ -974,8 +974,11 @@ attempts total). Likely a limitation of synthetic XTEST input against REAPER's o
 drag hit-testing rather than a real bug, but not confirmed either way — needs an
 actual mouse to settle it.
 
-**Still not tested:** Dave's physical desktop specifically, HiDPI, Windows, macOS
-(different code path on each, per this section).
+**Confirming on Dave's actual physical desktop was deliberately skipped** (his call,
+2026-09-28) — the virtual-WM run above (a real window manager, just not his physical
+screen) was judged sufficient, especially since it's what caught and let us fix the
+title-bar-offset bug. **Still not tested:** HiDPI, Windows, macOS (different code path
+on each, per this section).
 
 ---
 
