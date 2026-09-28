@@ -941,9 +941,25 @@ showing it, e.g. when a docker's tab is scrolled or another tab is selected). Th
 a web view crash can't take REAPER down with it, which lines up with §28's process-isolation
 reasoning for the backend.
 
-**Not yet tested:** a real desktop with a window manager (title bars, dragging the docker
-edge by hand, screensets) — the spike so far only ran on a bare Xvfb display with no window
-manager; HiDPI; Windows and macOS (different code path on each, per this section).
+**Window-manager result (2026-09-28): mostly confirmed, one open finding.** Re-ran under a
+real window manager (xfwm4) on a private virtual display — not Dave's physical desktop,
+which stayed untouched throughout; a locked/asleep session there made it unavailable, and
+this run stands in for it. Confirmed: floating panels get a real title bar with working
+minimize/maximize/close (used to dismiss REAPER's own eval-license dialog and its
+save-screenset dialog, both fully interactable — under a bare Xvfb display with no WM, a
+modal like this hangs forever, per §19's note on the same failure mode); dock, undock,
+redock still work; a window set saved with the panel docked and reloaded after closing it
+correctly restored the docked panel. **New finding, not yet root-caused:** a ~25–30px gap
+(the SWELL dialog's own "waiting for web view…" placeholder text) was visible above the
+web view's content in both the docked and floating layouts in this run, where the original
+bare-Xvfb runs (§29 above) showed none. Whether this is specific to reparenting under a
+window manager or a regression from a later, unrelated code change (extra test actions
+added after the first clean run) was not isolated — needs a debugger-attached investigation
+before Epic A implementation, not blocking the overall go/no-go. **Inconclusive:**
+dragging the dock divider by simulated mouse events did not resize it in three attempts;
+may be a real limitation of synthetic input rather than a real bug, needs confirming with
+an actual mouse. **Still not tested:** Dave's physical desktop specifically, HiDPI, Windows,
+macOS (different code path on each, per this section).
 
 ---
 
