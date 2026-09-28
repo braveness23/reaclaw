@@ -12,6 +12,7 @@ import { loadConfig } from "./config.js";
 import { ReaClawClient } from "./reaclawClient.js";
 import { ApprovalBroker, type ApprovalDecision } from "./approvals.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
+import { OpenAiCompatProvider } from "./providers/openaiCompat.js";
 import { FakeProvider } from "./providers/fake.js";
 import type { Provider } from "./providers/types.js";
 
@@ -49,8 +50,17 @@ export function createApp(cfg: ReturnType<typeof loadConfig>) {
 }
 
 function makeProvider(cfg: ReturnType<typeof loadConfig>, broker: ApprovalBroker, client: ReaClawClient): Provider {
-  if (!cfg.useFakeProvider && cfg.anthropicApiKey) {
-    return new AnthropicProvider(cfg.anthropicApiKey, broker, client);
+  if (cfg.provider === "anthropic" && cfg.anthropicApiKey) {
+    return new AnthropicProvider(cfg.anthropicApiKey, broker, client, cfg.anthropicModel);
+  }
+  if (cfg.provider === "openai_compat" && cfg.openaiCompatBaseUrl && cfg.openaiCompatModel) {
+    return new OpenAiCompatProvider(
+      cfg.openaiCompatBaseUrl,
+      cfg.openaiCompatApiKey,
+      cfg.openaiCompatModel,
+      broker,
+      client,
+    );
   }
   return new FakeProvider(broker, client);
 }

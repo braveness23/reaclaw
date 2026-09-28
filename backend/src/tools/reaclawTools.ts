@@ -77,3 +77,18 @@ export const REACLAW_TOOLS: ToolSpec[] = [
 export function findTool(name: string): ToolSpec | undefined {
   return REACLAW_TOOLS.find((t) => t.name === name);
 }
+
+// Some models (small local ones especially) don't reliably respect a tool's
+// declared JSON types -- confirmed live: llama3.2:3b called set_track with
+// {index:"0", muted:"true"} (strings). zod's plain .parse() does NOT coerce
+// those, so this rejects them with a clear message the model can act on,
+// instead of letting a wrong-shaped value reach ReaClaw's API, where it can
+// be silently ignored (muted:"true" satisfies no validation there and the
+// track is left unchanged, while the tool call still reports success).
+export function validateToolArgs(spec: ToolSpec, rawArgs: unknown): Record<string, unknown> {
+  const result = z.object(spec.schema).safeParse(rawArgs);
+  if (!result.success) {
+    throw new Error(`invalid arguments for ${spec.name}: ${result.error.message}`);
+  }
+  return result.data;
+}

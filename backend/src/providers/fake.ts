@@ -5,7 +5,7 @@
 // fixed vocabulary; it is not a language model.
 import type { ApprovalBroker } from "../approvals.js";
 import type { ReaClawClient } from "../reaclawClient.js";
-import { findTool } from "../tools/reaclawTools.js";
+import { findTool, validateToolArgs } from "../tools/reaclawTools.js";
 import type { ChatEvent, Provider } from "./types.js";
 
 const MUTE_PATTERN = /mute track (\d+)/i;
@@ -46,8 +46,9 @@ export class FakeProvider implements Provider {
     if (!spec) throw new Error(`unknown tool: ${name}`);
     emit({ type: "tool_call", toolUseId, name, input });
     try {
-      if (spec.mutates) await this.broker.requestApproval(name, input);
-      const output = await spec.run(this.client, input);
+      const validated = validateToolArgs(spec, input);
+      if (spec.mutates) await this.broker.requestApproval(name, validated);
+      const output = await spec.run(this.client, validated);
       emit({ type: "tool_result", toolUseId, ok: true, output });
     } catch (e) {
       emit({ type: "tool_result", toolUseId, ok: false, error: e instanceof Error ? e.message : String(e) });
