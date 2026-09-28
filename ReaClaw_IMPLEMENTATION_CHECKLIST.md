@@ -745,11 +745,15 @@ surface, plus a new audio-in path via REAPER's own ReaStream plugin.
       before any tool call reaches ReaClaw; Anthropic already had this via the SDK's own
       validation. 33 tests total (6 new).
 - [x] ReaClaw REST tools (`src/tools/reaclawTools.ts`, one definition used by every
-      provider): `get_tracks`/`get_track` read-only, `set_track`/`execute_action` ask
-      first via `src/approvals.ts`. `POST /api/undo` is a direct button, not a model tool.
-      Verified live against a throwaway real REAPER, not just mocks: a "mute track 0"
-      request paused on approval, and after approving, REAPER's own `/state/tracks`
-      showed `muted: true` afterwards.
+      provider): 13 tools — track read/create/update, FX add/param-set, MIDI item
+      create + note insert, transport (play/stop/pause/record/loop), and render. Read
+      tools run freely, everything else asks first via `src/approvals.ts`.
+      `POST /api/undo` is a direct button, not a model tool. No track fader/mute-group
+      tool — checked, ReaClaw's REST API has no structured surface for REAPER's track
+      grouping matrix at all. Verified live against a throwaway real REAPER, not just
+      mocks, twice: a "mute track 0" request, and a full unattended build of a 3-track
+      song with a real MIDI melody and a genuinely non-silent rendered WAV
+      (`~/greymatter/Projects/Reaclaw/05 Song Writing Test.md`).
 - [ ] Context chips + `@` picker.
 - [ ] Keys in the OS keychain (works with a plain env var for now).
 - [x] Chat UI (`src/ui/index.html`): plain-text log, tool-call cards, inline
