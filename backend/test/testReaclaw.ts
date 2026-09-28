@@ -18,33 +18,68 @@ export function startStubReaClaw(): Promise<StubReaClaw> {
     req.on("end", () => {
       const raw = Buffer.concat(chunks).toString("utf8");
       const body = raw ? JSON.parse(raw) : undefined;
-      calls.push({ method: req.method!, path: req.url!, body });
+      const method = req.method!;
+      const url = req.url!;
+      calls.push({ method, path: url, body });
+      const json = (status: number, payload: unknown) => {
+        res.writeHead(status, { "content-type": "application/json" });
+        res.end(JSON.stringify(payload));
+      };
 
-      if (req.url === "/state/tracks") {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ tracks: [{ index: 0, name: "Kick", volume_db: -7.2 }] }));
-        return;
+      if (method === "GET" && url === "/state/tracks") {
+        return json(200, { tracks: [{ index: 0, name: "Kick", volume_db: -7.2 }] });
       }
-      if (req.url?.startsWith("/state/tracks/") && req.method === "POST") {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ updated: true, ...body }));
-        return;
+      if (method === "POST" && url === "/state/tracks") {
+        const created = (body?.create ?? []).map((t: any, i: number) => ({ index: i, ...t }));
+        return json(200, { created, updated: [] });
       }
-      if (req.url === "/undo") {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ undone: true }));
-        return;
+      if (method === "POST" && url.startsWith("/state/tracks/") && url.includes("/fx/")) {
+        return json(200, { track: 0, slot: 0, guid: "{fx-guid}", ...body });
       }
-      if (req.url === "/execute/action") {
+      if (method === "POST" && url.match(/^\/state\/tracks\/\d+\/fx$/)) {
+        if (body.name === "NoSuchPlugin") return json(400, { error: `FX not found: ${body.name}` });
+        return json(200, { track: 0, slot: 0, guid: "{fx-guid}", name: body.name, enabled: true });
+      }
+      if (method === "POST" && url.startsWith("/state/tracks/")) {
+        return json(200, { updated: true, ...body });
+      }
+      if (method === "POST" && url === "/state/items") {
+        const created = (body?.create ?? []).map((it: any, i: number) => ({
+          index: i,
+          take: it.file ? { name: "" } : null,
+          ...it,
+        }));
+        return json(200, { created, updated: [] });
+      }
+      if (method === "POST" && url.match(/^\/state\/items\/\d+\/midi$/)) {
+        return json(200, {
+          ok: true,
+          notes_inserted: (body?.notes ?? []).length,
+          cc_inserted: 0,
+          notes_deleted: body.replace ? 1 : 0,
+          cc_deleted: 0,
+          warnings: [],
+        });
+      }
+      if (method === "GET" && url === "/transport") {
+        return json(200, { playing: false, paused: false, recording: false, position: 0, loop_enabled: false, loop_start: 0, loop_end: 0 });
+      }
+      if (method === "POST" && url === "/transport") {
+        return json(200, { action: body.action, transport: { playing: body.action === "play" } });
+      }
+      if (method === "POST" && url === "/transport/loop") {
+        return json(200, { start: 0, end: 8, enabled: true, ...body });
+      }
+      if (method === "POST" && url === "/render") {
+        return json(200, { output_path: body.output, render_seconds: 0.1, offline_ratio: 20 });
+      }
+      if (method === "POST" && url === "/undo") {
+        return json(200, { undone: true });
+      }
+      if (method === "POST" && url === "/execute/action") {
         // id 1 simulates an unknown/rejected action, everything else succeeds.
-        if (body?.id === 1) {
-          res.writeHead(400, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "unknown action id" }));
-          return;
-        }
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ executed: true }));
-        return;
+        if (body?.id === 1) return json(400, { error: "unknown action id" });
+        return json(200, { executed: true });
       }
       res.writeHead(404);
       res.end("not found");

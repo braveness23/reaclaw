@@ -11,9 +11,13 @@ import type { ApprovalBroker } from "../approvals.js";
 import type { ReaClawClient } from "../reaclawClient.js";
 import type { ChatEvent, Provider } from "./types.js";
 
-// Safety valve against a model stuck calling tools forever; a real turn
-// rarely needs more than a couple of round trips.
-const MAX_TOOL_ROUNDS = 8;
+// Safety valve against a model stuck calling tools forever. Raised from an
+// initial 8 once a real multi-step task (building out a track layout, FX,
+// a MIDI part, and rendering it) showed 8 wasn't enough headroom -- a
+// "round" is one model turn, which can itself batch several tool_calls, but
+// a model that calls one tool per turn can easily need 15-20 for a task
+// like that.
+const MAX_TOOL_ROUNDS = 25;
 
 type Role = "system" | "user" | "assistant" | "tool";
 

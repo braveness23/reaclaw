@@ -6,6 +6,7 @@
 // to ask".
 import { z } from "zod";
 import type { ReaClawClient } from "../reaclawClient.js";
+import { writeSeedMidiFile } from "./seedMidiFile.js";
 
 export interface ToolSpec<Args = any> {
   name: string;
@@ -71,6 +72,142 @@ export const REACLAW_TOOLS: ToolSpec[] = [
     mutates: true,
     run: (client, args: { id: number | string }) =>
       client.post("/execute/action", { id: args.id }),
+  },
+  {
+    name: "create_tracks",
+    description: "Create one or more new tracks, in order, with the given names.",
+    schema: { names: z.array(z.string()).min(1) },
+    mutates: true,
+    run: (client, args: { names: string[] }) =>
+      client.post("/state/tracks", { create: args.names.map((name) => ({ name })) }),
+  },
+  {
+    name: "add_fx",
+    description:
+      "Add an FX or virtual instrument to a track by name (e.g. \"ReaSynth\", \"ReaComp\", \"ReaEQ\" -- " +
+      "REAPER's own bundled plugins are always available; other names must already be installed). " +
+      "This cannot install a plugin that isn't already on the machine.",
+    schema: { track: z.number().int().min(0), name: z.string() },
+    mutates: true,
+    run: (client, args: { track: number; name: string }) =>
+      client.post(`/state/tracks/${args.track}/fx`, { name: args.name }),
+  },
+  {
+    name: "set_fx_param",
+    description:
+      "Set one parameter (by name) on an FX already added to a track. Value is normalized 0..1 " +
+      "(0 = the parameter's minimum, 1 = its maximum), not the real unit.",
+    schema: {
+      track: z.number().int().min(0),
+      slot: z.number().int().min(0),
+      param: z.string(),
+      value: z.number().min(0).max(1),
+    },
+    mutates: true,
+    run: (client, args: { track: number; slot: number; param: string; value: number }) =>
+      client.post(`/state/tracks/${args.track}/fx/${args.slot}`, {
+        params: [{ name: args.param, value: args.value }],
+      }),
+  },
+  {
+    name: "create_midi_item",
+    description:
+      "Create an empty MIDI item on a track, ready for insert_midi_notes. `position` and `length` are " +
+      "in seconds.",
+    schema: {
+      track: z.number().int().min(0),
+      position: z.number().min(0).default(0),
+      length: z.number().min(0.1).default(4),
+    },
+    mutates: true,
+    // ReaClaw's create-item endpoint only gives an item a real MIDI take when
+    // loaded from an actual file (an item created with no `file` has
+    // take:null and can't take notes -- see seedMidiFile.ts) -- so this
+    // seeds one from a tiny throwaway .mid file, confirmed live.
+    run: async (client, args: { track: number; position: number; length: number }) => {
+      const file = writeSeedMidiFile();
+      const result = (await client.post("/state/items", {
+        create: [{ track: args.track, position: args.position, length: args.length, file }],
+      })) as { created: unknown[] };
+      return result.created[0];
+    },
+  },
+  {
+    name: "insert_midi_notes",
+    description:
+      "Add notes to a MIDI item (from create_midi_item). Timing is in quarter notes from the start of " +
+      "the item, independent of tempo -- start_quarter 0 is the item's first beat, 1.0 is the next beat, " +
+      "etc. `replace: true` clears any existing notes first (create_midi_item's placeholder note counts).",
+    schema: {
+      item: z.number().int().min(0),
+      notes: z
+        .array(
+          z.object({
+            pitch: z.number().int().min(0).max(127),
+            start_quarter: z.number().min(0),
+            length_quarter: z.number().min(0.0625).default(1),
+            velocity: z.number().int().min(1).max(127).default(100),
+          }),
+        )
+        .min(1),
+      replace: z.boolean().default(false),
+    },
+    mutates: true,
+    run: (
+      client,
+      args: {
+        item: number;
+        notes: Array<{ pitch: number; start_quarter: number; length_quarter: number; velocity: number }>;
+        replace: boolean;
+      },
+    ) =>
+      client.post(`/state/items/${args.item}/midi`, {
+        replace: args.replace,
+        notes: args.notes.map((n) => ({
+          pitch: n.pitch,
+          velocity: n.velocity,
+          start_ppq: n.start_quarter * 480,
+          end_ppq: (n.start_quarter + n.length_quarter) * 480,
+        })),
+      }),
+  },
+  {
+    name: "get_transport",
+    description: "Get the current transport state: playing/paused/recording, position, loop range.",
+    schema: {},
+    mutates: false,
+    run: (client) => client.get("/transport"),
+  },
+  {
+    name: "transport",
+    description: "Start or stop playback or recording.",
+    schema: { action: z.enum(["play", "stop", "pause", "record"]) },
+    mutates: true,
+    run: (client, args: { action: "play" | "stop" | "pause" | "record" }) =>
+      client.post("/transport", { action: args.action }),
+  },
+  {
+    name: "set_loop",
+    description: "Set the loop/time-selection range and/or turn looping on or off. All fields optional.",
+    schema: {
+      start: z.number().min(0).optional(),
+      end: z.number().min(0).optional(),
+      enabled: z.boolean().optional(),
+    },
+    mutates: true,
+    run: (client, args: Record<string, unknown>) => client.post("/transport/loop", args),
+  },
+  {
+    name: "render",
+    description:
+      "Render (bounce) the project to an audio file. Always renders the whole project offline -- fast, " +
+      "no audio hardware needed, and doesn't affect playback.",
+    schema: {
+      output: z.string(),
+      format: z.enum(["wav", "flac", "mp3", "ogg"]).default("wav"),
+    },
+    mutates: true,
+    run: (client, args: { output: string; format: string }) => client.post("/render", args),
   },
 ];
 
