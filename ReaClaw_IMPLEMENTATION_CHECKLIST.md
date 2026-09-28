@@ -701,8 +701,10 @@ surface, plus a new audio-in path via REAPER's own ReaStream plugin.
       close/reopen, REAPER restart with the panel open, keyboard/mouse input — all confirmed,
       screenshotted. Re-run under a real window manager (xfwm4, on a private virtual display
       since Dave's physical desktop was unavailable): title bars, modal dialogs, and
-      screensets all confirmed working; one new finding (a small rendering gap) not yet
-      root-caused, and divider-drag by synthetic input was inconclusive. Write-up:
+      screensets all confirmed working. Found and fixed a real bug — positioning math used
+      a window measurement that includes the WM's title bar, offsetting the panel content
+      by that height; re-verified clean (docked and floating) after the fix. Divider-drag
+      by synthetic input remains inconclusive after six attempts. Write-up:
       TECH_DECISIONS §29, `~/greymatter/Projects/Reaclaw/02 Dock Test.md`.
       **Still open:** Dave's actual physical desktop, HiDPI, Windows, macOS.
 - [ ] **Test 2 — backend packaging:** TS backend + pinned Node runtime running the Agent SDK

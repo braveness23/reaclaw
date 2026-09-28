@@ -255,9 +255,15 @@ static void sync_webview() {
         if (a == top)
             break;
     }
-    RECT tr;
-    GetWindowRect(top, &tr);
-    int x = vis.left - tr.left, y = vis.top - tr.top;
+    // Use ClientToScreen, not GetWindowRect: under a reparenting window
+    // manager, GetWindowRect(top) can include the WM's own title-bar frame,
+    // while the helper's X window is reparented into top's client-area
+    // GdkWindow. Using the frame's origin as if it were the client origin
+    // pushes everything down by the title-bar height (confirmed live under
+    // xfwm4 -- the gap disappears with this fix, see TECH_DECISIONS §29).
+    POINT tp = {0, 0};
+    ClientToScreen(top, &tp);
+    int x = vis.left - tp.x, y = vis.top - tp.y;
     int w = vis.right - vis.left, h = vis.bottom - vis.top;
     bool visible = IsWindowVisible(g_hwnd) && w > 1 && h > 1;
 
