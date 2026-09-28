@@ -733,7 +733,17 @@ surface, plus a new audio-in path via REAPER's own ReaStream plugin.
 - [x] Anthropic provider (`src/providers/anthropic.ts`): Claude Agent SDK, `tools: []`
       so the SDK's own Bash/Read/Write tools are off, ReaClaw's tools registered as an
       in-process MCP server instead. Not yet run against a real API key (needs one).
-- [ ] OpenAI-compatible provider (LiteLLM, OpenRouter) with its own tool loop.
+- [x] OpenAI-compatible provider (`src/providers/openaiCompat.ts`) — one client for
+      LiteLLM, OpenRouter, and Ollama (all speak the same wire format), own hand-written
+      tool loop (the Agent SDK doesn't cover this path), tool schemas converted from zod
+      via zod's own `toJSONSchema` (no new dependency). Verified live against a real
+      `llama3.2:3b` on a separate Ollama host, muting a track in a real REAPER instance.
+      That run caught a real gap: small models don't reliably send correctly-typed tool
+      arguments (got `{index:"0", muted:"true"}`, strings) — ReaClaw silently accepted
+      the bad value without applying the change while still reporting success. Fixed with
+      a shared `validateToolArgs` check (zod, applied in this provider and `FakeProvider`)
+      before any tool call reaches ReaClaw; Anthropic already had this via the SDK's own
+      validation. 33 tests total (6 new).
 - [x] ReaClaw REST tools (`src/tools/reaclawTools.ts`, one definition used by every
       provider): `get_tracks`/`get_track` read-only, `set_track`/`execute_action` ask
       first via `src/approvals.ts`. `POST /api/undo` is a direct button, not a model tool.
