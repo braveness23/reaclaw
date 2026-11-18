@@ -1,0 +1,34 @@
+name: Refresh runner image
+
+# The ARC runner pods use reaclaw-ci-runner:latest, whose actions-runner base
+# bundles a runner binary. Runner self-update is disabled in the pods, so once
+# GitHub drops support for that version the scale set goes "Outdated" and no
+# job ever gets picked up. ci.yml only rebuilds the image when the Dockerfile
+# content changes, so refresh it weekly (pulling the newest base) to keep the
+# bundled runner current. Manual dispatch rebuilds immediately.
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .github/runner-image
+          pull: true
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/reaclaw-ci-runner:latest
